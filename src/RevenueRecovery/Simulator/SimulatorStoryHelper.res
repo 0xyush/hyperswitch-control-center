@@ -258,7 +258,12 @@ module NowCard = {
         </div>
       | None => React.null
       }}
-      <RenderIf condition={story.hint->LogicUtils.isNonEmptyString && !(story.stage->isFinalStage)}>
+      <RenderIf condition={story.done}>
+        <p className={`${body.sm.medium} text-nd_gray-500`}>
+          {"This story is complete, so the screen stopped asking for updates."->React.string}
+        </p>
+      </RenderIf>
+      <RenderIf condition={story.hint->LogicUtils.isNonEmptyString && !story.done}>
         <p className={`${body.sm.medium} text-nd_primary_blue-450`}> {story.hint->React.string} </p>
       </RenderIf>
     </div>

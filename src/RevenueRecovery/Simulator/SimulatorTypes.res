@@ -69,6 +69,8 @@ type story = {
   startedAt: string,
   stage: stage,
   stageCaption: string,
+  // The proxy says the story has made its point, so polling can stop
+  done: bool,
   nextRetryAt: option<string>,
   invoice: Dict.t<JSON.t>,
   attempts: JSON.t,

@@ -43,7 +43,8 @@ let make = (~storyIdFromUrl: option<string>) => {
   let (showRequests, setShowRequests) = React.useState(_ => false)
   let (pollError, setPollError) = React.useState(_ => "")
 
-  let isFinal = story->Option.mapOr(false, (s: story) => s.stage->isFinalStage)
+  // Scenario 3 can stay in Monitoring, so the proxy's done flag is the main end signal
+  let isDone = story->Option.mapOr(false, (s: story) => s.done || s.stage->isFinalStage)
   let storyPath = id =>
     GlobalVars.appendDashboardPath(~url=`${RevenueRecoverySidebarValues.simulatorStoryPath}/${id}`)
 
@@ -66,7 +67,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   // Poll the story every 4 s until it reaches an end state, or the visitor pauses
   React.useEffect(() => {
     switch storyIdFromUrl {
-    | Some(id) if !isPaused && !isFinal => {
+    | Some(id) if !isPaused && !isDone => {
         let cancelled = ref(false)
         let inFlight = ref(false)
         let poll = async () => {
@@ -100,7 +101,7 @@ let make = (~storyIdFromUrl: option<string>) => {
       }
     | _ => None
     }
-  }, (storyIdFromUrl, isPaused, isFinal))
+  }, (storyIdFromUrl, isPaused, isDone))
 
   let onPlay = async () => {
     setIsBusy(_ => true)
@@ -204,7 +205,7 @@ let make = (~storyIdFromUrl: option<string>) => {
             buttonType=Secondary
             buttonSize=Medium
             leftIcon={CustomIcon(<Icon name={isPaused ? "play" : "pause"} size=14 />)}
-            buttonState={disabledUnless(hasStory && !isFinal)}
+            buttonState={disabledUnless(hasStory && !isDone)}
             onClick={_ => setIsPaused(prev => !prev)}
           />
           <Button

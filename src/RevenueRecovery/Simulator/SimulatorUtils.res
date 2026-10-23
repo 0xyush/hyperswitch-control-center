@@ -168,6 +168,7 @@ let storyMapper = (json): story => {
     startedAt: dict->getString("startedAt", ""),
     stage: (stageText->isNonEmptyString ? stageText : dict->getString("status", ""))->stageMapper,
     stageCaption: dict->getString("stageCaption", ""),
+    done: dict->getBool("done", false),
     nextRetryAt: dict->getOptionString("nextRetryAt"),
     invoice: dict->getDictfromDict("invoice"),
     attempts: dict->getArrayFromDict("attempts", [])->JSON.Encode.array,
