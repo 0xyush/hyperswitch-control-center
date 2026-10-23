@@ -131,9 +131,9 @@ display_configs=[]
 # Override with env, for example default__simulator__profile_id=pro_xxx
 [default.simulator]
 sim_url="http://localhost:8787"
-org_id=""
-merchant_id=""
-profile_id=""
+org_id="org_zS11mfgp7UAPtCdunDYj"
+merchant_id="revenue_recovery_x8gd0pzm6l_MhOXrZKGDMGeVFF7VT17"
+profile_id="pro_2qWOGZLPJQRRY0O75DXg"
 [default.merchant_config]
 [default.merchant_config.allowlist]
 [default.merchant_config.allowlist.dev_recon_engine_v1]
