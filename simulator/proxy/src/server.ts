@@ -8,6 +8,7 @@ import { passThrough, recentBlocked } from "./passthrough.ts";
 import { scrubText } from "./redact.ts";
 import { publicScenarios } from "./scenarios.ts";
 import {
+  checkScenario,
   HttpError,
   listStories,
   paidInApp,
@@ -177,6 +178,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         undefined,
         "bad_scenario",
       );
+    checkScenario(scenario); // a bad request does not use up a start
     const ip = req.socket.remoteAddress ?? "unknown";
     const gate = allowStart(ip);
     if (!gate.ok) {

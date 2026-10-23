@@ -122,7 +122,7 @@ export const SCENARIOS: Scenario[] = [
       "The billing system reports the same failure twice. Rev Rec keeps one attempt and ignores the copy.",
     reason: REASONS.generic_decline,
     retryCard: CARD_DECLINES,
-    expected: "Second report ignored, one attempt kept",
+    expected: "Second report refused as a duplicate, one attempt kept",
     liveTime: "1 min",
     v1Status: "Ready",
     runnable: true,

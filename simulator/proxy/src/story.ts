@@ -61,6 +61,7 @@ export type Story = {
   stripeCustomerId: string;
   tokenPm: string; // the saved card Rev Rec retries
   tokenCard: Card;
+  declinePm?: string; // the failing card the billing system's own charges use
   lastFailureBody: unknown | null; // re-sent as-is for a duplicate report
   reportsSent: number;
   startRule: number | null; // billing_connector_retry_threshold when the story started, if known
@@ -268,14 +269,18 @@ async function attachCard(
 
 // A real off-session charge that Stripe declines: what the billing system's own monthly charge looks like.
 async function failedCharge(story: Story, step: string): Promise<string> {
-  const pm =
-    story.tokenCard.last4 === CARD_DECLINES.last4
-      ? story.tokenPm
-      : await attachCard(
-          story,
-          CARD_DECLINES,
-          "Save the failing card for the billing system's own charge",
-        );
+  // The billing system's own charges use a failing card. Reuse the saved one when it is 0341.
+  if (!story.declinePm) {
+    story.declinePm =
+      story.tokenCard.last4 === CARD_DECLINES.last4
+        ? story.tokenPm
+        : await attachCard(
+            story,
+            CARD_DECLINES,
+            "Save the failing card for the billing system's own charge",
+          );
+  }
+  const pm = story.declinePm;
   const r = await stripeStep(story, step, "payment_intents", {
     amount: String(story.amount),
     currency: story.currency.toLowerCase(),
@@ -360,9 +365,46 @@ async function report(story: Story, step: string, body: unknown) {
   return r;
 }
 
+// The billing system sends the same failure again (same transaction id).
+// On 14 Oct the sandbox answered 200 and kept one attempt. Since 23 Oct it answers
+// 400 "already recorded against the invoice". Both mean Rev Rec did not record the copy.
+async function reportDuplicate(story: Story) {
+  const r = await sandboxStep(
+    story,
+    "Report the same failure again (duplicate)",
+    story.lastFailureBody,
+  );
+  const msg: string = r.json?.error?.message ?? "";
+  const refused = r.status === 400 && /already recorded/i.test(msg);
+  if (r.status !== 200 && !refused) {
+    throw new HttpError(
+      502,
+      `POST /${config.hsRecoveryPath} returned ${r.status}: ${msg || "no message"}`,
+      story.storyId,
+    );
+  }
+  story.reportsSent += 1;
+  event(
+    story,
+    "billing",
+    "revrec",
+    "The billing system sent the same failure report again (same transaction id).",
+  );
+  event(
+    story,
+    "revrec",
+    "billing",
+    refused
+      ? `Rev Rec refused the copy (${r.status}): ${msg}`
+      : `Rev Rec answered ${r.status} and kept one attempt (payment status ${r.json?.intent_status}).`,
+    "sandbox",
+  );
+}
+
 // ---------- actions ----------
 
-export async function startStory(scenarioId: number): Promise<Story> {
+// Throws 400 for an unknown scenario and 409 for one that is not runnable yet.
+export function checkScenario(scenarioId: number): Scenario {
   const sc = scenarioById(scenarioId);
   if (!sc)
     throw new HttpError(
@@ -376,6 +418,11 @@ export async function startStory(scenarioId: number): Promise<Story> {
       409,
       `scenario ${sc.id} "${sc.title}" is not available yet (${sc.v1Status})`,
     );
+  return sc;
+}
+
+export async function startStory(scenarioId: number): Promise<Story> {
+  const sc = checkScenario(scenarioId);
 
   const storyId = `st_${crypto.randomBytes(6).toString("hex")}`;
   const story: Story = {
@@ -483,24 +530,7 @@ export async function startStory(scenarioId: number): Promise<Story> {
     }
 
     if (sc.sendDuplicateOnStart) {
-      const dup = await report(
-        story,
-        "Report the same failure again (duplicate)",
-        story.lastFailureBody,
-      );
-      event(
-        story,
-        "billing",
-        "revrec",
-        "The billing system sent the same failure report again (same transaction id).",
-      );
-      event(
-        story,
-        "revrec",
-        "billing",
-        `Rev Rec answered ${dup.status} for the copy (payment status ${dup.json.intent_status}).`,
-        "sandbox",
-      );
+      await reportDuplicate(story);
     }
     save();
     return story;
@@ -599,24 +629,7 @@ export function reportAgain(storyId: string, requested?: ReportAgainMode) {
       throw new HttpError(429, "this story already sent 8 reports");
 
     if (mode === "duplicate") {
-      const r = await report(
-        story,
-        "Report the same failure again (duplicate)",
-        story.lastFailureBody,
-      );
-      event(
-        story,
-        "billing",
-        "revrec",
-        "The billing system sent the same failure report again (same transaction id).",
-      );
-      event(
-        story,
-        "revrec",
-        "billing",
-        `Rev Rec answered ${r.status} for the copy (payment status ${r.json.intent_status}).`,
-        "sandbox",
-      );
+      await reportDuplicate(story);
     } else {
       // swap: the customer's bank works again, and the billing system now holds a working card.
       if (mode === "swap" && story.tokenCard.last4 !== CARD_WORKS.last4) {
@@ -1023,7 +1036,7 @@ export async function storyView(storyId: string) {
         "recomputed",
         `Reports sent by the billing system: ${story.reportsSent}. Attempts Rev Rec kept from them: ${external.length}.` +
           (story.reportsSent > external.length
-            ? " The copy was ignored as a duplicate."
+            ? " Rev Rec did not record the copy."
             : ""),
       );
     if (attempts[0])
@@ -1097,6 +1110,12 @@ export async function storyView(storyId: string) {
 
   const stage = stageInfo.stage;
   const open = Boolean(story.recoveryId) && !FINAL_STAGES.has(stage);
+  // When the story has made its point, the dashboard can stop polling. Scenario 3 never reaches
+  // a final stage on a profile with a start rule above 0, so its point is the refused copy.
+  const done =
+    status === "error" ||
+    FINAL_STAGES.has(stage) ||
+    (Boolean(sc.sendDuplicateOnStart) && story.reportsSent > external.length);
   const hhmm = (iso: string) => iso.slice(11, 16);
   const latest = timeline.at(-1);
   // The "now" card: who acts at this moment, what, and why.
@@ -1178,6 +1197,7 @@ export async function storyView(storyId: string) {
     stage,
     stageCaption: caption,
     recoveredBy,
+    done,
     nextRetryAt,
     // Raw sandbox JSON (secrets hidden), so the dashboard can reuse its invoice page mappers.
     invoice: intent,
