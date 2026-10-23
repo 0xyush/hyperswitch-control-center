@@ -178,6 +178,11 @@ export function dropDashboardToken() {
 }
 
 export const revrecMerchantId = () => state.merchantId;
+// The org of the switched token, else of the pasted one. Used by the shell stubs.
+export const revrecOrgId = () =>
+  jwtClaims(state.token).org_id ??
+  jwtClaims(config.hsDashboardJwt).org_id ??
+  "";
 export const hasDashboardToken = () => Boolean(state.token);
 
 // For /healthz. Ids and expiry times only, never a token.
@@ -200,6 +205,7 @@ export function authStatus() {
       : null,
     scoped: state.token
       ? {
+          orgId: scoped.org_id ?? null,
           merchantId: scoped.merchant_id ?? null,
           profileId: scoped.profile_id ?? null,
           expiresAt: iso(scoped.exp),

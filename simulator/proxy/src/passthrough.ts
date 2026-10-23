@@ -2,6 +2,7 @@
 // Connector writes, API-key, user and every other endpoint get 403.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { redact, scrubText } from "./redact.ts";
+import { shellStub } from "./shell.ts";
 import { hsApiKey, hsDashboard } from "./upstream.ts";
 
 export type Rule = {
@@ -140,6 +141,8 @@ export async function passThrough(
 ) {
   const path = url.pathname.replace(/^\/api\/?/, "");
   const method = req.method ?? "GET";
+  const stub = UNSAFE.test(path) ? null : shellStub(method, path);
+  if (stub !== null) return sendJson(res, 200, stub, { "x-sim-auth": "stub" });
   const rule = matchRule(method, path);
   if (!rule) {
     noteBlocked(method, path);
