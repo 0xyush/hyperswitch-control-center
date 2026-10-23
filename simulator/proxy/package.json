@@ -1,0 +1,21 @@
+{
+  "name": "revrec-simulator-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rev Rec Simulator proxy: holds the keys, plays the billing system, passes allow-listed dashboard reads to the Hyperswitch sandbox.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "test:unit": "node --test test/unit.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
