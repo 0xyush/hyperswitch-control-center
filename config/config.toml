@@ -108,6 +108,8 @@ dev_saved_views=false
 dev_clickhouse_aggregate=false
 dev_superposition=false
 dev_embed_decision_engine=false
+# Rev Rec Simulator: skip login with a demo session (the proxy holds the real token)
+simulator_demo_session=true
 [default.connector_list_for_live]
 paymentProcessors = []
 threedsAuthProcessors = []
@@ -125,6 +127,13 @@ paymentProcessors = ["peachpayments"]
 organization_id=""
 workspace=""
 display_configs=[]
+# Rev Rec Simulator settings. Ids are not secrets; the dashboard token stays in the proxy.
+# Override with env, for example default__simulator__profile_id=pro_xxx
+[default.simulator]
+sim_url="http://localhost:8787"
+org_id=""
+merchant_id=""
+profile_id=""
 [default.merchant_config]
 [default.merchant_config.allowlist]
 [default.merchant_config.allowlist.dev_recon_engine_v1]

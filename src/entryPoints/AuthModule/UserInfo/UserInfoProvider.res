@@ -14,7 +14,7 @@ let make = (~children, ~isEmbeddableApp=false) => {
   ))
 
   let fetchApi = AuthHooks.useApiFetcher()
-  let {xFeatureRoute, forceCookies, sendV1DummyApiKeyHeader} =
+  let {xFeatureRoute, forceCookies, sendV1DummyApiKeyHeader, simulatorDemoSession} =
     HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
 
   let getUserInfo = async () => {
@@ -22,14 +22,19 @@ let make = (~children, ~isEmbeddableApp=false) => {
 
     let url = `${Window.env.apiBaseUrl}/user`
     try {
-      let res = await fetchApi(
-        `${url}`,
-        ~method_=Get,
-        ~xFeatureRoute,
-        ~forceCookies,
-        ~sendV1DummyApiKeyHeader,
-      )
-      let response = await res->(res => res->Fetch.Response.json)
+      // Simulator demo build: the session comes from the demo seed, not from GET /user
+      let response = if simulatorDemoSession {
+        SimulatorDemoSession.getUserInfoSeed()
+      } else {
+        let res = await fetchApi(
+          `${url}`,
+          ~method_=Get,
+          ~xFeatureRoute,
+          ~forceCookies,
+          ~sendV1DummyApiKeyHeader,
+        )
+        await res->(res => res->Fetch.Response.json)
+      }
       let userInfo = response->getDictFromJsonObject->itemMapperToDashboardUserType
       HyperSwitchEntryUtils.setThemeIdtoStore(userInfo.themeId)
       setApplicationState(_ => DashboardSession(userInfo))

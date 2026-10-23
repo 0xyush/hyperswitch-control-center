@@ -58,6 +58,10 @@ module HyperSwitchEntryComponent = {
           superpositionConfigs: superpositionDict->isEmptyDict
             ? None
             : Some(superpositionDict->getSuperpositionConfigMapper),
+          simulatorConfig: urlConfig
+          ->getDictFromJsonObject
+          ->getDictfromDict("simulator")
+          ->SimulatorUtils.getSimulatorConfig,
         }
         DOMUtils.window._env_ = value
         configureFavIcon(value.urlThemeConfig.faviconUrl)->ignore

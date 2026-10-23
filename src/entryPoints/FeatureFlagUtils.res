@@ -94,6 +94,7 @@ type featureFlag = {
   cugUser: bool,
   devSuperposition: bool,
   paymentLinkOperations: bool,
+  simulatorDemoSession: bool,
 }
 
 let featureFlagType = (featureFlags: JSON.t) => {
@@ -190,6 +191,7 @@ let featureFlagType = (featureFlags: JSON.t) => {
     cugUser: dict->getBool("cug_user", false),
     devSuperposition: dict->getBool("dev_superposition", false),
     paymentLinkOperations: dict->getBool("payment_link_operations", false),
+    simulatorDemoSession: dict->getBool("simulator_demo_session", false),
   }
 }
 

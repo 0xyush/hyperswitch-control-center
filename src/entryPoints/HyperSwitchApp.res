@@ -93,7 +93,8 @@ let make = () => {
         userGroupACLFetch,
         merchantAccountFetch(),
       ))
-      setActiveProductValue(productType)
+      // The simulator demo session always opens the Rev Rec module
+      setActiveProductValue(featureFlagDetails.simulatorDemoSession ? Recovery : productType)
       setShowSideBar(_ => true)
     } catch {
     | _ => setScreenState(_ => PageLoaderWrapper.Error("Failed to setup dashboard!"))

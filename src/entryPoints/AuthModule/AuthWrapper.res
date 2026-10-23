@@ -57,12 +57,16 @@ let make = (~children) => {
     AuthInfoProvider.authStatusContext,
   )
   let (screenState, setScreenState) = React.useState(_ => PageLoaderWrapper.Success)
+  let {simulatorDemoSession} = HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
 
   let getAuthDetails = () => {
     let preLoginInfo = getPreLoginDetailsFromLocalStorage()
     let loggedInInfo = getUserInfoDetailsFromLocalStorage()
 
-    if preLoginInfo.token->Option.isSome && preLoginInfo.token_type->isNonEmptyString {
+    if simulatorDemoSession {
+      // Simulator demo build only: skip login with a placeholder token that the proxy swaps
+      setAuthStatus(LoggedIn(Auth(SimulatorDemoSession.authInfo)))
+    } else if preLoginInfo.token->Option.isSome && preLoginInfo.token_type->isNonEmptyString {
       setAuthStatus(PreLogin(preLoginInfo))
     } else if loggedInInfo.token->Option.isSome {
       setAuthStatus(LoggedIn(Auth(loggedInInfo)))

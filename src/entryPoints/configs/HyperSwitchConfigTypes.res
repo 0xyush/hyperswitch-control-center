@@ -37,6 +37,7 @@ type baseConfig = {
   urlThemeConfig: urlThemeConfig,
   hypersenseUrl: string,
   superpositionConfigs: option<superpositionConfig>,
+  simulatorConfig?: SimulatorTypes.simulatorConfig,
 }
 
 // Type definition for themes
