@@ -1,6 +1,7 @@
 type workflowTypes = [
   | #ExploreSmartRetries
   | #ExploreRouting
+  | #ExploreRevenueRecovery
 ]
 
 type actionType =

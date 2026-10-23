@@ -94,7 +94,7 @@ let make = () => {
   let roundedClass = isSmallerScreen ? "rounded-tl-lg rounded-bl-lg" : "rounded-lg"
 
   let showWorkflowDrawer = switch activeProduct {
-  | Orchestration(V1) => true
+  | Orchestration(V1) | Recovery => true
   | _ => false
   }
 

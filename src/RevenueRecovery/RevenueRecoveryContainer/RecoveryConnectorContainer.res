@@ -3,6 +3,7 @@ let make = () => {
   open HSwitchUtils
   let url = RescriptReactRouter.useUrl()
   let {userHasAccess} = GroupACLHooks.useUserGroupACLHook()
+  let {devRecoverySimulator} = HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
   let fetchConnectorListResponse = ConnectorListHook.useFetchConnectorList(
     ~entityName=V2(V2_CONNECTOR),
     ~version=V2,
@@ -73,7 +74,12 @@ let make = () => {
         <RevenueRecoveryOnboardingLanding createMerchant=false />
       }
     | list{"unauthorized"} => <UnauthorizedPage />
-    | _ => <EmptyPage path=RevenueRecoverySidebarValues.defaultPath />
+    | _ =>
+      <EmptyPage
+        path={devRecoverySimulator
+          ? RevenueRecoverySidebarValues.homePath
+          : RevenueRecoverySidebarValues.defaultPath}
+      />
     }}
   </PageLoaderWrapper>
 }

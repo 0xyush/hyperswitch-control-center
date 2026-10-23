@@ -95,6 +95,7 @@ type featureFlag = {
   devSuperposition: bool,
   paymentLinkOperations: bool,
   simulatorDemoSession: bool,
+  devRecoverySimulator: bool,
 }
 
 let featureFlagType = (featureFlags: JSON.t) => {
@@ -192,6 +193,7 @@ let featureFlagType = (featureFlags: JSON.t) => {
     devSuperposition: dict->getBool("dev_superposition", false),
     paymentLinkOperations: dict->getBool("payment_link_operations", false),
     simulatorDemoSession: dict->getBool("simulator_demo_session", false),
+    devRecoverySimulator: dict->getBool("dev_recovery_simulator", false),
   }
 }
 

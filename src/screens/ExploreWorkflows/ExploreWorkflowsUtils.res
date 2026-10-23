@@ -89,6 +89,11 @@ let getCurrentWorkflowDetails = (workflowType: workflowTypes): (
       getStepsForWorkflow(workflowType),
     )
   | #ExploreRouting => ("Explore Routing", "", getStepsForWorkflow(workflowType))
+  | #ExploreRevenueRecovery => (
+      SimulatorExploreSteps.drawerHeading,
+      SimulatorExploreSteps.drawerSubHeading,
+      SimulatorExploreSteps.steps,
+    )
   }
 }
 

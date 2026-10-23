@@ -186,7 +186,11 @@ let useGetAllProductSections = (~products: array<productTypes>) => {
     | Recon(V1) =>
       ReconEngineSidebarValues.reconEngineSidebars(~userHasResourceAccess, ~userHasAccess)
     | Recon(V2) => ReconSidebarValues.reconSidebars
-    | Recovery => RevenueRecoverySidebarValues.recoverySidebars(isLiveMode)
+    | Recovery =>
+      RevenueRecoverySidebarValues.recoverySidebars(
+        isLiveMode,
+        ~showSimulator=featureFlagDetails.devRecoverySimulator,
+      )
     | Vault => VaultSidebarValues.vaultSidebars
     | CostObservability => HypersenseSidebarValues.hypersenseSidebars
     | DynamicRouting => IntelligentRoutingSidebarValues.intelligentRoutingSidebars
@@ -288,7 +292,11 @@ let useGetSidebarValuesForCurrentActive = () => {
   let sidebarValuesForProduct = switch activeProduct {
   | Orchestration(V1) => hsSidebars
   | Recon(V2) => ReconSidebarValues.reconSidebars
-  | Recovery => RevenueRecoverySidebarValues.recoverySidebars(isLiveMode)
+  | Recovery =>
+    RevenueRecoverySidebarValues.recoverySidebars(
+      isLiveMode,
+      ~showSimulator=featureFlagDetails.devRecoverySimulator,
+    )
   | Vault => VaultSidebarValues.vaultSidebars
   | CostObservability => HypersenseSidebarValues.hypersenseSidebars
   | DynamicRouting => IntelligentRoutingSidebarValues.intelligentRoutingSidebars

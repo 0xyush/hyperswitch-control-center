@@ -29,6 +29,35 @@ let revenueRecoverySummary = {
   })
 }
 
-let recoverySidebars = _isLiveMode => {
-  [revenueRecoveryInvoices, revenueRecoverySummary]
+// Rev Rec Simulator pages (flag `dev_recovery_simulator`)
+let homePath = "/v2/recovery/home"
+let simulatorStoryPath = "/v2/recovery/simulator/story"
+
+let revenueRecoverySimulatorHome = {
+  Link({
+    name: "Home",
+    link: homePath,
+    access: Access,
+    icon: "nd-home",
+  })
+}
+
+let revenueRecoverySimulatorStory = {
+  Link({
+    name: "Invoice Story",
+    link: simulatorStoryPath,
+    access: Access,
+    icon: "nd-workflow",
+  })
+}
+
+let recoverySidebars = (_isLiveMode, ~showSimulator) => {
+  showSimulator
+    ? [
+        revenueRecoverySimulatorHome,
+        revenueRecoveryInvoices,
+        revenueRecoverySimulatorStory,
+        revenueRecoverySummary,
+      ]
+    : [revenueRecoveryInvoices, revenueRecoverySummary]
 }
