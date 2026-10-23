@@ -49,3 +49,7 @@ coverage
 /ctrf-shards/
 /ctrf-shard-*.json
 /merged-ctrf/
+
+# simulator secrets
+simulator/proxy/.env
+simulator/proxy/node_modules
