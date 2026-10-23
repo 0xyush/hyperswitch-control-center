@@ -5,7 +5,8 @@
 import { createRequire } from "node:module";
 
 const args = process.argv.slice(2);
-const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const arg = (name, fallback) =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const base = arg("--base", "http://localhost:9000");
 const storyId = arg("--story", null);
 
@@ -16,18 +17,26 @@ const pages = [
   ["/dashboard/v2/recovery/invoices", "List of Invoices"],
   ["/dashboard/v2/recovery/simulator/story", "Invoice story"],
   ["/dashboard/v2/recovery/simulator/unknown-page", "Invoice story"],
-  ...(storyId ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "Scenario"]] : []),
+  ...(storyId
+    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "Scenario"]]
+    : []),
 ];
 
-const browserAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+const browserAccept =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 let failed = 0;
 
 for (const [path] of pages) {
   const res = await fetch(base + path, { headers: { Accept: browserAccept } });
   const body = await res.text();
-  const ok = res.status === 200 && (res.headers.get("content-type") ?? "").includes("text/html") && body.includes('id="app"');
+  const ok =
+    res.status === 200 &&
+    (res.headers.get("content-type") ?? "").includes("text/html") &&
+    body.includes('id="app"');
   if (!ok) failed++;
-  console.log(`${ok ? "ok  " : "FAIL"} server  ${path} -> ${res.status} ${res.headers.get("content-type")}${ok ? "" : ` body: ${body.slice(0, 80)}`}`);
+  console.log(
+    `${ok ? "ok  " : "FAIL"} server  ${path} -> ${res.status} ${res.headers.get("content-type")}${ok ? "" : ` body: ${body.slice(0, 80)}`}`,
+  );
 }
 
 if (args.includes("--browser")) {
@@ -37,13 +46,26 @@ if (args.includes("--browser")) {
   for (const [path, text] of pages) {
     const page = await (await browser.newContext()).newPage();
     await page.goto(base + path, { waitUntil: "domcontentloaded" });
-    await page.getByText(text).first().waitFor({ timeout: 20000 }).catch(() => {});
+    await page
+      .getByText(text)
+      .first()
+      .waitFor({ timeout: 20000 })
+      .catch(() => {});
     await page.reload({ waitUntil: "domcontentloaded" });
-    const shown = await page.getByText(text).first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+    const shown = await page
+      .getByText(text)
+      .first()
+      .waitFor({ timeout: 20000 })
+      .then(
+        () => true,
+        () => false,
+      );
     const raw = (await page.locator("body").innerText()).trim().startsWith("{");
     const ok = shown && !raw;
     if (!ok) failed++;
-    console.log(`${ok ? "ok  " : "FAIL"} browser ${path} -> after reload ${page.url().replace(base, "")} shows "${text}": ${shown}${raw ? " (raw JSON)" : ""}`);
+    console.log(
+      `${ok ? "ok  " : "FAIL"} browser ${path} -> after reload ${page.url().replace(base, "")} shows "${text}": ${shown}${raw ? " (raw JSON)" : ""}`,
+    );
     await page.close();
   }
   await browser.close();
