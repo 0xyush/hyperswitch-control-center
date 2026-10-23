@@ -219,15 +219,20 @@ async function stripeStep(
   return r;
 }
 
-async function sandboxStep(story: Story, step: string, body: unknown) {
-  const r = await hsApiKey("POST", config.hsRecoveryPath, body);
+async function sandboxStep(
+  story: Story,
+  step: string,
+  body: unknown,
+  path = config.hsRecoveryPath,
+) {
+  const r = await hsApiKey("POST", path, body);
   story.requests.push({
     step,
     at: nowIso(),
     system: "sandbox",
     request: {
       method: "POST",
-      url: `${config.hsBaseUrl}/${config.hsRecoveryPath}`,
+      url: `${config.hsBaseUrl}/${path}`,
       headers: shownHsHeaders("api-key"),
       body: redact(body),
     },
@@ -269,6 +274,9 @@ async function attachCard(
 
 // A real off-session charge that Stripe declines: what the billing system's own monthly charge looks like.
 async function failedCharge(story: Story, step: string): Promise<string> {
+  const sc = scenarioById(story.scenarioId)!;
+  // A failCard that Stripe will not save is charged one-off, straight from its test token.
+  if (sc.failCard) return chargeToFail(story, step, sc.failCard.pm);
   // The billing system's own charges use a failing card. Reuse the saved one when it is 0341.
   if (!story.declinePm) {
     story.declinePm =
@@ -280,7 +288,14 @@ async function failedCharge(story: Story, step: string): Promise<string> {
             "Save the failing card for the billing system's own charge",
           );
   }
-  const pm = story.declinePm;
+  return chargeToFail(story, step, story.declinePm);
+}
+
+async function chargeToFail(
+  story: Story,
+  step: string,
+  pm: string,
+): Promise<string> {
   const r = await stripeStep(story, step, "payment_intents", {
     amount: String(story.amount),
     currency: story.currency.toLowerCase(),
@@ -413,7 +428,7 @@ export function checkScenario(scenarioId: number): Scenario {
       undefined,
       "bad_scenario",
     );
-  if (!sc.runnable)
+  if (!sc.runnable && !config.enabledScenarios.includes(sc.id))
     throw new HttpError(
       409,
       `scenario ${sc.id} "${sc.title}" is not available yet (${sc.v1Status})`,
@@ -518,7 +533,7 @@ export async function startStory(scenarioId: number): Promise<Story> {
         story,
         "billing",
         "revrec",
-        `The billing system reported the failure${of} to Rev Rec with reason "${sc.reason.key}" (reason chosen by the simulator).`,
+        `The billing system reported the failure${of} to Rev Rec with reason "${sc.reason.key}". The sandbox checks the charge with Stripe and records Stripe's own decline.`,
       );
       event(
         story,
@@ -608,6 +623,47 @@ export function paidInApp(storyId: string) {
       "revrec",
       "billing",
       `Rev Rec answered: payment status ${r.json.intent_status}.`,
+      "sandbox",
+    );
+    viewCache.delete(storyId);
+    save();
+  });
+}
+
+// The merchant cancels the invoice: Rev Rec stops its retry work for it (live on the sandbox since 23 Oct).
+export function cancelStory(storyId: string) {
+  const story = getStory(storyId);
+  return withLock(storyId, async () => {
+    if (!story.recoveryId)
+      throw new HttpError(
+        409,
+        "the story did not start, so there is nothing to cancel",
+      );
+    const path = `${config.hsRecoveryPath}/${encodeURIComponent(story.invoiceId)}/cancel`;
+    const r = await sandboxStep(
+      story,
+      "Cancel the invoice's recovery",
+      undefined,
+      path,
+    );
+    const msg: string = r.json?.error?.message ?? "";
+    if (r.status !== 200)
+      throw new HttpError(
+        r.status === 412 ? 409 : 502,
+        `cancel returned ${r.status}: ${msg || "no message"}`,
+        storyId,
+      );
+    event(
+      story,
+      "billing",
+      "revrec",
+      "The merchant cancelled the invoice in the billing system and told Rev Rec.",
+    );
+    event(
+      story,
+      "revrec",
+      "billing",
+      `Rev Rec stopped work on the invoice (payment status ${r.json?.intent_status}).`,
       "sandbox",
     );
     viewCache.delete(storyId);
@@ -722,6 +778,8 @@ type Attempt = {
   by: Actor;
   errorCode: string | null;
   errorMessage: string | null;
+  declineCode: string | null; // e.g. generic_decline, stolen_card (Stripe's decline_code)
+  networkDeclineCode: string | null;
   connectorTxnId: string | null;
   last4: string | null;
   network: string | null;
@@ -741,6 +799,8 @@ function toAttempts(json: any): Attempt[] {
         by: (by === "internal" ? "revrec" : "billing") as Actor,
         errorCode: a.error?.code ?? null,
         errorMessage: a.error?.message ?? null,
+        declineCode: a.error?.network_error_message ?? null,
+        networkDeclineCode: a.error?.network_decline_code ?? null,
         connectorTxnId:
           a.connector_payment_id?.TxnId ?? a.connector_reference_id ?? null,
         last4: a.payment_method_data?.card?.last4 ?? null,
@@ -1058,10 +1118,30 @@ export async function storyView(storyId: string) {
         `Total retry count on the invoice: ${fm.total_retry_count}.`,
       );
   }
+  // Since 23 Oct the sandbox checks each reported charge with Stripe and records Stripe's own
+  // decline, so the recorded reason can differ from the one the simulator reported.
+  const firstFail = attempts.find(
+    (a) => a.by === "billing" && a.status !== "charged",
+  );
+  const recorded = firstFail?.declineCode ?? null;
+  if (firstFail)
+    add(
+      "recorded-reason",
+      "sandbox",
+      `Decline recorded by the sandbox from Stripe: ${firstFail.errorCode ?? "?"}` +
+        (recorded ? `, ${recorded}` : "") +
+        (firstFail.networkDeclineCode
+          ? ` (network code ${firstFail.networkDeclineCode})`
+          : "") +
+        ".",
+    );
   add(
     "reason",
     "rule",
-    `Reported reason "${sc.reason.key}" is a ${sc.reason.soft ? "soft decline: the bank said not now, so it is worth retrying" : "hard decline: the bank said never, so Rev Rec should stop"}. The simulator chose this reason.`,
+    `The simulator reported reason "${sc.reason.key}", a ${sc.reason.soft ? "soft decline: the bank said not now, so it is worth retrying" : "hard decline: the bank said never, so Rev Rec should stop"}.` +
+      (recorded && recorded !== sc.reason.key
+        ? ` The sandbox replaced it with Stripe's real answer, "${recorded}".`
+        : ""),
   );
   add(
     "card",
@@ -1217,6 +1297,7 @@ export async function storyView(storyId: string) {
       connector: fm.connector ?? null,
       savedCard: story.tokenCard.last4,
       reportedReason: sc.reason.key,
+      recordedReason: recorded,
       reportsSent: story.reportsSent,
       createdAt: intent?.created_at ?? null,
     },
@@ -1229,6 +1310,7 @@ export async function storyView(storyId: string) {
     actions: {
       paidInApp: open && !story.paidInAppAt,
       reportAgain: open && story.reportsSent < 8,
+      cancel: open,
       reportAgainMode: sc.reportAgainMode,
     },
     warnings,

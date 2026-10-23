@@ -18,6 +18,14 @@ export const CARD_DECLINES: Card = {
   network: "Visa",
   behaviour: "Stripe test card 0341 declines every charge.",
 };
+// Declines as a stolen card. Stripe refuses to save it, so it is only charged one-off.
+export const CARD_STOLEN: Card = {
+  pm: "pm_card_chargeDeclinedStolenCard",
+  last4: "9979",
+  isin: "400000",
+  network: "Visa",
+  behaviour: "Stripe test card 9979 declines every charge as a stolen card.",
+};
 export const CARD_WORKS: Card = {
   pm: "pm_card_visa",
   last4: "4242",
@@ -74,6 +82,9 @@ export type Scenario = {
   summary: string;
   reason: Reason;
   retryCard: Card;
+  // The card the billing system's own charges fail on, when it is not the saved card.
+  // Since 23 Oct the sandbox records Stripe's real decline, not the reported reason.
+  failCard?: Card;
   expected: string;
   liveTime: string;
   v1Status: string;
@@ -176,9 +187,10 @@ export const SCENARIOS: Scenario[] = [
     id: 7,
     title: "Hard decline (stolen card)",
     summary:
-      "The billing system reports a stolen card. Rev Rec should stop at once.",
+      "The billing system's charge is declined as a stolen card. Rev Rec should stop at once.",
     reason: REASONS.stolen_card,
     retryCard: CARD_DECLINES,
+    failCard: CARD_STOLEN,
     expected: "Terminated at once",
     liveTime: "~1 min",
     v1Status: "Blocked on ask 7",

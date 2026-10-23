@@ -8,6 +8,7 @@ import { passThrough, recentBlocked } from "./passthrough.ts";
 import { scrubText } from "./redact.ts";
 import { publicScenarios } from "./scenarios.ts";
 import {
+  cancelStory,
   checkScenario,
   HttpError,
   listStories,
@@ -193,13 +194,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   const m = p.match(
-    /^\/sim\/story\/(st_[a-f0-9]{12})(?:\/(paid-in-app|report-again))?$/,
+    /^\/sim\/story\/(st_[a-f0-9]{12})(?:\/(paid-in-app|report-again|cancel))?$/,
   );
   if (m) {
     const [, id, action] = m;
     if (method === "GET" && !action) return send(res, 200, await storyView(id));
     if (method === "POST" && action === "paid-in-app") {
       await paidInApp(id);
+      return send(res, 200, await storyView(id));
+    }
+    if (method === "POST" && action === "cancel") {
+      await cancelStory(id);
       return send(res, 200, await storyView(id));
     }
     if (method === "POST" && action === "report-again") {
