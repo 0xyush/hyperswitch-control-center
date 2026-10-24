@@ -259,3 +259,21 @@ A, the redesigned story screen will read these. Until they land, B falls back to
   - **Design note for M2:** a bank flip must come before Rev Rec's about 7 retries are used up (about 15 min at sandbox pace). The insufficient-funds range of 4–12 min fits, but only if the loop is on time.
   - **Dashboard image** (B's check): `default__simulator__sim_url` is added. New `simulator/deploy/dashboard.Dockerfile` (Node 24, `npm ci --ignore-scripts` + `patch-package`, a git stand-in for `webpack.server.js`, its own ignore file that keeps `.env` files out), plus `cloudbuild.dashboard.yaml` on a 32 GB machine. Local test: every step passed up to the webpack production build, which was killed for lack of memory in the 6 GB Docker VM, so that last step is not verified.
   - :8787 is restarted on the latest code (portfolio on, 30 starts/h). `/healthz` has `limits` and `contract` (7/7 passed, no drift).
+
+## Hard-coded or English-only in the simulator UI (B, 2026-10-23 20:00)
+
+The dashboard has no translation system (no i18n library; all upstream UI text is English), so every simulator string is English too. Moving to translations would be a dashboard-wide change, not a simulator one. Items to know:
+
+- **Text from the proxy is shown as sent (English):** preset titles and summaries, timeline labels and sentences, explain lines, bank rules, warnings, the comparison label and error messages.
+- **English word matching (fallbacks only):** `SimulatorUtils.inferStepStatus` reads "declin", "fail", "approved", "paid" when a timeline row has no `status` (older proxies). `rowForAttempt` finds an attempt id inside the row's `text` / `why` when `attemptId` is missing. `SimulatorGlossary.linkTerms` underlines English terms only. The portfolio start falls back on no error text now.
+- **Copy written in the UI:** Home cards, Explore drawer steps, Feature tour panels (PRD §9; display-only texts are my summaries, to review), glossary definitions (PRD §20 plus "webhook"), page headings, empty states, the Billing system note, the countdown ("in 2 min 05 s").
+- **Values written in the UI:**
+  - Card network limits in the tour (Visa 20/20, Mastercard 10/35, Amex and Discover 20/20, "to confirm"), and "Retries for hard declines: 0 (fixed in the dashboard)".
+  - Portfolio: the five decline reasons and their labels, the default mix 4/3/2/1/0 (copied from the proxy's `DEFAULT_MIX`), invoices 10 / 25 (25 disabled by hand; could read `/healthz` `limits.portfolioMaxInvoices`), Stop after 10/20/45 min, "Card mix: Visa 100%", chart colours.
+  - Story form: default amount 65.40 USD, a fallback card list (used only if the proxy sends none), the customer options.
+  - Money: `toMinor` / `toMajorText` assume two decimals (fine for USD, EUR and GBP, the proxy's only currencies). The portfolio shows amounts with "$" and the amount dial says "(USD)", whatever the currency.
+  - Lifeline names and notes ("Simulated", "Sandbox", "Stripe test mode"); the source-label texts; retry-mode names (cascading, smart, monitoring).
+  - Polling: story 4 s, portfolio 30 s, health page 30 s.
+- **Demo session:** placeholder token `simulator-demo`, user name "Demo visitor", entity merchant, version v2, Recovery product forced. The ids come from config/env.
+- **Config:** `sim_url` and `api_url` default to localhost in config.toml; deploy must set `default__simulator__sim_url` and `default__endpoints__api_url`.
+- **Dates and times** use the browser's locale (`toLocaleTimeString`, the dashboard's `DateCell`), so they follow the visitor.
