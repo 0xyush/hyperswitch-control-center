@@ -11,7 +11,8 @@ process.env.SIM_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "sim-unit-"));
 const { matchRule } = await import("../src/passthrough.ts");
 const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
-const { SCENARIOS } = await import("../src/scenarios.ts");
+const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
+const { parseStart } = await import("../src/story.ts");
 const { createServer } = await import("../src/server.ts");
 
 describe("allow-list", () => {
@@ -100,16 +101,71 @@ describe("shell stubs", () => {
   });
 });
 
-describe("scenario table", () => {
-  test("has the 8 PRD scenarios, 1 to 3 runnable", () => {
+describe("presets and start body", () => {
+  test("has the 8 PRD presets, 1 to 3 verified", () => {
     assert.deepEqual(
-      SCENARIOS.map((s) => s.id),
+      PRESETS.map((p) => p.id),
       [1, 2, 3, 4, 5, 6, 7, 8],
     );
     assert.deepEqual(
-      SCENARIOS.filter((s) => s.runnable).map((s) => s.id),
+      PRESETS.filter((p) => p.verified).map((p) => p.id),
       [1, 2, 3],
     );
+  });
+
+  test("the single card field maps to a saved card and a first-charge card", () => {
+    assert.deepEqual(resolveCards({ card: "0341" }), {
+      savedCard: "0341",
+      firstCharge: "0341",
+    });
+    assert.deepEqual(resolveCards({ card: "4242" }), {
+      savedCard: "4242",
+      firstCharge: "0002",
+    });
+    assert.deepEqual(resolveCards({ card: "9995" }), {
+      savedCard: "0341",
+      firstCharge: "9995",
+    });
+    assert.deepEqual(resolveCards({ card: "9979", savedCard: "4242" }), {
+      savedCard: "4242",
+      firstCharge: "9979",
+    });
+  });
+
+  test("a preset fills defaults and explicit fields win", () => {
+    const p2 = parseStart({ preset: 2 });
+    assert.equal(p2.savedCard, "4242");
+    assert.equal(p2.firstCharge, "0002");
+    assert.equal(p2.amount, 6540);
+    const own = parseStart({
+      preset: 2,
+      card: "9995",
+      amount: 1999,
+      currency: "eur",
+    });
+    assert.deepEqual(
+      [own.savedCard, own.firstCharge, own.amount, own.currency],
+      ["0341", "9995", 1999, "EUR"],
+    );
+    assert.equal(parseStart({ preset: 3 }).sendDuplicateOnStart, true);
+    assert.equal(parseStart({ card: 341 }).savedCard, "0341");
+  });
+
+  test("bad start bodies are refused", () => {
+    for (const body of [
+      { preset: 9 },
+      { amount: 65.4 },
+      { amount: 10 },
+      { currency: "JPY" },
+      { card: "1234" },
+      { savedCard: "9979" },
+      { customer: "old" },
+    ])
+      assert.throws(
+        () => parseStart(body),
+        { status: 400 },
+        JSON.stringify(body),
+      );
   });
 });
 
@@ -153,24 +209,25 @@ describe("server (in process, no upstream calls)", () => {
     assert.equal(other.headers.get("access-control-allow-origin"), null);
   });
 
-  test("unknown and not-yet-runnable scenarios", async () => {
-    const post = (scenario: unknown) =>
+  test("bad start bodies get 400 before any Stripe call", async () => {
+    const post = (body: unknown) =>
       fetch(`${base}/sim/story/start`, {
         method: "POST",
-        body: JSON.stringify({ scenario }),
+        body: JSON.stringify(body),
       });
-    const r9 = await post(9);
+    const r9 = await post({ preset: 9 });
     assert.equal(r9.status, 400);
     assert.equal((await r9.json()).error.code, "bad_scenario");
-    const r5 = await post(5);
-    assert.equal(r5.status, 409);
-    assert.equal((await r5.json()).error.code, "not_available");
+    const rc = await post({ card: "1111" });
+    assert.equal(rc.status, 400);
+    assert.equal((await rc.json()).error.code, "bad_request");
   });
 
-  test("scenarios endpoint and unknown story", async () => {
-    const s = await (await fetch(`${base}/sim/scenarios`)).json();
-    assert.equal(s.scenarios.length, 8);
-    assert.equal("pm" in s.scenarios[0], false);
+  test("presets endpoint and unknown story", async () => {
+    const s = await (await fetch(`${base}/sim/presets`)).json();
+    assert.equal(s.presets.length, 8);
+    assert.equal(s.cards.length, 5);
+    assert.equal(JSON.stringify(s).includes("pm_card_"), false);
     const r = await fetch(`${base}/sim/story/st_000000000000`);
     assert.equal(r.status, 404);
     assert.equal((await r.json()).error.code, "not_found");

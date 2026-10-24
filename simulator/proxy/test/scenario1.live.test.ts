@@ -54,23 +54,40 @@ test(
       `healthz not ok: ${JSON.stringify(health.json)}`,
     );
 
-    const start = await call("POST", "/sim/story/start", { scenario: 1 });
+    const start = await call("POST", "/sim/story/start", { preset: 1 });
     assert.equal(start.status, 200, JSON.stringify(start.json));
     const id: string = start.json.storyId;
     assert.match(id, /^st_[a-f0-9]{12}$/);
-    assert.ok(start.json.recoveryId, "no recovery id from the sandbox");
+    // Start returns at once; the billing system's steps run in the background.
+    assert.equal(start.json.status, "starting");
+    let first = start.json;
+    for (let i = 0; i < 30 && first.status === "starting"; i++) {
+      await sleep(2000);
+      first = (await call("GET", `/sim/story/${id}`)).json;
+    }
+    assert.ok(
+      first.recoveryId,
+      `no recovery id from the sandbox: ${first.startError}`,
+    );
     assert.ok(
       ["monitoring", "queued", "scheduled", "processing"].includes(
-        start.json.status,
+        first.status,
       ),
-      start.json.status,
+      first.status,
     );
+    // Every diagram step links to a raw call, except notes with no call.
+    for (const e of first.timeline)
+      if (e.status !== "info")
+        assert.ok(
+          first.requests.some((r: { stepId: string }) => r.stepId === e.stepId),
+          `no request for step ${e.stepId} (${e.label})`,
+        );
     t.diagnostic(
-      `story ${id}, invoice ${start.json.invoiceId}, payment ${start.json.recoveryId}`,
+      `story ${id}, invoice ${first.invoiceId}, payment ${first.recoveryId}`,
     );
 
     // With the dashboard token the simulator meets the start rule, so Rev Rec should take over.
-    let view = start.json;
+    let view = first;
     if (hasDashboardToken()) {
       for (
         let i = 0;

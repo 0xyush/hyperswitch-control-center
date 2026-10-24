@@ -74,11 +74,6 @@ export const config = {
   hsRevrecMerchantId: read("HS_REVREC_MERCHANT_ID"),
   stripeKey: read("STRIPE_TEST_KEY"),
   startsPerHour: Number(read("RATE_LIMIT_STARTS_PER_HOUR") || 5),
-  // Scenario ids to allow although they are not runnable yet, for one-off probes. Example: "7".
-  enabledScenarios: read("SIM_ENABLE_SCENARIOS")
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter(Number.isInteger),
   dataDir: read("SIM_DATA_DIR") || path.join(PROXY_ROOT, "data"),
 };
 

@@ -12,8 +12,6 @@ The dashboard talks only to this server. It holds the keys, plays the merchant's
 
 At start, the proxy switches the pasted dashboard token (`HS_DASHBOARD_JWT`) to the Rev Rec merchant with `POST v2/user/switch/merchant`. It never uses a token that is scoped to another merchant. If the token expires, re-grab it (`bash simulator/scripts/grab-jwt.sh`) and restart.
 
-To try a scenario that is not runnable yet, start the proxy with `SIM_ENABLE_SCENARIOS=7` (a comma list of ids).
-
 ## Test
 
 - `npm test` runs the offline unit tests and one live scenario-1 story on the sandbox (about 1 minute). The live test skips when `.env` is missing a required key, or when `SIM_LIVE=0`.
@@ -22,27 +20,29 @@ To try a scenario that is not runnable yet, start the proxy with `SIM_ENABLE_SCE
 
 ## Endpoints
 
-| Route                                        | What it does                                                                                                           |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `GET /healthz`                               | Sandbox and Stripe reachable, config present, dashboard token status (ids and expiry only)                             |
-| `GET /sim/scenarios`                         | The 8 scenarios from PRD section 7, with V1 status and `runnable`                                                      |
-| `POST /sim/story/start` `{scenario}`         | Starts a story. Returns the story view. Limit: 5 starts per hour per IP                                                |
-| `GET /sim/story/:id`                         | The story view: status, raw invoice, attempts and process tracker, explain lines, timeline, requests                   |
-| `POST /sim/story/:id/paid-in-app`            | Real 4242 charge, then a `charged` report: "paid outside Rev Rec"                                                      |
-| `POST /sim/story/:id/report-again` `{mode?}` | `duplicate` (same transaction), `new` (new failed charge) or `swap` (new failure with the 4242 card)                   |
-| `POST /sim/story/:id/cancel`                 | Cancels the invoice's recovery on the sandbox (`POST /v2/recovery/{merchant_reference_id}/cancel`)                     |
-| `GET /sim/stories`                           | The last 50 stories                                                                                                    |
-| `GET /sim/blocked`                           | `/api` calls the allow-list refused (for the dashboard builder)                                                        |
-| `GET /api/*`                                 | Allow-listed sandbox reads (`src/passthrough.ts`); shell reads answered by stubs (`src/shell.ts`); everything else 403 |
+| Route                                                                 | What it does                                                                                                           |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz`                                                        | Sandbox and Stripe reachable, config present, dashboard token status (ids and expiry only)                             |
+| `GET /sim/presets`                                                    | The 8 presets from PRD section 7 with the form values they fill, the 5 test cards, the currencies                      |
+| `POST /sim/story/start` `{amount, currency, card, customer, preset?}` | Starts a story and returns the story view at once (status `starting`). Limit: 5 starts per hour per IP                 |
+| `GET /sim/story/:id`                                                  | The story view: status, raw invoice, attempts and process tracker, explain lines, timeline, requests                   |
+| `POST /sim/story/:id/paid-in-app`                                     | Real 4242 charge, then a `charged` report: "paid outside Rev Rec"                                                      |
+| `POST /sim/story/:id/report-again` `{mode?}`                          | `duplicate` (same transaction), `new` (new failed charge) or `swap` (new failure with the 4242 card)                   |
+| `POST /sim/story/:id/cancel`                                          | Cancels the invoice's recovery on the sandbox (`POST /v2/recovery/{merchant_reference_id}/cancel`)                     |
+| `GET /sim/stories`                                                    | The last 50 stories                                                                                                    |
+| `GET /sim/blocked`                                                    | `/api` calls the allow-list refused (for the dashboard builder)                                                        |
+| `GET /api/*`                                                          | Allow-listed sandbox reads (`src/passthrough.ts`); shell reads answered by stubs (`src/shell.ts`); everything else 403 |
 
 The full story JSON contract is in `simulator/NOTES.md` ("A reply to B proposals").
 
 ## How a story runs
 
-1. The billing simulator creates a Stripe test customer and saves the scenario's card: 0341 declines every charge, 4242 approves every charge.
-2. It makes (start rule + 1) real failed charges, which are the billing system's own retries, and reports each one to `POST /v2/recovery` with `transaction_status: failure` and the scenario's decline reason. The start rule is read from the billing connector. Since 23 Oct the sandbox checks each charge with Stripe and records Stripe's own decline, so the decline reason comes from the card that failed (0341 = `generic_decline`, 9979 = `stolen_card`), not from the report.
-3. Rev Rec takes over on the sandbox: Monitoring, then Queued, Scheduled, Processing, and Recovered or Terminated.
-4. The proxy reads the status back: the invoice list row, the invoice, its attempts and the process tracker. Each explain line says where it comes from: `sandbox`, `recomputed` or `rule`.
+1. The dashboard form plays the merchant's billing system: amount (minor units, 6540 = 65.40), currency, card, customer (new or same as last). A preset only fills these fields; explicit fields win.
+2. A story uses two cards. The **saved card** is the one Rev Rec retries: 4242 approves every charge, 0341 declines every charge. The **first-charge card** is the one the billing system's own charge fails on: 0341 itself, or the one-off Stripe decline cards 0002 (generic_decline), 9995 (insufficient_funds) or 9979 (stolen_card), which Stripe will not save. The form's single `card` field picks both: 4242 = saved 4242 with a first charge on 0002; 0341 = 0341 for both; 0002, 9995 or 9979 = that first charge with saved card 0341. `savedCard` and `firstCharge` can also be sent on their own.
+3. The billing simulator makes (start rule + 1) real failed charges, which are its own retries, and reports each one to `POST /v2/recovery` with `transaction_status: failure`. The start rule is read from the billing connector. Since 23 Oct the sandbox checks each charge with Stripe and records Stripe's own decline, so the decline reason comes from the first-charge card.
+4. Rev Rec takes over on the sandbox: Monitoring, then Queued, Scheduled, Processing, and Recovered or Terminated.
+5. The proxy reads the status back: the invoice list row, the invoice, its attempts and the process tracker. Rev Rec's retry bookings, its own charges and the final status become timeline steps too.
+6. Every timeline step (one arrow in the sequence diagram) has a `stepId`; the `requests` entry with the same `stepId` is its raw call. Each explain line says where it comes from: `sandbox`, `recomputed` or `rule`.
 
 ## Files
 

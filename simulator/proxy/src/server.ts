@@ -6,13 +6,13 @@ import { authStatus, refreshDashboardToken } from "./auth.ts";
 import { config, configStatus } from "./config.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
 import { scrubText } from "./redact.ts";
-import { publicScenarios } from "./scenarios.ts";
+import { publicPresets } from "./scenarios.ts";
 import {
   cancelStory,
-  checkScenario,
   HttpError,
   listStories,
   paidInApp,
+  parseStart,
   reportAgain,
   startStory,
   storyView,
@@ -162,24 +162,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   if (method === "GET" && p === "/healthz")
     return send(res, 200, await healthz());
-  if (method === "GET" && p === "/sim/scenarios")
-    return send(res, 200, { scenarios: publicScenarios() });
+  // Presets, card options and currencies for the billing-system form.
+  if (method === "GET" && (p === "/sim/presets" || p === "/sim/scenarios"))
+    return send(res, 200, publicPresets());
   if (method === "GET" && p === "/sim/stories")
     return send(res, 200, { stories: listStories() });
   if (method === "GET" && p === "/sim/blocked")
     return send(res, 200, { blocked: recentBlocked() });
 
   if (method === "POST" && p === "/sim/story/start") {
-    const body = await readJson(req);
-    const scenario = Number(body.scenario);
-    if (!Number.isInteger(scenario))
-      throw new HttpError(
-        400,
-        'send {"scenario": 1..8}',
-        undefined,
-        "bad_scenario",
-      );
-    checkScenario(scenario); // a bad request does not use up a start
+    // Bad input is refused before the rate limit, so it does not use up a start.
+    const opts = parseStart(await readJson(req));
     const ip = req.socket.remoteAddress ?? "unknown";
     const gate = allowStart(ip);
     if (!gate.ok) {
@@ -189,7 +182,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         `limit is ${config.startsPerHour} story starts per hour; try again in ${gate.retryAfterSec} s`,
       );
     }
-    const s = await startStory(scenario);
+    // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
+    const s = startStory(opts);
     return send(res, 200, await storyView(s.storyId));
   }
 
