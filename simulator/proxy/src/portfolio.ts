@@ -352,6 +352,12 @@ async function tick(run: Run) {
     return stopTimer(run);
   ticking.add(run.runId);
   try {
+    // A late tick (a slow sandbox, a busy machine) still ends the run at the cap.
+    const elapsedMin = (Date.now() - Date.parse(run.startedAt)) / 60_000;
+    if (run.status === "running" && elapsedMin >= run.dials.maxMinutes) {
+      await poll(run);
+      return await end(run, `time cap of ${run.dials.maxMinutes} min`);
+    }
     await flipDue(run);
     await poll(run);
     // Half-minute steps: one point per 30 s tick.
@@ -402,8 +408,24 @@ async function flipDue(run: Run) {
   }
 }
 
-// One invoice-list read per profile gives every status. Attempts are read only for copies whose
-// status changed, to count Rev Rec's retries and find the recovery time.
+// Runs fn over the items with at most `limit` calls at a time.
+async function eachLimited<T>(
+  items: T[],
+  limit: number,
+  fn: (t: T) => Promise<void>,
+) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+}
+
+// One invoice-list read per profile gives every status. Attempts are read for every copy that
+// was still open, at most 5 reads at a time: the status can look the same at two ticks with a
+// Rev Rec retry in between (run pf_5f2dcd18 counted 3 retries where the sandbox had 7).
 async function poll(run: Run) {
   const status = new Map<string, string>();
   for (const profileId of new Set(SIDES.map((s) => PROFILES[s].profileId))) {
@@ -420,34 +442,37 @@ async function poll(run: Run) {
       if (rows.length < 100) break;
     }
   }
+  const toRead: { c: Copy; side: ProfileKey }[] = [];
   for (const inv of run.invoices)
     for (const side of SIDES) {
       const c = inv.copies[side];
       if (!c?.recoveryId) continue;
       const next = normalizeStatus(status.get(c.recoveryId));
-      // Read attempts again while a recovered copy has no recovery time yet: the paying attempt
-      // can show up in the attempts list a poll later than the status.
-      const settled =
-        next === c.status && !(next === "recovered" && !c.recoveredAt);
-      if (!next || settled) continue;
+      if (!next) continue;
+      // Open copies, copies that just became final, and a recovered copy whose paying
+      // attempt has not shown up yet.
+      const read =
+        !isFinalStatus(c.status) || (next === "recovered" && !c.recoveredAt);
       c.status = next;
-      const r = await hsApiKey(
-        "GET",
-        `v2/payments/${c.recoveryId}/list-attempts`,
-        undefined,
-        PROFILES[side].profileId,
-      );
-      const list: any[] =
-        r.status === 200 ? (r.json?.payment_attempt_list ?? []) : [];
-      const own = list.filter(
-        (a) =>
-          a.feature_metadata?.revenue_recovery?.attempt_triggered_by ===
-          "internal",
-      );
-      c.revrecAttempts = own.length;
-      const paid = own.find((a) => a.status === "charged");
-      c.recoveredAt = paid ? (paid.modified_at ?? paid.created_at) : null;
+      if (read) toRead.push({ c, side });
     }
+  await eachLimited(toRead, 5, async ({ c, side }) => {
+    const r = await hsApiKey(
+      "GET",
+      `v2/payments/${c.recoveryId}/list-attempts`,
+      undefined,
+      PROFILES[side].profileId,
+    ).catch(() => null);
+    if (r?.status !== 200) return;
+    const own = (r.json?.payment_attempt_list ?? []).filter(
+      (a: any) =>
+        a.feature_metadata?.revenue_recovery?.attempt_triggered_by ===
+        "internal",
+    );
+    c.revrecAttempts = own.length;
+    const paid = own.find((a: any) => a.status === "charged");
+    c.recoveredAt = paid ? (paid.modified_at ?? paid.created_at) : null;
+  });
 }
 
 const openCopies = (run: Run) =>
@@ -511,6 +536,15 @@ try {
 }
 
 // ---------- the result view (GET /sim/portfolio/:runId) ----------
+
+const LATE_FLIP_SEC = 90;
+const lateSec = (inv: PfInvoice) =>
+  inv.flipAt && inv.flippedAt
+    ? Math.max(
+        0,
+        Math.round((Date.parse(inv.flippedAt) - Date.parse(inv.flipAt)) / 1000),
+      )
+    : null;
 
 function quantile(sorted: number[], q: number) {
   if (!sorted.length) return null;
@@ -615,6 +649,7 @@ export async function portfolioView(runId: string) {
         flipAfterMin: inv.flipAfterMin,
         flipAt: inv.flipAt,
         flippedAt: inv.flippedAt,
+        lateSec: lateSec(inv),
       },
       static: inv.copies.static ?? null,
       smart: inv.copies.smart ?? null,
@@ -632,11 +667,21 @@ export async function portfolioView(runId: string) {
         : `${modes[0] ?? "static"} vs ${modes[1] ?? "smart"}`,
       source: "recomputed",
     },
-    warnings: sameProfile
-      ? [
-          `Both runs use the same profile (${PROFILES.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
-        ]
-      : [],
+    warnings: [
+      ...(sameProfile
+        ? [
+            `Both runs use the same profile (${PROFILES.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
+          ]
+        : []),
+      // The scripted bank must be on time to be a fair test. A late flip comes from the proxy
+      // (a slow sandbox or a busy machine), not from Rev Rec.
+      ...run.invoices
+        .filter((inv) => (lateSec(inv) ?? 0) > LATE_FLIP_SEC)
+        .map(
+          (inv) =>
+            `Invoice ${inv.i}: the bank flip came ${Math.round(lateSec(inv)! / 60)} min late, so its result is not a fair data point.`,
+        ),
+    ],
   };
 }
 
