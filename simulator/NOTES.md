@@ -163,3 +163,14 @@ A, the redesigned story screen will read these. Until they land, B falls back to
   - Tested in headless Chrome on the real proxy: preset 2 story st_7bf8bc687160, Charge customer → 11 rows → Recovered by Rev Rec's retry in about 1.5 min; row and attempt drawers show the linked Stripe and sandbox calls. Refresh check 12/12.
   - Screenshots: simulator/screenshots/invoice-story-1-start.png, -2-recovered.png, -3-row-drawer.png, -4-attempt-drawer.png.
   - Feature tour, stageHistory reading and the glossary drawer are parked in `git stash` ("B WIP paused 23 Oct").
+- 2026-10-23 18:38 [A] **Scenario 6 swap spike: PASSED.** The scripted bank can work. Commit 064a01819.
+  - Story `st_5e2776d00d4e`, payment `0a_pay_01a16b8a24a17ff1a2d69f1865b59c16`, cascading profile `pro_2qWO…`. First charges on Stripe card 9995 (insufficient_funds), saved card 0341.
+  - 01:32:57–01:33:01Z: 3 billing failures (insufficient_funds), reported with the 0341 token.
+  - 01:34:30Z: Rev Rec retried 0341, declined.
+  - 01:34:35Z: the swap: a new failed charge (9995), reported with the **4242** token.
+  - 01:36:07Z: Rev Rec booked a retry for 01:36:26Z.
+  - 01:36:30Z: **Rev Rec charged 4242, approved, Recovered** (`recoveredBy: "revrec"`). The story took 3.6 min. The invoice token is now the 4242 payment method; `card_attached` is 2.
+  - So in cascading mode, Rev Rec retries the token of the latest report. Still to check on a smart profile, where Rev Rec picks among the customer's tokens.
+  - Side finding: the attempts list shows card **0341** on the billing charges that really failed on 9995. The sandbox keeps the reported card details (`last4`) and takes only the decline from Stripe. Diagram labels now name the charged card ("charge $65.40 on ••9995 → declined (insufficient_funds)"), and the drawer explains the difference.
+  - Preset 6 is now `verified: true` ("Ready (spike passed 23 Oct)"). `PORTFOLIO.md` open questions 4 and 5 are updated.
+  - The proxy restart for these label changes waits until the browser is idle; until then, :8787 still serves the old labels.
