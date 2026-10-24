@@ -74,6 +74,10 @@ export const config = {
   hsRevrecMerchantId: read("HS_REVREC_MERCHANT_ID"),
   stripeKey: read("STRIPE_TEST_KEY"),
   startsPerHour: Number(read("RATE_LIMIT_STARTS_PER_HOUR") || 5),
+  // Behind Cloud Run the socket address is Google's front end: take the client IP from
+  // X-Forwarded-For instead. Only set this behind a proxy you trust.
+  trustProxy: read("TRUST_PROXY") === "1",
+  contractTest: read("SIM_CONTRACT_TEST") !== "0",
   // Looser cap per IP, because a browser chooses its own x-sim-session id and could change it.
   startsPerIpHour: Number(
     read("RATE_LIMIT_STARTS_PER_IP_HOUR") ||

@@ -203,6 +203,18 @@ export function listStories() {
     }));
 }
 
+// Invoices for the contract test's read-back: the newest one, and the newest one where the
+// proxy saw Rev Rec book a retry (so it has a process-tracker task).
+export function contractTargets() {
+  const newest = [...stories.values()].reverse();
+  return {
+    any: newest.find((s) => s.recoveryId)?.recoveryId ?? null,
+    withTask:
+      newest.find((s) => s.recoveryId && s.seenSchedules?.length)?.recoveryId ??
+      null,
+  };
+}
+
 // One action at a time per story, so a double click cannot make two real charges.
 const locks = new Map<string, Promise<unknown>>();
 function withLock<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
@@ -470,6 +482,38 @@ function recoveryBody(
     },
     ...(o.error ? { error: o.error } : {}),
   };
+}
+
+// The bodies the billing simulator sends, for a made-up invoice. The contract test (contract.ts)
+// sends them with one unknown field added, so the sandbox refuses them before creating anything.
+export function sampleRecoveryBodies() {
+  const story = {
+    invoiceId: "SIM-contract-probe",
+    amount: 6540,
+    currency: "USD",
+    startedAt: nowIso(),
+    stripeCustomerId: "cus_contract_probe",
+    profile: "static",
+  } as Story;
+  const failure = recoveryBody(story, {
+    status: "failure",
+    txnId: "pi_contract_probe_failure",
+    token: "pm_contract_probe",
+    card: "0341",
+    error: {
+      code: "card_declined",
+      message: "Your card was declined.",
+      reason: "decline_code - generic_decline",
+      network_decline_code: "05",
+    },
+  });
+  const charged = recoveryBody(story, {
+    status: "charged",
+    txnId: "pi_contract_probe_charged",
+    token: "pm_contract_probe",
+    card: "4242",
+  });
+  return { failure, charged };
 }
 
 const rejected = (story: Story, r: Upstream, what: string) =>

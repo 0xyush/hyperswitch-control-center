@@ -4,6 +4,7 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { authStatus, refreshDashboardToken } from "./auth.ts";
 import { config, configStatus, portfolioConfig } from "./config.ts";
+import { lastContract, scheduleContractTest } from "./contract.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
 import {
   listPortfolios,
@@ -91,7 +92,11 @@ function cors(req: IncomingMessage, res: ServerResponse) {
 // or the IP when the header is missing. Used for "same customer" and for the start limit.
 const SESSION = /^[A-Za-z0-9_-]{8,64}$/;
 function visitor(req: IncomingMessage) {
-  const ip = req.socket.remoteAddress ?? "unknown";
+  const forwarded = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")[0]
+    .trim();
+  const ip =
+    (config.trustProxy && forwarded) || req.socket.remoteAddress || "unknown";
   const header = req.headers["x-sim-session"];
   const session =
     typeof header === "string" && SESSION.test(header) ? header : null;
@@ -157,12 +162,18 @@ async function healthz() {
     ),
   ]);
   // "dashboard" is not part of ok: the billing simulator works without it, only the next retry time is missing.
+  // The hourly contract test: field drift between the sandbox and what the proxy sends and reads.
+  const contract = lastContract();
   const body = {
-    ok: sandbox.ok && stripeCheck.ok && cfg.ok,
+    ok: sandbox.ok && stripeCheck.ok && cfg.ok && contract?.ok !== false,
     sandbox,
     stripe: stripeCheck,
     config: cfg,
     dashboard: authStatus(),
+    contract: contract ?? {
+      ok: null,
+      note: "first run 20 s after start, then every hour",
+    },
     checkedAt: new Date().toISOString(),
   };
   health = { at: Date.now(), body };
@@ -310,6 +321,7 @@ if (import.meta.main) {
     process.exit(1);
   }
   await refreshDashboardToken();
+  if (config.contractTest) scheduleContractTest();
   const auth = authStatus();
   createServer().listen(config.port, config.host, () => {
     console.log(
