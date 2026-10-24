@@ -17,6 +17,7 @@ const pages = [
   ["/dashboard/v2/recovery/invoices", "List of Invoices"],
   ["/dashboard/v2/recovery/simulator/story", "Billing system"],
   ["/dashboard/v2/recovery/simulator/unknown-page", "Billing system"],
+  ["/dashboard/v2/recovery/simulator/tour", "Feature tour"],
   ...(storyId
     ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "What happened"]]
     : []),

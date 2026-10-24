@@ -466,7 +466,7 @@ module ExplainLines = {
             {label->React.string}
           </span>
           <p className={`${body.md.medium} text-nd_gray-600`} style={overflowWrap: "anywhere"}>
-            {line.text->React.string}
+            {line.text->SimulatorGlossary.linkTerms}
           </p>
         </div>
       })

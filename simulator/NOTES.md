@@ -174,3 +174,9 @@ A, the redesigned story screen will read these. Until they land, B falls back to
   - Side finding: the attempts list shows card **0341** on the billing charges that really failed on 9995. The sandbox keeps the reported card details (`last4`) and takes only the decline from Stripe. Diagram labels now name the charged card ("charge $65.40 on ••9995 → declined (insufficient_funds)"), and the drawer explains the difference.
   - Preset 6 is now `verified: true` ("Ready (spike passed 23 Oct)"). `PORTFOLIO.md` open questions 4 and 5 are updated.
   - The proxy restart for these label changes waits until the browser is idle; until then, :8787 still serves the old labels.
+- 2026-10-23 18:43 [B] Story polish, Feature tour, glossary.
+  - Story form: amount shows two decimals (65.40; a text input, formatted on blur). The Billing system panel was already sticky at xl widths; it now keeps a top gap.
+  - Feature tour at `/v2/recovery/simulator/tour` (sidebar: Feature Tour, under Invoice Story). 9 live / read-only panels and 7 display-only panels from PRD §9, each tagged. Real values via the proxy's `/api` pass-through (the same reads as Configuration Details): profile → retry mode; billing connector → start rule, max retries, grace period, partial authorization. Today: static retries (cascading), start rule 2, max retries 8, 30 days, partial authorization off. No writes. "See it in the invoice story" opens the story with `?preset=N`.
+  - Glossary drawer (PRD §20 terms, plus webhook from §10): first mention of a term is underlined in tour panels, story drawer explanations and Explore drawer steps; a click opens the drawer at that term. Also a Glossary button on the tour.
+  - Display-only panel texts are my plain-words summaries of the PRD feature names; please review the wording.
+  - Checked in headless Chrome on the real proxy; refresh check 14/14. Screenshots: simulator/screenshots/feature-tour.png, glossary-drawer.png.

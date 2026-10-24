@@ -102,3 +102,31 @@ type story = {
   // The billing system form values this story was started with
   form: option<billingForm>,
 }
+
+// Feature tour (PRD section 9)
+type featureTag = Live | LiveToConfirm | LiveSmartOnly | ReadOnly | DisplayOnly
+
+// Rev Rec settings read from the sandbox through the proxy
+type configKey = StartRule | MaxRetries | GracePeriod | RetryMode | PartialAuth
+
+type revRecConfig = {
+  startRule: option<int>,
+  maxRetries: option<int>,
+  gracePeriodDays: option<int>,
+  retryMode: option<string>,
+  partialAuth: option<bool>,
+}
+
+type configState = ConfigLoading | ConfigLoaded(revRecConfig) | ConfigFailed
+
+// A line on a feature panel: a live setting, or a fixed fact with its source
+type featureFact = Config(configKey) | Fact(string, string, source)
+
+type feature = {
+  title: string,
+  tag: featureTag,
+  description: string,
+  facts: array<featureFact>,
+  // Invoice story preset that shows the feature, if any
+  preset: option<int>,
+}

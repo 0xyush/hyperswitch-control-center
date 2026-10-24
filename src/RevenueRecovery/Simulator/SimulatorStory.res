@@ -9,6 +9,7 @@ open SimulatorStoryHelper
 let make = (~storyIdFromUrl: option<string>) => {
   open LogicUtils
   let simFetch = SimulatorApi.useSimFetch()
+  let url = RescriptReactRouter.useUrl()
   let showToast = ToastAdapter.useShowToast()
   let mixpanelEvent = MixpanelHook.useSendEvent()
 
@@ -33,7 +34,17 @@ let make = (~storyIdFromUrl: option<string>) => {
       let json = await simFetch(~path="/sim/presets", ~method_=Get)
       let formOptions = json->getFormOptions
       setOptions(_ => formOptions)
-      formOptions.presets->Array.get(0)->Option.forEach(preset => setForm(_ => preset.fields))
+      // A link like ?preset=7 (from the feature tour) picks that preset; otherwise the first one
+      let presetFromUrl =
+        url.search
+        ->getDictFromUrlSearchParams
+        ->Dict.get("preset")
+        ->Option.flatMap(id =>
+          formOptions.presets->Array.find(preset => preset.id->Int.toString == id)
+        )
+      presetFromUrl
+      ->Option.orElse(formOptions.presets->Array.get(0))
+      ->Option.forEach(preset => setForm(_ => preset.fields))
       setScreenState(_ => PageLoaderWrapper.Success)
     } catch {
     | _ => setScreenState(_ => PageLoaderWrapper.Custom)

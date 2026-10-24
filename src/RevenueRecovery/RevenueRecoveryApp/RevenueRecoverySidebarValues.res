@@ -32,6 +32,7 @@ let revenueRecoverySummary = {
 // Rev Rec Simulator pages (flag `dev_recovery_simulator`)
 let homePath = "/v2/recovery/home"
 let simulatorStoryPath = "/v2/recovery/simulator/story"
+let simulatorTourPath = "/v2/recovery/simulator/tour"
 
 let revenueRecoverySimulatorHome = {
   Link({
@@ -51,12 +52,22 @@ let revenueRecoverySimulatorStory = {
   })
 }
 
+let revenueRecoverySimulatorTour = {
+  Link({
+    name: "Feature Tour",
+    link: simulatorTourPath,
+    access: Access,
+    icon: "nd-overview",
+  })
+}
+
 let recoverySidebars = (_isLiveMode, ~showSimulator) => {
   showSimulator
     ? [
         revenueRecoverySimulatorHome,
         revenueRecoveryInvoices,
         revenueRecoverySimulatorStory,
+        revenueRecoverySimulatorTour,
         revenueRecoverySummary,
       ]
     : [revenueRecoveryInvoices, revenueRecoverySummary]

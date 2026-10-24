@@ -5,8 +5,9 @@ open Typography
 let drawerHeading = "Revenue Recovery Guide"
 let drawerSubHeading = "Learn how Rev Rec recovers failed subscription payments, one part at a time."
 
+// Glossary terms in the text are underlined and open the glossary drawer
 let stepText = (text: string) =>
-  <p className={`${body.md.medium} text-nd_gray-600`}> {text->React.string} </p>
+  <p className={`${body.md.medium} text-nd_gray-600`}> {text->SimulatorGlossary.linkTerms} </p>
 
 let comingSoon =
   <span
@@ -70,11 +71,16 @@ let steps: array<stepDetails> = [
       {stepText(
         "One panel per Rev Rec feature. Each panel says Live, Read-only or Display only, so you always know what is real.",
       )}
-      comingSoon
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_tour_the_features",
-    cta: None,
+    cta: Some((
+      "Open the feature tour →",
+      InternalRoute({
+        url: RevenueRecoverySidebarValues.simulatorTourPath,
+        trackingEvent: "redirect_to_simulator_tour",
+      }),
+    )),
   },
   {
     title: "Read the maths",
