@@ -1,17 +1,20 @@
 # Rev Rec Simulator · build plan (M0 → M1)
 
 Source of truth: the PRD at ~/work/revrec-sandbox/prd/prd.md (sections 6, 7, 11, 12, 13).
-Research with file:line refs: ~/work/revrec-sandbox/research/01..05*.md.
+Research with file:line refs: ~/work/revrec-sandbox/research/01..05\*.md.
 Owner: Aayush Shrestha. Fork: github.com/0xyush/hyperswitch-control-center (this repo), upstream juspay/hyperswitch-control-center.
 
 ## Layout in this repo
-- `simulator/proxy/`      Node 24 + TypeScript. The proxy + billing simulator + explain service (PRD §6). Own package.json. Port 8787.
-- `simulator/BUILD.md`    this file. `simulator/NOTES.md` running notes from the builders (append, never rewrite).
-- `src/RevenueRecovery/Simulator/`  ReScript screens: Home (two entry cards), Invoice story, later Portfolio, Feature tour, Explain panel.
+
+- `simulator/proxy/` Node 24 + TypeScript. The proxy + billing simulator + explain service (PRD §6). Own package.json. Port 8787.
+- `simulator/BUILD.md` this file. `simulator/NOTES.md` running notes from the builders (append, never rewrite).
+- `src/RevenueRecovery/Simulator/` ReScript screens: Home (two entry cards), Invoice story, later Portfolio, Feature tour, Explain panel.
 - Keep edits to shared dashboard files minimal (routing, sidebar, feature flag). Simulation code lives in the two folders above.
 
 ## Workstream A · proxy + billing simulator (M0, then M1 scenarios 1, 2, 3)
+
 Goal: the dashboard talks only to the proxy; the proxy holds keys and plays the billing system.
+
 1. `GET /healthz` → sandbox reachable (GET a recovery list), Stripe reachable (GET /v1/balance), config present.
 2. Pass-through for dashboard calls under `/api/*` → `https://sandbox.hyperswitch.io/*` with an allow-list (recovery list, aggregate, invoice detail, process tracker, profile config reads). Adds `authorization: Bearer <HS_DASHBOARD_JWT>` and `X-Merchant-Id` / `X-Profile-Id` from env. Everything else → 403.
    For M0 the JWT comes from env (`HS_DASHBOARD_JWT`, pasted from the browser). Login/renew is M4.
@@ -26,7 +29,9 @@ Goal: the dashboard talks only to the proxy; the proxy holds keys and plays the 
 6. Tests: a `npm test` that runs the scenario-1 flow against the real sandbox when env is present, otherwise skips. Keep a `simulator/proxy/README.md` with run steps.
 
 ## Workstream B · dashboard fork front end (M0, then M1 Home + Invoice story shell)
+
 Goal: the fork runs locally, points at the proxy, shows the Rev Rec module, and has the Home page with two entry cards and an Invoice story screen that polls the proxy.
+
 1. Read AGENTS.md and README.md in the repo root. Get `npm install`, `npm run re:build` and `npm run start` working (webpack dev on :9000). Record any env or node quirks in simulator/NOTES.md.
 2. `config/config.toml`: `dev_recovery_v2_product=true`, `test_processors=true`, `api_url="http://localhost:8787/api"` (the proxy). Keep a diff small.
 3. Demo session: a feature flag `simulator_demo_session=true` that skips the login screen and seeds the user info the Rev Rec module needs (merchant id, profile id, product type Recovery, transaction entity Merchant). Find how `UserInfoProvider` and `AuthHooks` build the session and seed the same shape from `window.__SIM_SESSION__` injected by the proxy (or from config for M0). Do not weaken auth for non-demo builds.
@@ -36,6 +41,7 @@ Goal: the fork runs locally, points at the proxy, shows the Rev Rec module, and 
 7. Use the dashboard's own components, Tailwind theme, InterDisplay font and icons. No new design system.
 
 ## Rules for both
+
 - Branch: work on `main` of the fork, commit small with clear messages, do not push until Aayush says so.
 - No secrets in commits. `.env` files are git-ignored (check `.gitignore`).
 - Append findings and blockers to `simulator/NOTES.md` with a timestamp.

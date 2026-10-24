@@ -1,15 +1,17 @@
 - 2026-10-23 13:15 plan written; fork cloned from 0xyush/hyperswitch-control-center at 75ba7c1e7
 
 ## Contract (proxy <-> dashboard) — Builder A writes, Builder B reads; both may append questions
+
 - Base URL: http://localhost:8787
-- GET  /healthz -> {ok, sandbox, stripe, config}
+- GET /healthz -> {ok, sandbox, stripe, config}
 - POST /sim/story/start {scenario: 1..8} -> {storyId, invoiceId, recoveryId, startedAt}
-- GET  /sim/story/:storyId -> {status, invoice, attempts[], nextRetryAt, explain:[{text, source:"sandbox"|"recomputed"|"rule"}], requests:[{step, request, response}]}
+- GET /sim/story/:storyId -> {status, invoice, attempts[], nextRetryAt, explain:[{text, source:"sandbox"|"recomputed"|"rule"}], requests:[{step, request, response}]}
 - POST /sim/story/:storyId/paid-in-app, /report-again -> same shape as GET
-- /api/* -> allow-listed pass-through to the sandbox with auth headers added
+- /api/\* -> allow-listed pass-through to the sandbox with auth headers added
 - **Header `x-sim-session`** (added 2026-10-23 by A, commit 5ccdf3486): the dashboard sends it on every `/sim/*` call. Value = a random id, 8 to 64 characters of `A-Z a-z 0-9 _ -`, made once and kept in the browser's localStorage. It identifies the visitor for `customer: "same"` and for the start limit (5 per hour per session; plus 30 per hour per IP). Missing or malformed: the proxy uses the IP. CORS allows it.
 
 ## Builder B (front end) log
+
 - 2026-10-23 13:19 [B] Step 1 done. Node v24.21.0, npm 11.19.0. `npm install` 12 s, `npm run re:build` 38 s (4313 files, no errors), `npm run start` serves http://localhost:9000 (webpack compiles in ~10 s).
   - Quirk: npm 11 `allowScripts` skips the postinstall of rescript, core-js-pure and fsevents ("install scripts not yet covered by allowScripts"). The build still works, because the rescript binary ships in the package. No action needed.
   - Quirk: no AGENTS.md in the repo root. `.clinerules` is the repo's agent guide (ReScript rules: PageLoaderWrapper around API calls, `useGetMethod`, typed state).
@@ -18,6 +20,7 @@
   - Refresh bug root cause (from review-opus-prd-v0.1 F55): the hosted sandbox sends `/dashboard/v2/...` page paths to the API router (`IR_02`). It is a hosting rule, not app code. Our fork must keep a single-page-app fallback on every page path, and the proxy must never forward non-`/api` page paths to the sandbox.
 
 ## Contract · B proposals (2026-10-23 13:22) — A, please confirm or edit inline under "A reply"
+
 1. CORS. The dashboard runs on http://localhost:9000 and calls http://localhost:8787 directly, so every route needs CORS. No cookies are sent (`credentials: omit`), so `Access-Control-Allow-Origin: *` works. Answer preflight `OPTIONS` with 204, `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`, and echo `Access-Control-Request-Headers` (the app sends `authorization`, `content-type`, `x-profile-id`, `x-merchant-id`, sometimes `x-feature`, `api-key`).
 2. Auth. In demo mode the browser sends `authorization: Bearer simulator-demo` (a placeholder, never a real token). The proxy replaces it with `HS_DASHBOARD_JWT` and overrides `X-Merchant-Id` / `X-Profile-Id`. The browser never holds the JWT.
 3. `/api/*` allow-list the dashboard needs (GET only, V2 merchant). The app shell list is a first cut from the code; B will confirm it from a real browser run and append the final list:
@@ -50,6 +53,7 @@
 5. Session seed. M0: the dashboard reads `org_id`, `merchant_id`, `profile_id` from `[default.simulator]` in config/config.toml (or env `default__simulator__merchant_id` etc.). M4: if the proxy serves the page, it can inject `window.__SIM_SESSION__ = {org_id, merchant_id, profile_id}` and that wins. The front end needs the real profile id, because some paths contain it.
 
 ## Orchestrator (2026-10-23) — dashboard token is in simulator/proxy/.env
+
 - `HS_DASHBOARD_JWT` written (377 chars, exp 2026-10-25T16:07Z, role org_admin). It is scoped to the Orchestrator merchant `merchant_1790193509` / profile `pro_3Ey0xhMp02zVffTXQ6Zt`, NOT the Rev Rec merchant.
 - Rev Rec demo merchant (sandbox): API merchant id `revenue_recovery_x8gd0pzm6l_MhOXrZKGDMGeVFF7VT17` (dashboard shows `revenue_recovery_x8GD0pZM6l`), profile `pro_2qWOGZLPJQRRY0O75DXg`, billing MCA (Custom) `mca_8sEBJcnLL79XDoOsQiWg`, payment MCA (Stripe test) `mca_QJ26aS0VvDMpjjA3TJOn`. `HS_MERCHANT_ID` in .env currently holds the Orchestrator id; A: set the Rev Rec ids as `HS_REVREC_MERCHANT_ID` / use HS_PROFILE_ID (already the Rev Rec profile).
 - Builder A: on startup, exchange the token for a Rev Rec-scoped one with `POST {HS_BASE_URL}/user/switch/merchant` body `{"merchant_id": "<rev rec merchant id>"}` (dashboard calls `user/switch/merchant`; v2 path `v2/user/switch/merchant` also exists), then `user/switch/profile` with `{"profile_id": "pro_2qWOGZLPJQRRY0O75DXg"}`. Use the returned token for all /api pass-through. If the switch fails, log the status code (not the token) in NOTES and Aayush will re-grab a token after switching merchant in the browser.
@@ -71,6 +75,7 @@
     Options for A: (a) allow these GETs as pass-through with the Rev Rec-scoped token; or (b) answer them in the proxy from a fixed stub (keeps user and merchant lists out of a public demo): merchant-details `{"product_type":"recovery","merchant_account_type":"standard"}`, role `{"groups":["operations_view","connectors_view","workflows_view","analytics_view","merchant_details_view","account_view"],"resources":["payment","account","connector","analytics"]}`, merchant lists `[{"merchant_id","merchant_name","product_type":"recovery","version":"v2"}]`, org list `[{"org_id","org_name"}]`, profile list `[{"profile_id","profile_name"}]`, user data `{}`, merchant account `{"id","merchant_name","product_type":"recovery"}`. B tested with exactly these stubs. Drop `account` from resources and the merchant-accounts call goes away.
 
 ## Builder A (proxy) log
+
 - 2026-10-23 13:42 [A] **M0 runnable** on http://127.0.0.1:8787. Run: `cd simulator/proxy && npm install && npm start`. Commits 42aecb877, ef9516083, 6f42c647e.
   - `GET /healthz` is green: sandbox 200 (28 invoices), Stripe test mode, config complete, dashboard token switched.
   - Dashboard token: at startup the proxy sends the pasted Orchestrator token to `POST v2/user/switch/merchant` with the Rev Rec merchant id. Result: 200, and the new token is already scoped to profile `pro_2qWOGZLPJQRRY0O75DXg` (no profile switch needed). Org `org_zS11mfgp7UAPtCdunDYj`. The proxy never uses a token for another merchant. `HS_REVREC_MERCHANT_ID` is now in .env. `/healthz` → `dashboard` shows ids, expiry and switch status codes (never the token).
@@ -85,6 +90,7 @@
   5. The profile `webhook_url` still points to the old trycloudflare tunnel from the prototype.
 
 ## A reply to B proposals (13:22)
+
 1. CORS: done, with an origin allow-list instead of `*` (localhost:9000 and 127.0.0.1:9000; env `ALLOWED_ORIGINS`). Preflight 204, methods GET, POST, PUT, DELETE, OPTIONS, request headers echoed, `x-sim-auth` exposed.
 2. Auth: yes. The proxy ignores every browser auth header, so `Bearer simulator-demo` is fine. It sets its own Authorization, X-Merchant-Id and X-Profile-Id.
 3. Allow-list: done (see above). Shell reads are stubs, not pass-through.
@@ -98,9 +104,10 @@
    - Scenario picker data: `GET /sim/scenarios` (8 rows with `v1Status`, `runnable`, `hint`). Runnable today: 1, 2, 3.
    - `POST /sim/story/:id/report-again` takes optional `{mode: "duplicate" | "new" | "swap"}`; the default comes from the scenario.
 5. Session seed: use org `org_zS11mfgp7UAPtCdunDYj`, merchant `revenue_recovery_x8gd0pzm6l_MhOXrZKGDMGeVFF7VT17`, profile `pro_2qWOGZLPJQRRY0O75DXg`. They are also in `/healthz` → `dashboard.scoped`.
+
 - 2026-10-23 13:51 [A] **Scenarios 2 and 3 proven on the sandbox.** Commit daf391da5.
   - Scenario 2 (try_again_later, saved card 4242): story `st_1f843ddfdb8a`, payment `0a_pay_01a16a80b1197ca3958d3eb3bc92280b`. Monitoring (about 28 s) → Scheduled (retry booked 20:44:38Z) → Processing → **Recovered by Rev Rec** at 20:45:00Z, `recoveredBy: "revrec"`. About 2 min in total. Task `COMPLETED_EXECUTE_TASK`.
-  - Scenario 3 (duplicate): story `st_179854639f59`, payment `0a_pay_01a16a8370a07a83bca1009ba4c934c1`. **Changed behaviour:** the sandbox now answers the copy with **400 "The transaction pi_… is already recorded against the invoice SIM-3-…"**. On 14 Oct it answered 200 and silently ignored it. One attempt kept, retry count 1. The story treats the 400 as the expected outcome.
+  - Scenario 3 (duplicate): story `st_179854639f59`, payment `0a_pay_01a16a8370a07a83bca1009ba4c934c1`. **Changed behaviour:** the sandbox now answers the copy with **400 "The transaction pi\_… is already recorded against the invoice SIM-3-…"**. On 14 Oct it answered 200 and silently ignored it. One attempt kept, retry count 1. The story treats the 400 as the expected outcome.
   - With start rule 2, scenario 3 stays in Monitoring (one failure). New field `done: boolean` in the story view: true at a final stage, on error, or once scenario 3 has shown the refused copy. **B: stop polling on `done`**, not only on final statuses.
   - `npm test` passes: 28 offline unit tests, plus 1 live scenario-1 run on the sandbox (about 54 s; skips without .env). README at `simulator/proxy/README.md`.
   - The proxy is running on :8787 with the default limit (5 starts per hour per IP). For heavy local testing, start it with `RATE_LIMIT_STARTS_PER_HOUR=30 npm start`.
@@ -116,14 +123,18 @@
   - For A / M4: the same check against :8787 fails (`{"error":{"code":"not_found"…}}` for `/dashboard/v2/recovery/*`). If the proxy ever serves the dashboard, it must return index.html for every page path that is not `/api/*`, `/sim/*` or `/healthz`. Run the script with `--base <url>` against the deployed host.
 
 ## How to run locally (for Aayush) — B, 2026-10-23
+
 Use two terminals. Terminal 1 (proxy): `cd simulator/proxy && npm install && npm start`. It needs `simulator/proxy/.env` filled in, listens on http://localhost:8787, and `curl -s localhost:8787/healthz` should say `"ok": true`. Terminal 2 (dashboard): from the repo root, `npm install`, then `npm run re:build`, then `npm run start` (add `npm run re:start` in a third terminal only if you edit `.res` files). Open http://localhost:9000/dashboard/v2/recovery/home: no login, the demo session opens the Rev Rec module. The Invoice story is at http://localhost:9000/dashboard/v2/recovery/simulator/story, and the Invoices list at http://localhost:9000/dashboard/v2/recovery/invoices. If a page shows "Oops", check the proxy terminal and `curl -s localhost:8787/sim/blocked` for blocked calls. To check that a refresh works, run `node simulator/scripts/check-refresh.mjs --browser` while the dashboard is up.
+
 - 2026-10-23 13:58 [A] Probes asked by the orchestrator. Commit abdf55be4.
   - **Cancel works on the sandbox.** `POST /v2/recovery/{merchant_reference_id}/cancel` (API key, no body) returned **200** `{"intent_status":"cancelled"}` on a Monitoring invoice (`SIM-3-mvlfwbfj-8539`) and on an invoice in active retries (`SIM-7-mvlg6850-0ea4`). The invoice list then shows `cancelled`. New proxy action: `POST /sim/story/:id/cancel` (story view gets `actions.cancel`). It can back the Cancelled state and a Reset that stops stale demo invoices. PRD §15 "Cancel API returns 404" is out of date.
   - **The sandbox now records Stripe's real decline, not the reported reason.** Scenario 2 reported `try_again_later` (code 19); the attempt shows `generic_decline` (code 01), which is what card 0341 really returns. The decline reason is no longer data the simulator can choose (PRD §7 and the scripted bank in §8 assume it is). To get a given reason, the charge must really fail that way at Stripe (test cards: 9979 stolen, 9995 insufficient funds, and so on). The explain panel now shows the recorded decline (source `sandbox`) next to the reported one; `summary.recordedReason` is new.
   - **Hard-decline probe (scenario 7): no stop.** Story `st_e15f47dac3f1`, payment `0a_pay_01a16a8a7e867243a3ce872873193c20`. The billing system's 3 charges failed at Stripe as stolen cards (card 9979, charged one-off because Stripe refuses to save it). The sandbox recorded `card_declined / stolen_card / network code 43`. Rev Rec still took over and retried the saved card 0341 at 20:54:30Z and 20:57:00Z (`FAILED_EXECUTE_TASK`, then booked again). Then I cancelled it. **Ask 7 is still open:** no hard-decline row in the error catalogue matches Stripe's stolen card. A row likely needs to match on Stripe's `decline_code`, because Stripe's `code` is `card_declined` for every decline. Scenario 7 stays not runnable; start the proxy with `SIM_ENABLE_SCENARIOS=7` to repeat the probe.
 
 ## Contract · B asks for the story redesign (REDESIGN-story.md §4) — 2026-10-23 18:15
+
 A, the redesigned story screen will read these. Until they land, B falls back to today's fields.
+
 1. `POST /sim/story/start` body: `{preset: 1..8, amount: 65.40, currency: "USD", card: "4242"|"0341"|"9995"|"9979"|"0002", customer: "new"|"same"}`. `amount` is in major units (B can send minor units instead if you prefer; say which). Preset fills defaults; explicit fields win. B also sends `scenario` = `preset` so today's proxy keeps working.
    - `customer: "same"` = reuse the Stripe customer of the visitor's last story. If there is none, please answer 409 `not_available` with a plain message.
 2. `timeline[]` entries: `{stepId, at, from, to, label, status, why?}`.
@@ -136,6 +147,7 @@ A, the redesigned story screen will read these. Until they land, B falls back to
 5. `actions.cancel`: seen, thanks. B shows Cancel invoice in the form's kebab menu.
 
 ## A reply to B asks for the story redesign (18:15) — 2026-10-23 18:28, live on :8787 (commits f94d43aca, 0f015dc49)
+
 1. **Start body**: `{preset?, amount, currency, card, customer}`. A preset fills defaults; explicit fields win. `scenario` is still read as `preset`.
    - **`amount` is in minor units** (6540 = 65.40), an integer from 50 to 1000000. 65.40 gets 400, so send minor units. `currency`: USD, EUR or GBP (only USD tested).
    - A story needs two cards. The single `card` field picks both. 4242 = saved card 4242, first charge fails on 0002. 0341 = 0341 for both. 0002, 9995 or 9979 = that card for the first charge, saved card 0341. Optional `savedCard` (4242 | 0341) and `firstCharge` (0341 | 0002 | 9995 | 9979) set each card on its own. The story view echoes them in `form`.
@@ -152,6 +164,7 @@ A, the redesigned story screen will read these. Until they land, B falls back to
 6. Also new: `stageHistory: [{stage, firstSeenAt, source}]`. `source: "sandbox"` = from an attempt's own timestamp (Monitoring, Processing, Recovered). `"observed"` = when the proxy first saw it at a poll, so up to one poll late (Queued, Scheduled). Stages are recorded only while someone polls.
    - Removed: `now` and `scenarioInfo` (now `presetInfo`).
    - Stories started before f94d43aca are not in the new store, so old story URLs answer 404.
+
 - Verified on the sandbox with the new flow: preset 2 (saved 4242, first charge 0002) Recovered by Rev Rec in 50 s; preset 1 paid outside Rev Rec; preset 3 refused copy and `done`; preset 8 reused the last customer (then cancelled). `npm test` passes (31 unit + live).
 - 2026-10-23 18:29 [A] `x-sim-session` header live on :8787 (commit 5ccdf3486); see the Contract section at the top. B: send it on every `/sim/*` call. Also: a story caught by a proxy restart in the middle of its start now shows `status: "error"` with `startError` (it no longer stays `starting` forever).
 - 2026-10-23 18:32 [B] Invoice story rebuilt to simulator/REDESIGN-story.md. The old screen (scenario cards, 4 boxes, moving arrow, Now card, always-on Why panel, stepper) is gone.
@@ -235,3 +248,14 @@ A, the redesigned story screen will read these. Until they land, B falls back to
     3. The trend's last point is minute 49.5 although Stop after was 20. My watcher saw no change from 19:08 to 19:50 (machine likely asleep), and the run ended on "every invoice final", not on the cap. A: is the cap measured on wall-clock time from the start?
   - Fixes from this run, in the screen: progress against the planned 20 copies; results hidden until the first copy is final; comparison label shown once; dials filled from a reopened run; "Stop after" dial; red pill when Rev Rec is worse; 30 s polling; a portfolio copy opened in the story shows preset "None (a portfolio copy)", and Charge customer then sends no preset. Fixture is no longer a fallback (kept in SimulatorPortfolioFixture.res).
   - Each status in the invoice table opens that copy's story (checked: st_07a2fd22d13c). Screenshot: simulator/screenshots/portfolio-real-run.png.
+- 2026-10-23 19:56 [A] **Run `pf_5f2dcd18` analysed; engine fixed; STATUS.md written.** Commits b7d1b893f, 9035d4d22, bfc66d1e5.
+  - **True result:** 7/10 recovered on both sides, **39 Rev Rec attempts each** (2.6 per recovery). The first count, 35 vs 39, was wrong: invoice 7's static copy showed 3 retries where the sandbox had 7.
+  - **Insufficient funds 2/4: the proxy's fault.** The flips for invoices 7 and 10 came 16 and 14 min late. By then Rev Rec had already retried 7 times and terminated the invoice (sandbox: about 7 retries in about 16 min, then stop). Invoice 10's swap calls also timed out.
+  - **Cause (most likely):** my local dashboard Docker build ran from about 02:08 to 02:50 on the same laptop and starved it. The proxy's 30-s loop stalled, and calls hit their 20-s timeouts. My restart overwrote the proxy log, so I cannot show the log lines. **My mistake: I ran a heavy build during B's run.** Restarts now append to the log.
+  - **Fixes:**
+    - Attempts are re-read for every open copy each tick (5 at a time).
+    - The time cap is checked at the start of each tick (the run went 50 min against a 20-min cap).
+    - A flip more than 90 s late is flagged: `bank.lateSec`, plus a warning "not a fair data point". The `pf_5f2dcd18` view now shows warnings for invoices 7 and 10.
+  - **Design note for M2:** a bank flip must come before Rev Rec's about 7 retries are used up (about 15 min at sandbox pace). The insufficient-funds range of 4–12 min fits, but only if the loop is on time.
+  - **Dashboard image** (B's check): `default__simulator__sim_url` is added. New `simulator/deploy/dashboard.Dockerfile` (Node 24, `npm ci --ignore-scripts` + `patch-package`, a git stand-in for `webpack.server.js`, its own ignore file that keeps `.env` files out), plus `cloudbuild.dashboard.yaml` on a 32 GB machine. Local test: every step passed up to the webpack production build, which was killed for lack of memory in the 6 GB Docker VM, so that last step is not verified.
+  - :8787 is restarted on the latest code (portfolio on, 30 starts/h). `/healthz` has `limits` and `contract` (7/7 passed, no drift).
