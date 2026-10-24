@@ -71,7 +71,7 @@ function cors(req: IncomingMessage, res: ServerResponse) {
     "Access-Control-Allow-Headers",
     String(
       req.headers["access-control-request-headers"] ??
-        "content-type, authorization, x-profile-id, x-merchant-id",
+        "content-type, authorization, x-profile-id, x-merchant-id, x-sim-session",
     )
       .replace(/[^A-Za-z0-9,\- ]/g, "")
       .slice(0, 500),
@@ -80,25 +80,38 @@ function cors(req: IncomingMessage, res: ServerResponse) {
   res.setHeader("Access-Control-Max-Age", "600");
 }
 
-// Story starts make real Stripe charges, so they are limited per client IP (in memory for now).
+// The visitor: the browser's x-sim-session id (a random id the dashboard keeps in localStorage),
+// or the IP when the header is missing. Used for "same customer" and for the start limit.
+const SESSION = /^[A-Za-z0-9_-]{8,64}$/;
+function visitor(req: IncomingMessage) {
+  const ip = req.socket.remoteAddress ?? "unknown";
+  const header = req.headers["x-sim-session"];
+  const session =
+    typeof header === "string" && SESSION.test(header) ? header : null;
+  return { ip, owner: ownerOf(session ? `session:${session}` : `ip:${ip}`) };
+}
+
+// Story starts make real Stripe charges, so they are limited per visitor, with a looser cap
+// per IP (in memory for now).
 const starts = new Map<string, number[]>();
 function allowStart(
-  ip: string,
+  key: string,
+  limit: number,
 ): { ok: true } | { ok: false; retryAfterSec: number } {
   const hour = 3_600_000;
   const now = Date.now();
-  const recent = (starts.get(ip) ?? []).filter((t) => now - t < hour);
-  if (recent.length >= config.startsPerHour) {
-    starts.set(ip, recent);
+  const recent = (starts.get(key) ?? []).filter((t) => now - t < hour);
+  starts.set(key, recent);
+  if (recent.length >= limit)
     return {
       ok: false,
       retryAfterSec: Math.ceil((recent[0] + hour - now) / 1000),
     };
-  }
-  recent.push(now);
-  starts.set(ip, recent);
   return { ok: true };
 }
+const noteStart = (...keys: string[]) => {
+  for (const k of keys) starts.get(k)?.push(Date.now());
+};
 
 // ---------- health ----------
 
@@ -175,21 +188,27 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (method === "POST" && p === "/sim/story/start") {
     // Bad input is refused before the rate limit, so it does not use up a start.
     const opts = parseStart(await readJson(req));
-    const ip = req.socket.remoteAddress ?? "unknown";
-    const owner = ownerOf(ip);
+    const { ip, owner } = visitor(req);
     if (opts.customer === "same" && !lastCustomerStory(owner))
       throw new HttpError(
         409,
         'There is no earlier customer to reuse. Start a story with customer "new" first.',
       );
-    const gate = allowStart(ip);
-    if (!gate.ok) {
-      res.setHeader("Retry-After", String(gate.retryAfterSec));
-      throw new HttpError(
-        429,
-        `limit is ${config.startsPerHour} story starts per hour; try again in ${gate.retryAfterSec} s`,
-      );
+    const ipKey = `ip:${ip}`;
+    for (const [key, limit] of [
+      [owner, config.startsPerHour],
+      [ipKey, config.startsPerIpHour],
+    ] as const) {
+      const gate = allowStart(key, limit);
+      if (!gate.ok) {
+        res.setHeader("Retry-After", String(gate.retryAfterSec));
+        throw new HttpError(
+          429,
+          `limit is ${limit} story starts per hour${key === ipKey ? " from one network address" : ""}; try again in ${gate.retryAfterSec} s`,
+        );
+      }
     }
+    noteStart(owner, ipKey);
     // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
     const s = startStory(opts, owner);
     return send(res, 200, await storyView(s.storyId));

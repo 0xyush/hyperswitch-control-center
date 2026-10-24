@@ -226,6 +226,26 @@ describe("server (in process, no upstream calls)", () => {
     assert.equal((await rc.json()).error.code, "bad_request");
   });
 
+  test("x-sim-session: allowed by CORS, and a new session has no customer to reuse", async () => {
+    const pre = await fetch(`${base}/sim/story/start`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:9000",
+        "Access-Control-Request-Headers": "content-type, x-sim-session",
+      },
+    });
+    assert.match(
+      pre.headers.get("access-control-allow-headers") ?? "",
+      /x-sim-session/,
+    );
+    const r = await fetch(`${base}/sim/story/start`, {
+      method: "POST",
+      headers: { "x-sim-session": "browser_abcdef123456" },
+      body: JSON.stringify({ customer: "same" }),
+    });
+    assert.equal(r.status, 409);
+  });
+
   test("presets endpoint and unknown story", async () => {
     const s = await (await fetch(`${base}/sim/presets`)).json();
     assert.equal(s.presets.length, 8);

@@ -145,7 +145,12 @@ const MAX_STORIES = 300;
 
 try {
   const saved = JSON.parse(fs.readFileSync(STORE_FILE, "utf8")) as Story[];
-  for (const s of saved) stories.set(s.storyId, s);
+  for (const s of saved) {
+    // A restart in the middle of a start stops its background steps for good.
+    if (!s.started && !s.error)
+      s.error = "The proxy restarted while this story was starting.";
+    stories.set(s.storyId, s);
+  }
 } catch {
   // No saved stories yet.
 }
