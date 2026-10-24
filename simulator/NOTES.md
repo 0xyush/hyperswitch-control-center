@@ -277,3 +277,8 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
 - **Demo session:** placeholder token `simulator-demo`, user name "Demo visitor", entity merchant, version v2, Recovery product forced. The ids come from config/env.
 - **Config:** `sim_url` and `api_url` default to localhost in config.toml; deploy must set `default__simulator__sim_url` and `default__endpoints__api_url`.
 - **Dates and times** use the browser's locale (`toLocaleTimeString`, the dashboard's `DateCell`), so they follow the visitor.
+
+## Orchestrator (2026-10-24) — sandbox writes done by Aayush's approval
+- Demo billing connector `mca_8sEBJcnLL79XDoOsQiWg`: start rule 2 → 0, max retries 8 → 15, grace 30 (saved, 200).
+- New profiles on the demo merchant: `sim-static` = profile `pro_Ly7W7OsLc7b8qVu5IHbu` (billing `mca_9vRZH9M4aRhZwA8ojJkM`, payment `mca_Y9Uslvqz4Szd24qZIJxi`); `sim-smart` = profile `pro_rOhNuMSwBsrRZupGSxyL` (billing `mca_qIvaIGoa8EApxOtNYptF`, payment `mca_zX8hYhwxe7HHrY80ihO6`). Both 0 / 15 / 30. HS_STATIC_* and HS_SMART_* are in simulator/proxy/.env.
+- A: restart the proxy, run the start-rule-0 story test, then the 10-invoice portfolio on the new pair.
