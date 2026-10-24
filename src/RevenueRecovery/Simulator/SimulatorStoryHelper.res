@@ -308,18 +308,29 @@ module DiagramRow = {
 // UML-style sequence diagram. Rows are appended as real events arrive; nothing moves.
 module SequenceDiagram = {
   @react.component
-  let make = (~story: option<story>, ~onRowClick) => {
+  let make = (~story: option<story>, ~onRowClick, ~onStatesClick) => {
     // The proxy sends the booked retry as the last row, with status pending
     let rows = story->Option.mapOr([], s => s.timeline)
+    let hasHistory = story->Option.mapOr(false, s => s.stageHistory->Array.length > 0)
 
     <div className={`${cardStyle} px-6 py-5 flex flex-col gap-3`}>
-      <div className="flex flex-col gap-1">
-        <p className={`${heading.md.semibold} text-nd_gray-900`}>
-          {"What happened"->React.string}
-        </p>
-        <p className={`${body.md.medium} text-nd_gray-500`}>
-          {"Each real event is one row. Click a row to see why it happened."->React.string}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <p className={`${heading.md.semibold} text-nd_gray-900`}>
+            {"What happened"->React.string}
+          </p>
+          <p className={`${body.md.medium} text-nd_gray-500`}>
+            {"Each real event is one row. Click a row to see why it happened."->React.string}
+          </p>
+        </div>
+        <RenderIf condition=hasHistory>
+          <Button
+            text="Invoice states"
+            buttonType=Secondary
+            buttonSize=Small
+            onClick={_ => onStatesClick()}
+          />
+        </RenderIf>
       </div>
       <div className="flex border-b border-nd_gray-200 pb-3 pt-2">
         <div className="relative flex-1 h-10">
@@ -478,15 +489,20 @@ module ExplainLines = {
 // Explanation on click only: what happened, who did it, why, and the raw call
 module ExplainDrawer = {
   @react.component
-  let make = (~row: option<diagramRow>, ~story: option<story>, ~onClose) => {
+  let make = (~content: option<drawerContent>, ~story: option<story>, ~onClose) => {
     let sectionTitle = text =>
       <p className={`${body.sm.semibold} text-nd_gray-400 uppercase`}> {text->React.string} </p>
+    let history = story->Option.mapOr([], s => s.stageHistory)
+    let row = switch content {
+    | Some(StepDetails(row)) => Some(row)
+    | _ => None
+    }
 
     <Modal
-      showModal={row->Option.isSome}
+      showModal={content->Option.isSome}
       setShowModal={_ => onClose()}
       closeOnOutsideClick=true
-      modalHeading="What happened"
+      modalHeading={content == Some(StateHistory) ? "Invoice states" : "What happened"}
       modalClass="flex flex-col justify-start h-screen w-full md:w-2/5 float-right overflow-hidden !bg-white"
       childClass="relative h-full">
       {switch row {
@@ -515,6 +531,13 @@ module ExplainDrawer = {
                   isCard=true
                 />
               </div>
+              {switch history->stageAt(row.at) {
+              | Some(visit) =>
+                <p className={`${body.md.medium} text-nd_gray-500`}>
+                  {`Invoice state then: ${visit.stage->stageName}, first seen at ${visit.firstSeenAt->toClockTime}`->React.string}
+                </p>
+              | None => React.null
+              }}
             </div>
             <div className="flex flex-col gap-3">
               {sectionTitle("Why")}
@@ -564,7 +587,31 @@ module ExplainDrawer = {
             </div>
           </div>
         </div>
-      | None => React.null
+      | None =>
+        <RenderIf condition={content == Some(StateHistory)}>
+          <div className="h-full relative">
+            <div className="absolute inset-0 overflow-y-auto px-4 pb-20 flex flex-col gap-4">
+              <p className={`${body.md.medium} text-nd_gray-500`}>
+                {"When the invoice was first seen in each state. Sandbox times are exact; times seen by the proxy can be up to one poll late."->React.string}
+              </p>
+              <SimulatorTable
+                headers=["State", "First seen", "Source"]
+                rows={history->Array.map(visit => {
+                  let (sourceText, sourceClass) = visit->stageVisitSource
+                  [
+                    visit.stage->stageName->React.string,
+                    visit.firstSeenAt->toClockTime->React.string,
+                    <span
+                      className={`w-fit rounded px-1.5 py-0.5 border whitespace-nowrap ${body.xs.semibold} ${sourceClass}`}>
+                      {sourceText->React.string}
+                    </span>,
+                  ]
+                })}
+                emptyText="The proxy has not reported any states yet."
+              />
+            </div>
+          </div>
+        </RenderIf>
       }}
     </Modal>
   }

@@ -77,6 +77,13 @@ type requestLog = {
 
 type storyActions = {paidInApp: bool, reportAgain: bool, cancel: bool}
 
+// When the invoice was first seen in a state. Sandbox times are exact; the others are when the
+// proxy noticed the change, up to one poll late.
+type stageVisit = {stage: stage, firstSeenAt: string, fromSandbox: bool}
+
+// What the side drawer shows: one diagram step, or the invoice's states over time
+type drawerContent = StepDetails(diagramRow) | StateHistory
+
 // GET /sim/story/:storyId (contract in simulator/NOTES.md). invoice, attempts and
 // processTracker are the raw sandbox JSON, so the invoice page components read them as they are.
 type story = {
@@ -89,6 +96,7 @@ type story = {
   stage: stage,
   // The proxy says the story has made its point, so polling can stop
   done: bool,
+  stageHistory: array<stageVisit>,
   nextRetryAt: option<string>,
   invoice: Dict.t<JSON.t>,
   attempts: JSON.t,

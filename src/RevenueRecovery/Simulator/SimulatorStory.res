@@ -19,7 +19,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   let (story, setStory) = React.useState(_ => None)
   let (isBusy, setIsBusy) = React.useState(_ => false)
   let (pollError, setPollError) = React.useState(_ => "")
-  let (selectedRow, setSelectedRow) = React.useState(_ => None)
+  let (drawerContent, setDrawerContent) = React.useState(_ => None)
   // The story whose values the form shows, so a reopened story fills the form once
   let formStoryId = React.useRef("")
 
@@ -149,7 +149,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   let onStartOver = () => {
     mixpanelEvent(~eventName="recovery_simulator_start_over")
     setStory(_ => None)
-    setSelectedRow(_ => None)
+    setDrawerContent(_ => None)
     setPollError(_ => "")
     RescriptReactRouter.replace(
       GlobalVars.appendDashboardPath(~url=RevenueRecoverySidebarValues.simulatorStoryPath),
@@ -162,7 +162,7 @@ let make = (~storyIdFromUrl: option<string>) => {
       story
       ->Option.flatMap(s => s.timeline->rowForAttempt(attempt))
       ->Option.getOr(attempt->attemptRow)
-    setSelectedRow(_ => Some(row))
+    setDrawerContent(_ => Some(StepDetails(row)))
   }
 
   let warnings = switch story {
@@ -227,7 +227,11 @@ let make = (~storyIdFromUrl: option<string>) => {
             />
           )
           ->React.array}
-          <SequenceDiagram story onRowClick={row => setSelectedRow(_ => Some(row))} />
+          <SequenceDiagram
+            story
+            onRowClick={row => setDrawerContent(_ => Some(StepDetails(row)))}
+            onStatesClick={() => setDrawerContent(_ => Some(StateHistory))}
+          />
           {switch story {
           | Some(s) if !(s.invoice->isEmptyDict) => <InvoicePanel story=s onAttemptClick />
           | Some(_) =>
@@ -239,6 +243,6 @@ let make = (~storyIdFromUrl: option<string>) => {
         </div>
       </div>
     </PageLoaderWrapper>
-    <ExplainDrawer row=selectedRow story onClose={() => setSelectedRow(_ => None)} />
+    <ExplainDrawer content=drawerContent story onClose={() => setDrawerContent(_ => None)} />
   </div>
 }

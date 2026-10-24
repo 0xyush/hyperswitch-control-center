@@ -264,6 +264,16 @@ let storyMapper = (json): story => {
     startedAt: dict->getString("startedAt", ""),
     stage: (stageText->isNonEmptyString ? stageText : dict->getString("status", ""))->stageMapper,
     done: dict->getBool("done", false),
+    stageHistory: dict
+    ->getArrayFromDict("stageHistory", [])
+    ->Array.map(item => {
+      let visit = item->getDictFromJsonObject
+      {
+        stage: visit->getString("stage", "")->stageMapper,
+        firstSeenAt: visit->getString("firstSeenAt", visit->getString("at", "")),
+        fromSandbox: visit->getString("source", "") == "sandbox",
+      }
+    }),
     nextRetryAt: dict->getOptionString("nextRetryAt"),
     invoice: dict->getDictfromDict("invoice"),
     attempts: dict->getArrayFromDict("attempts", [])->JSON.Encode.array,
@@ -328,6 +338,19 @@ let countdownText = (~nextRetryAt, ~nowMs) => {
     minutes > 0 ? `in ${minutes->Int.toString} min ${restText} s` : `in ${rest->Int.toString} s`
   }
 }
+
+// The state the invoice was in at a moment: the last state first seen at or before it
+let stageAt = (history: array<stageVisit>, time) => {
+  let millis = time->toMillis
+  history->Array.reduce(None, (found, visit) =>
+    visit.firstSeenAt->toMillis <= millis ? Some(visit) : found
+  )
+}
+
+let stageVisitSource = (visit: stageVisit) =>
+  visit.fromSandbox
+    ? sourceLabel(Sandbox)
+    : ("Seen by the proxy", "bg-nd_gray-50 text-nd_gray-600 border-nd_gray-200")
 
 // Raw calls behind a diagram row. Older proxies send no step ids, so match by time (within 3 s).
 let requestsForRow = (requests: array<requestLog>, row: diagramRow) =>
