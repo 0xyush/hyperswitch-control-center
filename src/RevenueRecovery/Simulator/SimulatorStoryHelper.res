@@ -136,7 +136,9 @@ module BillingSystemForm = {
         <SelectField
           label="Preset"
           name="preset"
-          options={options.presets->presetOptions}
+          options={form.preset == 0
+            ? [noPresetOption]->Array.concat(options.presets->presetOptions)
+            : options.presets->presetOptions}
           value={form.preset->Int.toString}
           onChange={value =>
             options.presets

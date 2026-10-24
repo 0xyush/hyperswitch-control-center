@@ -294,7 +294,13 @@ let storyMapper = (json): story => {
     startError: dict->getString("startError", ""),
     form: dict
     ->getDictfromDict("form")
-    ->formFromStory(~preset=dict->getInt("preset", dict->getInt("scenario", 1))),
+    // Portfolio copies have no preset: 0 shows as "None" in the form
+    ->formFromStory(
+      ~preset=dict
+      ->getOptionInt("preset")
+      ->Option.orElse(dict->getOptionInt("scenario"))
+      ->Option.getOr(0),
+    ),
   }
 }
 
@@ -392,6 +398,9 @@ let rowForAttempt = (rows: array<diagramRow>, attempt: RevenueRecoveryOrderTypes
     row.why->Array.some(line => line.text->String.includes(attempt.id))
   )
 
+// Preset 0 = no preset (a portfolio copy)
+let noPresetOption: SelectBox.dropdownOption = {label: "None (a portfolio copy)", value: "0"}
+
 let presetOptions = (presets: array<preset>): array<SelectBox.dropdownOption> =>
   presets->Array.map(preset => {
     let suffix = preset.verified ? "" : ` (${preset.v1Status})`
@@ -418,9 +427,12 @@ let defaultForm: billingForm = {
 // POST /sim/story/start body: the preset fills defaults on the proxy, explicit fields win
 let startBody = (form: billingForm) =>
   [
-    ("preset", form.preset->JSON.Encode.int),
-    ("amount", form.amount->toMinor->JSON.Encode.int),
-    ("currency", form.currency->JSON.Encode.string),
-    ("card", form.card->JSON.Encode.string),
-    ("customer", form.customer->JSON.Encode.string),
-  ]->getJsonFromArrayOfJson
+    // Preset 0 (none) is left out; the explicit fields then define the charge
+    form.preset > 0 ? Some(("preset", form.preset->JSON.Encode.int)) : None,
+    Some(("amount", form.amount->toMinor->JSON.Encode.int)),
+    Some(("currency", form.currency->JSON.Encode.string)),
+    Some(("card", form.card->JSON.Encode.string)),
+    Some(("customer", form.customer->JSON.Encode.string)),
+  ]
+  ->Array.filterMap(field => field)
+  ->getJsonFromArrayOfJson
