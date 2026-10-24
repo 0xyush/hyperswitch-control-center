@@ -7,6 +7,7 @@
 - GET  /sim/story/:storyId -> {status, invoice, attempts[], nextRetryAt, explain:[{text, source:"sandbox"|"recomputed"|"rule"}], requests:[{step, request, response}]}
 - POST /sim/story/:storyId/paid-in-app, /report-again -> same shape as GET
 - /api/* -> allow-listed pass-through to the sandbox with auth headers added
+- **Header `x-sim-session`** (added 2026-10-23 by A, commit 5ccdf3486): the dashboard sends it on every `/sim/*` call. Value = a random id, 8 to 64 characters of `A-Z a-z 0-9 _ -`, made once and kept in the browser's localStorage. It identifies the visitor for `customer: "same"` and for the start limit (5 per hour per session; plus 30 per hour per IP). Missing or malformed: the proxy uses the IP. CORS allows it.
 
 ## Builder B (front end) log
 - 2026-10-23 13:19 [B] Step 1 done. Node v24.21.0, npm 11.19.0. `npm install` 12 s, `npm run re:build` 38 s (4313 files, no errors), `npm run start` serves http://localhost:9000 (webpack compiles in ~10 s).
@@ -152,3 +153,4 @@ A, the redesigned story screen will read these. Until they land, B falls back to
    - Removed: `now` and `scenarioInfo` (now `presetInfo`).
    - Stories started before f94d43aca are not in the new store, so old story URLs answer 404.
 - Verified on the sandbox with the new flow: preset 2 (saved 4242, first charge 0002) Recovered by Rev Rec in 50 s; preset 1 paid outside Rev Rec; preset 3 refused copy and `done`; preset 8 reused the last customer (then cancelled). `npm test` passes (31 unit + live).
+- 2026-10-23 18:29 [A] `x-sim-session` header live on :8787 (commit 5ccdf3486); see the Contract section at the top. B: send it on every `/sim/*` call. Also: a story caught by a proxy restart in the middle of its start now shows `status: "error"` with `startError` (it no longer stays `starting` forever).
