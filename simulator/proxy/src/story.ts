@@ -50,6 +50,7 @@ type StoryEvent = {
   status: StepStatus;
   source: "simulator" | "sandbox";
   why: Why[];
+  txnId?: string; // Stripe payment id of a charge; the view turns it into the sandbox attemptId
 };
 
 type RequestLog = {
@@ -80,6 +81,7 @@ export type StartOptions = {
 
 export type Story = StartOptions & {
   storyId: string;
+  owner: string; // hash of the visitor's IP: "same customer" means the same visitor's last customer
   invoiceId: string; // merchant_reference_id: the invoice id in the billing system
   recoveryId: string | null; // the Hyperswitch payment id Rev Rec gave the invoice
   startedAt: string;
@@ -357,6 +359,7 @@ async function failingCharge(story: Story, step: string, suffix: string) {
   const d = DECLINES[declineCode];
   event(story, {
     stepId,
+    txnId,
     from: "billing",
     to: "processor",
     label: `charge ${money(story.amount, story.currency)}${suffix} → declined (${declineCode})`,
@@ -585,11 +588,12 @@ export function parseStart(body: any): StartOptions {
 
 // Creates the story and returns at once. The billing system's steps run in the background,
 // so the dashboard sees each step appear while it polls.
-export function startStory(opts: StartOptions): Story {
+export function startStory(opts: StartOptions, owner: string): Story {
   const storyId = `st_${crypto.randomBytes(6).toString("hex")}`;
   const story: Story = {
     ...opts,
     storyId,
+    owner,
     // "SIM-" prefix lets later sessions hide old demo invoices (the sandbox has no delete).
     invoiceId: `SIM-${opts.presetId ?? 0}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString("hex")}`,
     recoveryId: null,
@@ -620,15 +624,23 @@ export function startStory(opts: StartOptions): Story {
   return story;
 }
 
-const lastCustomerStory = (exceptId: string) =>
+// The visitor's last story that has a Stripe customer.
+export const lastCustomerStory = (owner: string, exceptId = "") =>
   [...stories.values()]
     .reverse()
-    .find((s) => s.storyId !== exceptId && s.stripeCustomerId);
+    .find(
+      (s) => s.owner === owner && s.storyId !== exceptId && s.stripeCustomerId,
+    );
+
+export const ownerOf = (ip: string) =>
+  crypto.createHash("sha256").update(ip).digest("hex").slice(0, 16);
 
 async function runStart(story: Story) {
   const amount = money(story.amount, story.currency);
   const prev =
-    story.customer === "same" ? lastCustomerStory(story.storyId) : undefined;
+    story.customer === "same"
+      ? lastCustomerStory(story.owner, story.storyId)
+      : undefined;
   if (prev) {
     story.stripeCustomerId = prev.stripeCustomerId;
     if (prev.savedCard === story.savedCard) story.savedPm = prev.savedPm;
@@ -755,6 +767,7 @@ export function paidInApp(storyId: string) {
       );
     event(story, {
       stepId,
+      txnId: pi.json.id,
       from: "customer",
       to: "processor",
       label: `pay ${amount} in the app → approved`,
@@ -1380,9 +1393,18 @@ export async function storyView(storyId: string) {
 
   const byTime = <T extends { at: string }>(x: T, y: T) =>
     String(x.at).localeCompare(String(y.at));
+  // attemptId links a charge row to its row in the attempts table.
   const timeline = [...story.events, ...attemptEvents]
     .sort(byTime)
-    .concat(pendingEvents);
+    .concat(pendingEvents)
+    .map(({ txnId, ...e }) => ({
+      ...e,
+      attemptId: e.stepId.startsWith("att_")
+        ? e.stepId.slice(4)
+        : txnId
+          ? (attempts.find((a) => a.connectorTxnId === txnId)?.id ?? null)
+          : null,
+    }));
   const requests = [...story.requests, ...attemptRequests].sort(byTime);
 
   // ----- explain (invoice level, for the attempts rows and the status) -----

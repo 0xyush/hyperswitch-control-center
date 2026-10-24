@@ -11,6 +11,8 @@ import {
   cancelStory,
   HttpError,
   listStories,
+  lastCustomerStory,
+  ownerOf,
   paidInApp,
   parseStart,
   reportAgain,
@@ -174,6 +176,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     // Bad input is refused before the rate limit, so it does not use up a start.
     const opts = parseStart(await readJson(req));
     const ip = req.socket.remoteAddress ?? "unknown";
+    const owner = ownerOf(ip);
+    if (opts.customer === "same" && !lastCustomerStory(owner))
+      throw new HttpError(
+        409,
+        'There is no earlier customer to reuse. Start a story with customer "new" first.',
+      );
     const gate = allowStart(ip);
     if (!gate.ok) {
       res.setHeader("Retry-After", String(gate.retryAfterSec));
@@ -183,7 +191,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       );
     }
     // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
-    const s = startStory(opts);
+    const s = startStory(opts, owner);
     return send(res, 200, await storyView(s.storyId));
   }
 

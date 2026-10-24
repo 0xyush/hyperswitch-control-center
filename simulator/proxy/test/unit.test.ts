@@ -218,6 +218,9 @@ describe("server (in process, no upstream calls)", () => {
     const r9 = await post({ preset: 9 });
     assert.equal(r9.status, 400);
     assert.equal((await r9.json()).error.code, "bad_scenario");
+    const same = await post({ customer: "same" });
+    assert.equal(same.status, 409);
+    assert.equal((await same.json()).error.code, "not_available");
     const rc = await post({ card: "1111" });
     assert.equal(rc.status, 400);
     assert.equal((await rc.json()).error.code, "bad_request");
