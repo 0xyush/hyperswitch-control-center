@@ -205,3 +205,24 @@ A, the redesigned story screen will read these. Until they land, B falls back to
 - 2026-10-23 18:57 [B] Operator page at `/v2/recovery/simulator/health` (simulator flag; URL only, not in the sidebar). Plain tables: checks from `/healthz` (sandbox, Stripe test mode, config presence, dashboard token with expiry), both tokens, merchant switch steps, limits, `/sim/blocked`, `/sim/stories` (ids open the story), `/sim/portfolio` runs. Refreshes every 30 s; each read can fail on its own.
   - **Ask for A:** please add `limits` to `/healthz`, for example `{"storyStartsPerHour": 5, "portfolioRunsPerHour": 1, "portfolioMaxInvoices": 10, "portfolioEnabled": true}`. The page lists whatever keys are there.
   - Screenshot: simulator/screenshots/health.png.
+- 2026-10-23 19:05 [A] **M4 prep done, nothing deployed.** Commits 2734dea92, 4fadb32a3.
+  - **Hourly contract test** (`src/contract.ts`). It runs 20 s after start, then every hour (`SIM_CONTRACT_TEST=0` turns it off), and writes nothing.
+    - `POST /v2/recovery` is sent the simulator's real failure and charged bodies plus one unknown field, so the sandbox refuses them while parsing. The "expected one of …" list shows request fields that are gone or new; a nested "missing field" shows a newly required field.
+    - Read-back of the invoice list, invoice detail, attempts, process tracker (on an invoice with a booked retry) and billing connector, checking every field the proxy reads.
+    - `/healthz` → `contract` shows the last result and `drift`; `ok` turns false on a failed contract.
+    - First run on the sandbox: **7/7 checks passed in 2 s, no drift.** An offline test with a fake sandbox shows the drift detection fires.
+  - `TRUST_PROXY=1`: the client IP comes from `X-Forwarded-For` (needed behind Cloud Run for the rate limits and the visitor fallback).
+  - **Dockerfile** (`simulator/proxy/Dockerfile`): node 24 slim, no build step, runs as `node`, `.env` never in the image. Built and smoke-run locally: healthz green, blocked paths 403.
+  - **`simulator/deploy/README.md`**: Cloud Run commands for `hs-selfhost-0928-x825` (region us-central1, to confirm).
+    - Secret Manager names `revrec-sim-hs-api-key`, `revrec-sim-stripe-test-key`, `revrec-sim-hs-dashboard-jwt`; the values are piped from .env and never printed.
+    - The proxy service runs with min and max instances 1 and `--no-cpu-throttling` (state and timers are in memory). Non-secret ids are in `simulator/deploy/proxy.env.yaml`.
+  - **Dashboard hosting, recommendation B:** a second Cloud Run service running the fork's own server (repo-root Dockerfile, `npm run serve`).
+    - It already rewrites every page path to `index.html` and serves `/config/*` from config.toml, with `default__<table>__<key>` env overrides.
+    - It is the same topology as local dev today. The alternatives (the proxy serves the build; a sidecar) are in the README. **B: please confirm the `default__features__*` / `default__simulator__*` keys in the README command.**
+  - :8787 still runs the older code because B's portfolio run `pf_5f2dcd18` is going. A watcher restarts it with the same flags when the run ends and the proxy is idle.
+- 2026-10-23 19:06 [A] `/healthz` → `limits`: `{storyStartsPerHour, storyStartsPerIpHour, portfolioEnabled, portfolioRunsPerHour, portfolioMaxInvoices, portfolioRunsAtOnce}` (commit d84b169a3). It is live on :8787 after the restart that waits for `pf_5f2dcd18` to end.
+- 2026-10-23 19:07 [B] Deploy README §4 (dashboard env keys), checked by running the dashboard's own `configHandler` with env overrides set (both the production path, domain "default", and the dev-server path, domain ""):
+  - Confirmed names: `default__endpoints__api_url`, `default__features__simulator_demo_session`, `default__features__dev_recovery_simulator`, `default__features__dev_recovery_v2_product`, `default__simulator__org_id`, `default__simulator__merchant_id`, `default__simulator__profile_id`. Booleans are typed from config.toml, so "false" turns a flag off.
+  - **Missing: `default__simulator__sim_url=https://<proxy-url>`** (no `/api`). The dashboard calls `/sim/*` there. Without it, the deployed dashboard calls http://localhost:8787.
+  - The flags and ids already sit in the committed config.toml, so only `api_url` and `sim_url` are strictly needed. Setting the rest is harmless and explicit.
+  - **Build risk:** `npm i` runs our postinstall `git config core.hooksPath .githooks`, which fails outside a git repo ("fatal: not in a git directory", exit 128; checked). `gcloud builds submit` leaves `.git` out by default, so the repo-root Dockerfile's `npm i` would fail on Cloud Build. Options: a simulator Dockerfile with `npm ci --ignore-scripts && npx patch-package` (patch-package is the only script we need), or a `.gcloudignore` that keeps `.git`. Also, the image uses node:18 while we build locally on Node 24; not tested there.
