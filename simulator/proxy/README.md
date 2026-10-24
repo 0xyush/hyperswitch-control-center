@@ -44,6 +44,16 @@ The full story JSON contract is in `simulator/NOTES.md` ("A reply to B proposals
 5. The proxy reads the status back: the invoice list row, the invoice, its attempts and the process tracker. Rev Rec's retry bookings, its own charges and the final status become timeline steps too.
 6. Every timeline step (one arrow in the sequence diagram) has a `stepId`; the `requests` entry with the same `stepId` is its raw call. Each explain line says where it comes from: `sandbox`, `recomputed` or `rule`.
 
+## Portfolio run (M2, behind a flag)
+
+1. Start the proxy with `SIM_PORTFOLIO=1`.
+2. `POST /sim/portfolio/start` with `{invoices (1 to 10), amount, mix: {insufficient_funds, generic_decline, processing_error, stolen_card, expired_card}, maxMinutes (5 to 45), seed}`. All fields are optional.
+3. Poll `GET /sim/portfolio/:runId` every 30 s. `POST /sim/portfolio/:runId/stop` ends the run and cancels open invoices.
+4. Each invoice runs twice, once on the static profile and once on the smart profile, each copy with its own Stripe customer. Until `scripts/setup-profiles.ts` has created the smart profile, both copies use the existing profile, and the view says so.
+5. Design and the bank rules: `simulator/PORTFOLIO.md`.
+
+**Operator only:** `npm run setup:profiles` prints the plan for the two demo profiles. `npm run setup:profiles -- --apply` creates them; it writes shared sandbox config, so run it only with the owner's approval.
+
 ## Files
 
 - `src/server.ts`: routes, CORS, rate limit, health
@@ -52,5 +62,7 @@ The full story JSON contract is in `simulator/NOTES.md` ("A reply to B proposals
 - `src/passthrough.ts`: the `/api` allow-list
 - `src/shell.ts`: fixed answers for the dashboard shell's user and merchant reads
 - `src/auth.ts`: the dashboard token switch
+- `src/portfolio.ts`: the portfolio run (M2)
+- `scripts/setup-profiles.ts`: operator script for the two demo profiles
 - `src/redact.ts`: hides secrets in everything that leaves the proxy
 - `data/stories.json`: saved stories (git-ignored)
