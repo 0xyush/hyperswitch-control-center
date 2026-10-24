@@ -69,7 +69,7 @@ We proved the mechanism on 23 Oct: after a decline, a new report carrying the go
 
 **Run 1, 23 Oct (`pf_5f2dcd18`), both sides on one static profile.** 10 invoices. 7 of 10 recovered on each side with 39 Rev Rec attempts each. Generic decline 3 of 3, processing error 2 of 2, insufficient funds 2 of 4, stolen card 0 of 1. The two insufficient-funds misses were the proxy's fault: a heavy local build stalled its loop, the bank flips came 14 to 16 minutes late, and Rev Rec had already used its retries. The stolen card was retried 7 times before terminating: the sandbox has no hard-decline stop for Stripe's code yet.
 
-**Run 2, 24 Oct (`pf_4744661b`), first run on the two real profiles.** Five minutes in: the static side had recovered 2 and made 19 attempts; the smart side had booked **zero retries** on all 10 invoices. This is the risk the PRD named: smart mode needs a decider service behind it, and the sandbox appears to have none for this merchant. Final numbers are in `STATUS.md`.
+**Run 2, 24 Oct (`pf_4744661b`), first run on the two real profiles (start rule 0, max retries 15).** Final: the static side recovered 8 of 10 with 55 attempts; the smart side booked **zero retries** on all 10 invoices and they were cancelled at the end. This is the risk the PRD named: smart mode needs a decider service behind it, and the sandbox has none for this merchant. Until Kirthi provides one (ask 2), the portfolio screen shows the smart side as 'no retries booked' and makes no uplift claim.
 
 ## 8. Facts about the sandbox we learned the hard way
 
@@ -96,9 +96,9 @@ We proved the mechanism on 23 Oct: after a decline, a new report carrying the go
 Two terminals in `~/work/revrec-simulator`:
 
 ```
+# terminal 1, the proxy
 cd simulator/proxy && npm install && SIM_PORTFOLIO=1 RATE_LIMIT_STARTS_PER_HOUR=30 npm start
-```
-```
+# terminal 2, the dashboard
 npm install && npm run re:build && npm run start
 ```
 
