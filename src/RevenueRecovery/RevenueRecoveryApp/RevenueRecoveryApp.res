@@ -15,6 +15,8 @@ let make = () => {
     | list{"v2", "recovery", "simulator", "story", storyId} if devRecoverySimulator =>
       <SimulatorStory storyIdFromUrl=Some(storyId) />
     | list{"v2", "recovery", "simulator", "tour"} if devRecoverySimulator => <SimulatorTour />
+    // Operator page, reached by URL only (not in the sidebar)
+    | list{"v2", "recovery", "simulator", "health"} if devRecoverySimulator => <SimulatorHealth />
     | list{"v2", "recovery", "simulator", "portfolio"} if devRecoverySimulator =>
       <SimulatorPortfolio runIdFromUrl=None />
     | list{"v2", "recovery", "simulator", "portfolio", runId} if devRecoverySimulator =>
