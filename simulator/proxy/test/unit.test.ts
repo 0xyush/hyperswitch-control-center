@@ -102,14 +102,14 @@ describe("shell stubs", () => {
 });
 
 describe("presets and start body", () => {
-  test("has the 8 PRD presets, 1 to 3 verified", () => {
+  test("has the 8 PRD presets, 1, 2, 3 and 6 verified", () => {
     assert.deepEqual(
       PRESETS.map((p) => p.id),
       [1, 2, 3, 4, 5, 6, 7, 8],
     );
     assert.deepEqual(
       PRESETS.filter((p) => p.verified).map((p) => p.id),
-      [1, 2, 3],
+      [1, 2, 3, 6],
     );
   });
 

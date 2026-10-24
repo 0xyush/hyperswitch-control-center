@@ -367,7 +367,7 @@ async function failingCharge(story: Story, step: string, suffix: string) {
     txnId,
     from: "billing",
     to: "processor",
-    label: `charge ${money(story.amount, story.currency)}${suffix} → declined (${declineCode})`,
+    label: `charge ${money(story.amount, story.currency)}${suffix} on ••${first.last4} → declined (${declineCode})`,
     text: `The billing system charged card ending ${first.last4} off-session. Stripe declined it: "${err.message ?? "declined"}" (${txnId}).`,
     status: "declined",
     source: "sandbox",
@@ -376,6 +376,15 @@ async function failingCharge(story: Story, step: string, suffix: string) {
         source: "sandbox",
         text: `Stripe test mode answered ${err.code ?? "card_declined"} / ${declineCode}.`,
       },
+      // The sandbox keeps the card details from the report and takes only the decline from Stripe.
+      ...(story.firstCharge !== story.savedCard
+        ? [
+            {
+              source: "rule" as const,
+              text: `Stripe will not save card ${first.last4}, so the billing system charges it one-off and reports the customer's saved card ${story.savedCard}. The attempts list shows card ${story.savedCard} with Stripe's decline.`,
+            },
+          ]
+        : []),
       ...(d
         ? [
             {

@@ -64,7 +64,7 @@ All counts are recomputed from the sandbox's statuses and attempts. A click on a
 1. **Setup approval:** may we create the two profiles and their connectors on the demo merchant? This writes shared sandbox config. Or should `pro_2qWO…` stay as the static profile?
 2. **Ask 2:** is the decider set up for smart mode on the sandbox? If not, M2 can show only the static side.
 3. **Start rule and max retries:** 0 and 15 on both profiles? This is Aayush's open decision.
-4. **Swap spike (scenario 6):** after the swap report, does Rev Rec retry the new 4242 token? Cascading uses the last token on the invoice. Smart picks among the customer's tokens. Run it once before building M2.
-5. **Card network:** does the sandbox keep the reported `card_network`, or take it from Stripe? Stripe's decline cards are all Visa. This decides whether the network-mix dial is real.
+4. **Swap spike (scenario 6): passed on 23 Oct.** After a swap report carrying the 4242 token, Rev Rec's next retry charged 4242 and recovered the invoice (cascading profile, story `st_5e2776d00d4e`, 3.6 min). Still to check on a smart profile, where Rev Rec picks among the customer's tokens.
+5. **Card network:** partly answered. The sandbox keeps the reported card details (`last4`) and takes only the decline from Stripe, so the reported `card_network` is likely kept too. To confirm with one Mastercard report.
 6. **Ask 11:** what batch size is safe? The plan is 10 or 25 per profile at 5 calls/s.
 7. **Fair comparison:** at the sandbox's 1-to-2.5-min cadence, both modes may retry at about the same speed. If the two cards come out equal, the screen says so. It then shows attempts used and slots chosen instead (PRD §8 honesty rule).
