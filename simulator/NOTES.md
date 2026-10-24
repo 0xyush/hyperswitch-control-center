@@ -189,3 +189,15 @@ A, the redesigned story screen will read these. Until they land, B falls back to
   - Shared change: `IntelligentRoutingAnalytics.Card` takes optional `baselineLabel`, `modelLabel`, `lowerIsBetter`, `titleAccessory`; the defaults keep Intelligent Routing unchanged.
   - Explore drawer: "Run a portfolio" and "Tour the features" now link to their pages (no "Coming soon" left).
   - Checked in headless Chrome against the real proxy (fixture path). Refresh check 16/16. Screenshots: simulator/screenshots/portfolio-start.png, portfolio-fixture.png.
+- 2026-10-23 18:56 [A] **Portfolio engine (M2) built behind `SIM_PORTFOLIO=1`, and one live run passed.** Commits 7e5f82b7a, cbb8cd874, 063eece4a.
+  - API: `POST /sim/portfolio/start {invoices ≤ 10, amount, mix, maxMinutes 5–45, seed}`, `GET /sim/portfolio/:runId`, `POST /sim/portfolio/:runId/stop`, `GET /sim/portfolio`. 1 run at a time for the proxy; 1 per session per hour. The result shape is as in PORTFOLIO.md §5, plus `bankRules` and `warnings`.
+  - How it works: each copy is an ordinary story (`GET /sim/story/:id` opens it) with its own Stripe customer and `profile` static or smart. All copies share one queue (≤ 5 Stripe or sandbox calls per second). Every 30 s: the bank flips that are due (swap report with the 4242 token for both copies), one `recovery-list` read per profile, attempts only for copies that changed, and a trend point. At the end, open copies are cancelled.
+  - Both sides use `pro_2qWO…` (cascading) until the smart profile exists. The view says: "A difference between the two cards is noise, not strategy."
+  - **Live run `pf_3c2015dd`** (on a second instance, :8788, so :8787 was not touched): 3 invoices × 2 copies, seed 42, 10-min cap.
+    - processing_error (Stripe card 0119): flip at 1 min; both copies Recovered by Rev Rec (median 1.6 min).
+    - generic_decline (0002): flip at 5.5 min; Recovered at 6.2 min (static copy) and 7.7 min (smart copy).
+    - expired_card (0069): never flips; both copies kept retrying and were cancelled at the cap.
+    - Cards: static 2/3 recovered, 7 Rev Rec attempts; smart 2/3, 9 attempts. **Same strategy on both sides, so this is the sandbox's noise: about 1.5 min and 2 attempts.** Smaller differences mean nothing.
+    - Stripe cards 0119 (processing_error) and 0069 (expired_card) work.
+  - Setup with start rule 2 takes about 20 s per invoice (3 failed charges per copy). With start rule 0 it would be about 3 times faster.
+  - **Operator setup script written, not run:** `npm run setup:profiles` (plan) / `-- --apply` (writes). It creates `sim-static` (cascading) and `sim-smart` (smart): profile → `PUT` retry mode → Stripe payment connector (key from .env) → Custom billing connector (start rule 0, max retries 15, grace 30, `billing_account_reference` to the new payment connector). It clones `payment_methods_enabled` and `metadata` from the existing pair and prints the `HS_STATIC_*` / `HS_SMART_*` lines for .env. It waits for Aayush's approval.
