@@ -1,7 +1,7 @@
 open SimulatorTypes
 open LogicUtils
 
-let getSimulatorConfig = (dict): simulatorConfig => {
+let getSimulatorConfig = (dict): SimulatorConfigTypes.simulatorConfig => {
   simUrl: dict->getString("sim_url", ""),
   orgId: dict->getString("org_id", ""),
   merchantId: dict->getString("merchant_id", ""),
@@ -16,24 +16,67 @@ let getSimUrl = path => `${getConfig().simUrl}${path}`
 // PRD section 7: poll the story every 4 s
 let pollIntervalMs = 4000
 
-let scenarioMapper = (dict): scenario => {
-  id: dict->getInt("id", 0),
-  title: dict->getString("title", ""),
-  summary: dict->getString("summary", ""),
-  reportedReason: dict->getString("reportedReason", ""),
-  savedCard: dict->getString("savedCard", ""),
-  expected: dict->getString("expected", ""),
-  liveTime: dict->getString("liveTime", ""),
-  v1Status: dict->getString("v1Status", ""),
-  runnable: dict->getBool("runnable", false),
-  hint: dict->getString("hint", ""),
+// Amount on the wire is in minor units (6540 = 65.40); the form shows major units
+let toMajorText = minor => (minor->Int.toFloat /. 100.0)->Float.toFixedWithPrecision(~digits=2)
+let toMinor = majorText => (majorText->getFloatFromString(0.0) *. 100.0)->Math.round->Float.toInt
+
+let presetMapper = (dict): preset => {
+  let fields = dict->getDictfromDict("fields")
+  let id = dict->getInt("id", 0)
+  {
+    id,
+    title: dict->getString("title", ""),
+    summary: dict->getString("summary", ""),
+    v1Status: dict->getString("v1Status", ""),
+    verified: dict->getBool("verified", dict->getBool("runnable", false)),
+    hint: dict->getString("hint", ""),
+    fields: {
+      preset: id,
+      amount: fields->getInt("amount", 6540)->toMajorText,
+      currency: fields->getString("currency", "USD"),
+      card: fields->getString("card", "0341"),
+      customer: fields->getString("customer", "new"),
+    },
+  }
 }
 
-let getScenarios = json =>
-  json
-  ->getDictFromJsonObject
-  ->getArrayFromDict("scenarios", [])
-  ->Array.map(item => item->getDictFromJsonObject->scenarioMapper)
+// Used when the proxy sends no card list
+let defaultCardOptions: array<SelectBox.dropdownOption> = [
+  {label: "Good card 4242", value: "4242"},
+  {label: "Declining card 0341", value: "0341"},
+  {label: "Generic decline 0002 (first charge)", value: "0002"},
+  {label: "Insufficient funds 9995 (first charge)", value: "9995"},
+  {label: "Stolen card 9979 (first charge)", value: "9979"},
+]
+
+let getFormOptions = (json): formOptions => {
+  let dict = json->getDictFromJsonObject
+  // Older proxies answer /sim/scenarios with "scenarios" and no fields
+  let presetList = switch dict->getArrayFromDict("presets", []) {
+  | [] => dict->getArrayFromDict("scenarios", [])
+  | list => list
+  }
+  let cards =
+    dict
+    ->getArrayFromDict("cards", [])
+    ->Array.map(item => {
+      let card = item->getDictFromJsonObject
+      let option: SelectBox.dropdownOption = {
+        label: card->getString("label", ""),
+        value: card->getString("id", ""),
+      }
+      option
+    })
+  let currencies = switch dict->getStrArrayFromDict("currencies", []) {
+  | [] => ["USD"]
+  | list => list
+  }
+  {
+    presets: presetList->Array.map(item => item->getDictFromJsonObject->presetMapper),
+    cards: cards->Array.length > 0 ? cards : defaultCardOptions,
+    currencies: currencies->SelectBox.makeOptions,
+  }
+}
 
 // Reads the dashboard names ("Partially Recovered") and the sandbox ones ("partially_recovered")
 let stageMapper = str =>
@@ -70,32 +113,6 @@ let stageName = stage =>
   | StoryError => "Error"
   }
 
-// Plain captions from PRD section 4
-let stageCaption = stage =>
-  switch stage {
-  | Starting => "Waiting for the sandbox"
-  | Monitoring => "Waiting for the start rule"
-  | Queued => "Picking a retry time"
-  | Scheduled => "Retry booked for a time"
-  | Processing => "Charging the card now"
-  | Recovered => "Paid"
-  | PartiallyRecovered => "Part paid"
-  | Terminated => "Rev Rec stopped"
-  | Cancelled => "Cancelled by the merchant"
-  | StoryError => "The simulator could not start this story"
-  }
-
-// Position on the stepper: Monitoring, Queued, Scheduled, Processing, then the end state
-let stagePosition = stage =>
-  switch stage {
-  | Starting => -1
-  | Monitoring => 0
-  | Queued => 1
-  | Scheduled => 2
-  | Processing => 3
-  | Recovered | PartiallyRecovered | Terminated | Cancelled | StoryError => 4
-  }
-
 // Status text the invoice page components understand (RevenueRecoveryOrderUtils.statusVariantMapper)
 let toInvoiceStatus = (stage, ~default) =>
   switch stage {
@@ -112,13 +129,24 @@ let actorMapper = str =>
   | _ => Billing
   }
 
-// Name and "is it real" line for each box in the flow
+// Name and "is it real" note for each lifeline
 let actorLabel = actor =>
   switch actor {
-  | Billing => ("Billing system", "Simulated by the proxy")
-  | RevRec => ("Rev Rec", "Real, on the sandbox")
+  | Billing => ("Billing system", "Simulated")
+  | RevRec => ("Rev Rec", "Sandbox")
   | Processor => ("Processor", "Stripe test mode")
   | Customer => ("Customer", "Simulated")
+  }
+
+let lifelines = [Billing, RevRec, Processor, Customer]
+
+// Horizontal position of a lifeline, in percent of the diagram width
+let lifelinePercent = actor =>
+  switch actor {
+  | Billing => 12.5
+  | RevRec => 37.5
+  | Processor => 62.5
+  | Customer => 87.5
   }
 
 let sourceMapper = str =>
@@ -138,10 +166,59 @@ let sourceLabel = source =>
   | Rule => ("Rule-based", "bg-nd_orange-50 text-nd_orange-600 border-nd_orange-200")
   }
 
+let explainLineMapper = (json): explainLine => {
+  let dict = json->getDictFromJsonObject
+  {text: dict->getString("text", ""), source: dict->getString("source", "")->sourceMapper}
+}
+
+let stepStatusMapper = str =>
+  switch str->String.toLowerCase {
+  | "ok" | "approved" | "success" | "succeeded" => StepOk
+  | "declined" | "failure" | "refused" => StepDeclined
+  | "error" | "failed" => StepFailed
+  | "pending" => StepPending
+  | _ => StepInfo
+  }
+
+// Older proxy rows have no status, so read it from the words
+let inferStepStatus = label => {
+  let text = label->String.toLowerCase
+  if ["declin", "fail", "refused", "rejected"]->Array.some(word => text->String.includes(word)) {
+    StepDeclined
+  } else if (
+    ["approved", "paid", "recovered", "succeeded"]->Array.some(word => text->String.includes(word))
+  ) {
+    StepOk
+  } else {
+    StepInfo
+  }
+}
+
+let diagramRowMapper = (index, json): diagramRow => {
+  let dict = json->getDictFromJsonObject
+  let label = switch dict->getString("label", "") {
+  | "" => dict->getString("text", "")
+  | label => label
+  }
+  let statusText = dict->getString("status", "")
+  {
+    stepId: dict->getString("stepId", `row-${index->Int.toString}`),
+    at: dict->getString("at", ""),
+    from: dict->getString("from", "")->actorMapper,
+    to: dict->getString("to", "")->actorMapper,
+    label,
+    text: dict->getString("text", ""),
+    status: statusText->isNonEmptyString ? statusText->stepStatusMapper : label->inferStepStatus,
+    why: dict->getArrayFromDict("why", [])->Array.map(explainLineMapper),
+    attemptId: dict->getOptionString("attemptId"),
+  }
+}
+
 let requestLogMapper = (dict): requestLog => {
   let request = dict->getDictfromDict("request")
   let response = dict->getDictfromDict("response")
   {
+    stepId: dict->getString("stepId", ""),
     step: dict->getString("step", ""),
     at: dict->getString("at", ""),
     method: request->getString("method", ""),
@@ -152,60 +229,59 @@ let requestLogMapper = (dict): requestLog => {
   }
 }
 
+// The proxy keeps the saved card and the first-charge card apart; the form has one card field.
+// This reverses the proxy's mapping: 4242 is saved as is, the one-off cards decline the first charge.
+let formFromStory = (dict, ~preset): option<billingForm> =>
+  if dict->isEmptyDict {
+    None
+  } else {
+    let savedCard = dict->getString("savedCard", "0341")
+    let firstCharge = dict->getString("firstCharge", savedCard)
+    Some({
+      preset,
+      amount: dict->getInt("amount", 6540)->toMajorText,
+      currency: dict->getString("currency", "USD"),
+      card: savedCard == "4242" || firstCharge == savedCard ? savedCard : firstCharge,
+      customer: dict->getString("customer", "new"),
+    })
+  }
+
 let storyMapper = (json): story => {
   let dict = json->getDictFromJsonObject
   let scenarioInfo = dict->getDictfromDict("scenarioInfo")
+  let presetInfo = dict->getDictfromDict("presetInfo")
   let actions = dict->getDictfromDict("actions")
-  let nowDict = dict->getDictfromDict("now")
   let stageText = dict->getString("stage", "")
   {
     storyId: dict->getString("storyId", ""),
-    scenarioId: dict->getInt("scenario", 0),
-    scenarioTitle: scenarioInfo->getString("title", ""),
-    hint: scenarioInfo->getString("hint", ""),
+    scenarioId: dict->getInt("preset", dict->getInt("scenario", 0)),
+    scenarioTitle: presetInfo->getString("title", scenarioInfo->getString("title", "")),
     invoiceId: dict->getString("invoiceId", ""),
     recoveryId: dict->getString("recoveryId", ""),
     startedAt: dict->getString("startedAt", ""),
     stage: (stageText->isNonEmptyString ? stageText : dict->getString("status", ""))->stageMapper,
-    stageCaption: dict->getString("stageCaption", ""),
     done: dict->getBool("done", false),
     nextRetryAt: dict->getOptionString("nextRetryAt"),
     invoice: dict->getDictfromDict("invoice"),
     attempts: dict->getArrayFromDict("attempts", [])->JSON.Encode.array,
     processTracker: dict->getDictfromDict("processTracker"),
-    now: nowDict->isEmptyDict
-      ? None
-      : Some({
-          actor: nowDict->getString("actor", "")->actorMapper,
-          text: nowDict->getString("text", ""),
-          why: nowDict->getString("why", ""),
-        }),
-    explain: dict
-    ->getArrayFromDict("explain", [])
-    ->Array.map(item => {
-      let line = item->getDictFromJsonObject
-      {text: line->getString("text", ""), source: line->getString("source", "")->sourceMapper}
-    }),
+    explain: dict->getArrayFromDict("explain", [])->Array.map(explainLineMapper),
     timeline: dict
     ->getArrayFromDict("timeline", [])
-    ->Array.map(item => {
-      let event = item->getDictFromJsonObject
-      {
-        at: event->getString("at", ""),
-        from: event->getString("from", "")->actorMapper,
-        to: event->getString("to", "")->actorMapper,
-        text: event->getString("text", ""),
-      }
-    }),
+    ->Array.mapWithIndex((item, index) => diagramRowMapper(index, item)),
     requests: dict
     ->getArrayFromDict("requests", [])
     ->Array.map(item => item->getDictFromJsonObject->requestLogMapper),
     actions: {
       paidInApp: actions->getBool("paidInApp", false),
       reportAgain: actions->getBool("reportAgain", false),
+      cancel: actions->getBool("cancel", false),
     },
     warnings: dict->getStrArrayFromDict("warnings", []),
     startError: dict->getString("startError", ""),
+    form: dict
+    ->getDictfromDict("form")
+    ->formFromStory(~preset=dict->getInt("preset", dict->getInt("scenario", 1))),
   }
 }
 
@@ -225,65 +301,6 @@ let getSimErrorMessage = (exn, ~default) =>
   | _ => default
   }
 
-// Flow diagram: four boxes on a 2 x 2 grid (viewBox 0 0 400 250)
-let boxSize = (150, 70)
-let boxOrigin = actor =>
-  switch actor {
-  | Customer => (10, 10)
-  | Billing => (240, 10)
-  | Processor => (10, 170)
-  | RevRec => (240, 170)
-  }
-
-// Arrow end points on the box edges, for the box pair the arrow joins
-let arrowPoints = (~from, ~to) => {
-  let edge = (a, b) =>
-    switch (a, b) {
-    | (Customer, Billing) => ((160, 45), (240, 45))
-    | (Billing, RevRec) => ((315, 80), (315, 170))
-    | (Processor, RevRec) => ((160, 205), (240, 205))
-    | (Billing, Processor) => ((240, 80), (160, 170))
-    | (Customer, RevRec) => ((160, 80), (240, 170))
-    | (Customer, Processor) => ((85, 80), (85, 170))
-    | _ => ((0, 0), (0, 0))
-    }
-  let rank = actor =>
-    switch actor {
-    | Customer => 0
-    | Billing => 1
-    | Processor => 2
-    | RevRec => 3
-    }
-  if from == to {
-    None
-  } else if rank(from) < rank(to) {
-    Some(edge(from, to))
-  } else {
-    let (start, finish) = edge(to, from)
-    Some((finish, start))
-  }
-}
-
-// For each stepper position: did the invoice really pass through it? While the story runs,
-// the engine moves in order. At the end, Rev Rec may have skipped steps (for example, the
-// invoice was paid outside before any retry ran), so the data decides.
-let reachedSteps = (story: story) => {
-  let position = story.stage->stagePosition
-  if story.stage->isFinalStage {
-    let hasTask = !(story.processTracker->isEmptyDict)
-    let hasRevRecRetry =
-      story.attempts
-      ->RevenueRecoveryEntity.getAttempts
-      ->Array.some(attempt =>
-        attempt.attempt_triggered_by->RevenueRecoveryOrderUtils.attemptTriggeredByVariantMapper ==
-          INTERNAL
-      )
-    [true, hasTask || hasRevRecRetry, hasTask || hasRevRecRetry, hasRevRecRetry, true]
-  } else {
-    [0, 1, 2, 3, 4]->Array.map(index => index <= position)
-  }
-}
-
 // The process tracker sends UTC times, sometimes without a zone ("2026-10-23 14:02:11.123")
 let toUtcIso = time => {
   let iso = time->String.replace(" ", "T")
@@ -291,10 +308,14 @@ let toUtcIso = time => {
   hasZone ? iso : `${iso}Z`
 }
 
+let toMillis = time => time->toUtcIso->Date.fromString->Date.getTime
+
+// Clock time in the visitor's time zone, for the diagram's time column
+let toClockTime = time => time->toUtcIso->Date.fromString->Date.toLocaleTimeString
+
 // "in 2 min 05 s" until the booked retry, "due now" after it
 let countdownText = (~nextRetryAt, ~nowMs) => {
-  let target = nextRetryAt->toUtcIso->Date.fromString
-  let seconds = ((target->Date.getTime -. nowMs) /. 1000.0)->Float.toInt
+  let seconds = ((nextRetryAt->toMillis -. nowMs) /. 1000.0)->Float.toInt
   if seconds <= 0 {
     "due now"
   } else {
@@ -304,3 +325,76 @@ let countdownText = (~nextRetryAt, ~nowMs) => {
     minutes > 0 ? `in ${minutes->Int.toString} min ${restText} s` : `in ${rest->Int.toString} s`
   }
 }
+
+// Raw calls behind a diagram row. Older proxies send no step ids, so match by time (within 3 s).
+let requestsForRow = (requests: array<requestLog>, row: diagramRow) =>
+  if requests->Array.some(request => request.stepId->isNonEmptyString) {
+    requests->Array.filter(request => request.stepId == row.stepId)
+  } else {
+    let rowMillis = row.at->toMillis
+    requests->Array.filter(request => Math.abs(request.at->toMillis -. rowMillis) <= 3000.0)
+  }
+
+// An attempt row with no diagram row yet: describe the charge from the attempt itself
+let attemptRow = (attempt: RevenueRecoveryOrderTypes.attempts): diagramRow => {
+  let isInternal =
+    attempt.attempt_triggered_by->RevenueRecoveryOrderUtils.attemptTriggeredByVariantMapper ==
+      INTERNAL
+  let charged = attempt.status->HSwitchOrderUtils.paymentAttemptStatusVariantMapper == #CHARGED
+  let reason = attempt.error->isNonEmptyString ? ` (${attempt.error})` : ""
+  let outcome = charged ? "approved" : "declined"
+  {
+    stepId: `attempt-${attempt.id}`,
+    at: attempt.created,
+    from: isInternal ? RevRec : Billing,
+    to: Processor,
+    label: `charge ${attempt.net_amount->InvoiceDetailsPageUtils.formatCurrency} → ${outcome}${reason}`,
+    text: `${isInternal
+        ? "Rev Rec"
+        : "The billing system"} charged the card. The processor answered ${attempt.status}.`,
+    status: charged ? StepOk : StepDeclined,
+    why: [],
+    attemptId: Some(attempt.id),
+  }
+}
+
+// The diagram row of an attempt: by its id, else the row whose explanation names the attempt
+let rowForAttempt = (rows: array<diagramRow>, attempt: RevenueRecoveryOrderTypes.attempts) =>
+  rows->Array.find(row =>
+    row.attemptId == Some(attempt.id) ||
+    row.text->String.includes(attempt.id) ||
+    row.why->Array.some(line => line.text->String.includes(attempt.id))
+  )
+
+let presetOptions = (presets: array<preset>): array<SelectBox.dropdownOption> =>
+  presets->Array.map(preset => {
+    let suffix = preset.verified ? "" : ` (${preset.v1Status})`
+    let option: SelectBox.dropdownOption = {
+      label: `${preset.title}${suffix}`,
+      value: preset.id->Int.toString,
+    }
+    option
+  })
+
+let customerOptions: array<SelectBox.dropdownOption> = [
+  {label: "New customer", value: "new"},
+  {label: "Same as last story", value: "same"},
+]
+
+let defaultForm: billingForm = {
+  preset: 1,
+  amount: "65.40",
+  currency: "USD",
+  card: "0341",
+  customer: "new",
+}
+
+// POST /sim/story/start body: the preset fills defaults on the proxy, explicit fields win
+let startBody = (form: billingForm) =>
+  [
+    ("preset", form.preset->JSON.Encode.int),
+    ("amount", form.amount->toMinor->JSON.Encode.int),
+    ("currency", form.currency->JSON.Encode.string),
+    ("card", form.card->JSON.Encode.string),
+    ("customer", form.customer->JSON.Encode.string),
+  ]->getJsonFromArrayOfJson

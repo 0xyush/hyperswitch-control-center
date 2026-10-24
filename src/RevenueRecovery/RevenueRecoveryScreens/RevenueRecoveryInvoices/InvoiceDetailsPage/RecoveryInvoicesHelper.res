@@ -36,14 +36,17 @@ module AttemptItem = {
   open Typography
   open InvoiceDetailsPageUtils
   @react.component
-  let make = (~attempt: attempts, ~attemptNumber: int, ~isLast: bool) => {
+  let make = (~attempt: attempts, ~attemptNumber: int, ~isLast: bool, ~onAttemptClick=?) => {
     let (badgeClass, badgeText) = getStatusBadgeColor(attempt.status)
     let dotColor = getTimelineDotColor(attempt.status)
     let attemptLabel =
       attemptNumber == 1 ? "Initial Attempt" : `Retry ${(attemptNumber - 1)->Int.toString}`
     let isInternal = attempt->isInternalAttempt
 
-    <div className="pt-7">
+    // Optional: the Rev Rec Simulator opens an explanation when a row is clicked
+    <div
+      className={`pt-7 ${onAttemptClick->Option.isSome ? "cursor-pointer" : ""}`}
+      onClick={_ => onAttemptClick->Option.forEach(onClick => onClick(attempt))}>
       <div className="flex items-center justify-between relative">
         <RenderIf condition={!isLast}>
           <div
@@ -115,6 +118,7 @@ module AttemptsHistory = {
     ~attemptsList,
     ~processTracker: option<Dict.t<JSON.t>>,
     ~startRetryThreshold: int,
+    ~onAttemptClick=?,
   ) => {
     let attempts = attemptsList
     let internalAttempts = attempts->Array.filter(isInternalAttempt)
@@ -243,7 +247,11 @@ module AttemptsHistory = {
             {internalAttempts
             ->Array.map(attempt => {
               <AttemptItem
-                key={attempt.id} attempt attemptNumber={attempt->getAttemptNumber} isLast={false}
+                key={attempt.id}
+                attempt
+                attemptNumber={attempt->getAttemptNumber}
+                isLast={false}
+                ?onAttemptClick
               />
             })
             ->React.array}
@@ -312,7 +320,11 @@ module AttemptsHistory = {
             {merchantRetries
             ->Array.map(attempt => {
               <AttemptItem
-                key={attempt.id} attempt attemptNumber={attempt->getAttemptNumber} isLast={false}
+                key={attempt.id}
+                attempt
+                attemptNumber={attempt->getAttemptNumber}
+                isLast={false}
+                ?onAttemptClick
               />
             })
             ->React.array}
@@ -337,7 +349,11 @@ module AttemptsHistory = {
           {switch firstAttempt {
           | Some(attempt) =>
             <AttemptItem
-              key={attempt.id} attempt attemptNumber={attempt->getAttemptNumber} isLast=true
+              key={attempt.id}
+              attempt
+              attemptNumber={attempt->getAttemptNumber}
+              isLast=true
+              ?onAttemptClick
             />
           | None => React.null
           }}

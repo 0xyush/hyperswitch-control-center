@@ -1,23 +1,29 @@
-// Settings from the [default.simulator] table in config/config.toml
-type simulatorConfig = {
-  simUrl: string,
-  orgId: string,
-  merchantId: string,
-  profileId: string,
+// The billing system form (left panel). Amount is kept as typed text, in major units.
+type billingForm = {
+  preset: int,
+  amount: string,
+  currency: string,
+  card: string,
+  customer: string,
 }
 
-// One row of GET /sim/scenarios (PRD section 7)
-type scenario = {
+// One preset from GET /sim/presets: it fills the billing system form
+type preset = {
   id: int,
   title: string,
   summary: string,
-  reportedReason: string,
-  savedCard: string,
-  expected: string,
-  liveTime: string,
   v1Status: string,
-  runnable: bool,
+  // True when the preset was run end to end on the sandbox
+  verified: bool,
   hint: string,
+  fields: billingForm,
+}
+
+// GET /sim/presets: presets plus the card and currency choices for the form
+type formOptions = {
+  presets: array<preset>,
+  cards: array<SelectBox.dropdownOption>,
+  currencies: array<SelectBox.dropdownOption>,
 }
 
 // The invoice states, with the dashboard's names
@@ -33,19 +39,33 @@ type stage =
   | Cancelled
   | StoryError
 
-// Who acts in the flow diagram
+// The four lifelines of the sequence diagram
 type actor = Billing | RevRec | Processor | Customer
 
-// Where an explain line comes from
+// Where an explanation line comes from
 type source = Sandbox | Recomputed | Rule
 
 type explainLine = {text: string, source: source}
 
-type nowCard = {actor: actor, text: string, why: string}
+// How a diagram arrow ended
+type stepStatus = StepOk | StepDeclined | StepFailed | StepPending | StepInfo
 
-type flowEvent = {at: string, from: actor, to: actor, text: string}
+// One message arrow in the sequence diagram
+type diagramRow = {
+  stepId: string,
+  at: string,
+  from: actor,
+  to: actor,
+  label: string,
+  // One sentence for the side drawer
+  text: string,
+  status: stepStatus,
+  why: array<explainLine>,
+  attemptId: option<string>,
+}
 
 type requestLog = {
+  stepId: string,
   step: string,
   at: string,
   method: string,
@@ -55,31 +75,30 @@ type requestLog = {
   response: JSON.t,
 }
 
-type storyActions = {paidInApp: bool, reportAgain: bool}
+type storyActions = {paidInApp: bool, reportAgain: bool, cancel: bool}
 
 // GET /sim/story/:storyId (contract in simulator/NOTES.md). invoice, attempts and
-// processTracker are the raw sandbox JSON, so the invoice page mappers read them as they are.
+// processTracker are the raw sandbox JSON, so the invoice page components read them as they are.
 type story = {
   storyId: string,
   scenarioId: int,
   scenarioTitle: string,
-  hint: string,
   invoiceId: string,
   recoveryId: string,
   startedAt: string,
   stage: stage,
-  stageCaption: string,
   // The proxy says the story has made its point, so polling can stop
   done: bool,
   nextRetryAt: option<string>,
   invoice: Dict.t<JSON.t>,
   attempts: JSON.t,
   processTracker: Dict.t<JSON.t>,
-  now: option<nowCard>,
   explain: array<explainLine>,
-  timeline: array<flowEvent>,
+  timeline: array<diagramRow>,
   requests: array<requestLog>,
   actions: storyActions,
   warnings: array<string>,
   startError: string,
+  // The billing system form values this story was started with
+  form: option<billingForm>,
 }

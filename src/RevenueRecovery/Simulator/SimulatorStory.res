@@ -1,58 +1,41 @@
-// Invoice story (PRD section 7): pick a scenario, press Play, and watch one real failed
-// invoice move through Rev Rec on the sandbox. The proxy plays the billing system.
+// Invoice story (simulator/REDESIGN-story.md): the left form plays the merchant's billing system,
+// like the checkout form on Orchestrator's "Try It Out" page. The right side is the product itself:
+// a sequence diagram of the real events, then the real invoice detail page, both updated live.
 open SimulatorTypes
 open SimulatorUtils
 open SimulatorStoryHelper
-
-module AttemptsSection = {
-  @react.component
-  let make = (~story: story) => {
-    let order = story.invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
-    let order = {...order, status: story.stage->toInvoiceStatus(~default=order.status)}
-    let attemptsList =
-      story.attempts
-      ->RevenueRecoveryEntity.getAttempts
-      ->Array.filter(item => item.status !== "started")
-    // Newest first, like the invoice page
-    attemptsList->Array.reverse
-
-    <div className=cardStyle>
-      <RecoveryInvoicesHelper.AttemptsHistory
-        order attemptsList processTracker={story.processTracker->Some} startRetryThreshold=0
-      />
-    </div>
-  }
-}
 
 @react.component
 let make = (~storyIdFromUrl: option<string>) => {
   open APIUtils
   open LogicUtils
-  open Typography
   let fetchDetails = useGetMethod(~showErrorToast=false)
   let updateDetails = useUpdateMethod(~showErrorToast=false)
   let showToast = ToastAdapter.useShowToast()
   let mixpanelEvent = MixpanelHook.useSendEvent()
 
   let (screenState, setScreenState) = React.useState(_ => PageLoaderWrapper.Loading)
-  let (scenarios, setScenarios) = React.useState(_ => [])
-  let (selectedId, setSelectedId) = React.useState(_ => 1)
+  let (options, setOptions) = React.useState(_ => {presets: [], cards: [], currencies: []})
+  let (form, setForm) = React.useState(_ => defaultForm)
   let (story, setStory) = React.useState(_ => None)
-  let (isPaused, setIsPaused) = React.useState(_ => false)
   let (isBusy, setIsBusy) = React.useState(_ => false)
-  let (showRequests, setShowRequests) = React.useState(_ => false)
   let (pollError, setPollError) = React.useState(_ => "")
+  let (selectedRow, setSelectedRow) = React.useState(_ => None)
+  // The story whose values the form shows, so a reopened story fills the form once
+  let formStoryId = React.useRef("")
 
   // Scenario 3 can stay in Monitoring, so the proxy's done flag is the main end signal
   let isDone = story->Option.mapOr(false, (s: story) => s.done || s.stage->isFinalStage)
   let storyPath = id =>
     GlobalVars.appendDashboardPath(~url=`${RevenueRecoverySidebarValues.simulatorStoryPath}/${id}`)
 
-  let fetchScenarios = async () => {
+  let fetchPresets = async () => {
     try {
       setScreenState(_ => PageLoaderWrapper.Loading)
-      let json = await fetchDetails(getSimUrl("/sim/scenarios"))
-      setScenarios(_ => json->getScenarios)
+      let json = await fetchDetails(getSimUrl("/sim/presets"))
+      let formOptions = json->getFormOptions
+      setOptions(_ => formOptions)
+      formOptions.presets->Array.get(0)->Option.forEach(preset => setForm(_ => preset.fields))
       setScreenState(_ => PageLoaderWrapper.Success)
     } catch {
     | _ => setScreenState(_ => PageLoaderWrapper.Custom)
@@ -60,14 +43,14 @@ let make = (~storyIdFromUrl: option<string>) => {
   }
 
   React.useEffect(() => {
-    fetchScenarios()->ignore
+    fetchPresets()->ignore
     None
   }, [])
 
-  // Poll the story every 4 s until it reaches an end state, or the visitor pauses
+  // Poll the story every 4 s until the proxy says it is done
   React.useEffect(() => {
     switch storyIdFromUrl {
-    | Some(id) if !isPaused && !isDone => {
+    | Some(id) if !isDone => {
         let cancelled = ref(false)
         let inFlight = ref(false)
         let poll = async () => {
@@ -76,7 +59,12 @@ let make = (~storyIdFromUrl: option<string>) => {
             try {
               let json = await fetchDetails(getSimUrl(`/sim/story/${id}`))
               if !cancelled.contents {
-                setStory(_ => Some(json->storyMapper))
+                let polledStory = json->storyMapper
+                if formStoryId.current != id {
+                  formStoryId.current = id
+                  polledStory.form->Option.forEach(storyForm => setForm(_ => storyForm))
+                }
+                setStory(_ => Some(polledStory))
                 setPollError(_ => "")
               }
             } catch {
@@ -101,30 +89,30 @@ let make = (~storyIdFromUrl: option<string>) => {
       }
     | _ => None
     }
-  }, (storyIdFromUrl, isPaused, isDone))
+  }, (storyIdFromUrl, isDone))
 
-  let onPlay = async () => {
+  // Charge customer: the billing system's own charge starts a new story
+  let onCharge = async () => {
     setIsBusy(_ => true)
-    mixpanelEvent(~eventName="recovery_simulator_play")
+    mixpanelEvent(~eventName="recovery_simulator_charge_customer")
     try {
-      let body = [("scenario", selectedId->JSON.Encode.int)]->getJsonFromArrayOfJson
-      let json = await updateDetails(getSimUrl("/sim/story/start"), body, Post)
+      let json = await updateDetails(getSimUrl("/sim/story/start"), form->startBody, Post)
       let newStory = json->storyMapper
+      formStoryId.current = newStory.storyId
       setStory(_ => Some(newStory))
-      setIsPaused(_ => false)
       setPollError(_ => "")
       RescriptReactRouter.replace(storyPath(newStory.storyId))
     } catch {
     | exn =>
       showToast(
-        ~message=exn->getSimErrorMessage(~default="Could not start the story."),
+        ~message=exn->getSimErrorMessage(~default="The billing system could not charge."),
         ~toastType=ToastError,
       )
     }
     setIsBusy(_ => false)
   }
 
-  // Paid in app and Report another failure: the proxy answers with the updated story
+  // Paid in app, Report another failure and Cancel invoice: the proxy answers with the updated story
   let runAction = async (~action, ~eventName) => {
     switch storyIdFromUrl {
     | Some(id) =>
@@ -149,20 +137,25 @@ let make = (~storyIdFromUrl: option<string>) => {
     }
   }
 
-  let onReset = () => {
-    mixpanelEvent(~eventName="recovery_simulator_reset")
+  let onStartOver = () => {
+    mixpanelEvent(~eventName="recovery_simulator_start_over")
     setStory(_ => None)
-    setIsPaused(_ => false)
-    setShowRequests(_ => false)
+    setSelectedRow(_ => None)
     setPollError(_ => "")
     RescriptReactRouter.replace(
       GlobalVars.appendDashboardPath(~url=RevenueRecoverySidebarValues.simulatorStoryPath),
     )
   }
 
-  let hasStory = storyIdFromUrl->Option.isSome
-  let actions = story->Option.mapOr({paidInApp: false, reportAgain: false}, s => s.actions)
-  let disabledUnless = condition => condition && !isBusy ? Button.Normal : Button.Disabled
+  // An attempt row opens the diagram row of the same charge, or one built from the attempt
+  let onAttemptClick = (attempt: RevenueRecoveryOrderTypes.attempts) => {
+    let row =
+      story
+      ->Option.flatMap(s => s.timeline->rowForAttempt(attempt))
+      ->Option.getOr(attempt->attemptRow)
+    setSelectedRow(_ => Some(row))
+  }
+
   let warnings = switch story {
   | Some(s) =>
     [s.startError]
@@ -171,9 +164,6 @@ let make = (~storyIdFromUrl: option<string>) => {
     ->Array.filter(isNonEmptyString)
   | None => [pollError]->Array.filter(isNonEmptyString)
   }
-  let lastEvent = story->Option.flatMap(s => s.timeline->Array.at(-1))
-  let activeActor = story->Option.flatMap(s => s.now->Option.map(now => now.actor))
-  let stage = story->Option.mapOr(Starting, s => s.stage)
 
   <div className="flex flex-col gap-6">
     <BreadCrumbNavigation
@@ -182,7 +172,7 @@ let make = (~storyIdFromUrl: option<string>) => {
     />
     <PageUtils.PageHeading
       title="Invoice story"
-      subTitle="Pick a scenario and press Play. The simulator plays the billing system; Rev Rec on the sandbox does the rest."
+      subTitle="Play the merchant's billing system on the left. Rev Rec on the sandbox handles the failed invoice on the right, live."
     />
     <PageLoaderWrapper
       screenState
@@ -190,122 +180,56 @@ let make = (~storyIdFromUrl: option<string>) => {
         message={`The simulator proxy is not reachable at ${getConfig().simUrl}. Start it (simulator/proxy) and refresh.`}
         renderType=NotFound
       />}>
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-wrap gap-3 items-center">
-          <Button
-            text={hasStory ? "Play again" : "Play"}
-            buttonType=Primary
-            buttonSize=Medium
-            leftIcon={CustomIcon(<Icon name="play" size=14 />)}
-            buttonState={isBusy ? Loading : Normal}
-            onClick={_ => onPlay()->ignore}
-          />
-          <Button
-            text={isPaused ? "Resume polling" : "Pause polling"}
-            buttonType=Secondary
-            buttonSize=Medium
-            leftIcon={CustomIcon(<Icon name={isPaused ? "play" : "pause"} size=14 />)}
-            buttonState={disabledUnless(hasStory && !isDone)}
-            onClick={_ => setIsPaused(prev => !prev)}
-          />
-          <Button
-            text="Paid in app"
-            buttonType=Secondary
-            buttonSize=Medium
-            buttonState={disabledUnless(actions.paidInApp)}
-            onClick={_ =>
+      <div className="flex flex-col xl:flex-row gap-10 items-start">
+        <div className="w-full xl:w-1/3 shrink-0 xl:sticky xl:top-0">
+          <BillingSystemForm
+            options
+            form
+            setForm
+            isBusy
+            story
+            onCharge={() => onCharge()->ignore}
+            onPaidInApp={() =>
               runAction(~action="paid-in-app", ~eventName="recovery_simulator_paid_in_app")->ignore}
-          />
-          <Button
-            text="Report another failure"
-            buttonType=Secondary
-            buttonSize=Medium
-            buttonState={disabledUnless(actions.reportAgain)}
-            onClick={_ =>
+            onReportAgain={() =>
               runAction(
                 ~action="report-again",
                 ~eventName="recovery_simulator_report_again",
               )->ignore}
-          />
-          <Button
-            text="Reset"
-            buttonType=Secondary
-            buttonSize=Medium
-            buttonState={disabledUnless(hasStory)}
-            onClick={_ => onReset()}
-          />
-          <Button
-            text={showRequests ? "Hide requests" : "Show requests"}
-            buttonType=Secondary
-            buttonSize=Medium
-            leftIcon={CustomIcon(<Icon name="code" size=14 />)}
-            onClick={_ => setShowRequests(prev => !prev)}
+            onCancel={() =>
+              runAction(~action="cancel", ~eventName="recovery_simulator_cancel")->ignore}
+            onStartOver
           />
         </div>
-        {warnings
-        ->Array.mapWithIndex((warning, index) =>
-          <AlertV2Binding
-            key={index->Int.toString}
-            alertType=Warning
-            slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
-            description=warning
+        <div className="w-full min-w-0 flex flex-col gap-8">
+          <PageUtils.PageHeading
+            title="Revenue Recovery"
+            subTitle="Live from the sandbox"
+            showPermLink=false
+            customTitleStyle="!font-medium !text-xl !text-nd_gray-600"
           />
-        )
-        ->React.array}
-        {switch story {
-        | Some(s) =>
-          <div
-            className={`${cardStyle} flex flex-wrap gap-x-8 gap-y-2 ${body.md.medium} text-nd_gray-600`}>
-            <span className={`${body.md.semibold} text-nd_gray-700`}>
-              {`Scenario ${s.scenarioId->Int.toString}: ${s.scenarioTitle}`->React.string}
-            </span>
-            <span> {`Invoice ${s.invoiceId}`->React.string} </span>
-            <RenderIf condition={s.recoveryId->isNonEmptyString}>
-              <span> {`Payment ${s.recoveryId}`->React.string} </span>
-            </RenderIf>
-            <span className="flex gap-1">
-              {"Started"->React.string}
-              <Table.DateCell timestamp={s.startedAt} isCard=true />
-            </span>
-          </div>
-        | None =>
-          <RenderIf condition={!hasStory}>
-            <ScenarioPicker scenarios selectedId setSelectedId />
-          </RenderIf>
-        }}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <div className="xl:col-span-3 min-w-0">
-            <StateStepper
-              stage reached={story->Option.mapOr([false, false, false, false, false], reachedSteps)}
+          {warnings
+          ->Array.mapWithIndex((warning, index) =>
+            <AlertV2Binding
+              key={index->Int.toString}
+              alertType=Warning
+              slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
+              description=warning
             />
-          </div>
-          <div className="xl:col-span-5 min-w-0">
-            <FlowDiagram activeActor lastEvent />
-          </div>
-          <div className="xl:col-span-4 min-w-0 flex flex-col gap-6">
-            {switch story {
-            | Some(s) => <NowCard story=s />
-            | None =>
-              <div className={`${cardStyle} flex flex-col gap-2`}>
-                <p className={`${body.lg.semibold} text-nd_gray-700`}> {"Now"->React.string} </p>
-                <p className={`${body.md.medium} text-nd_gray-500`}>
-                  {(
-                    hasStory ? "Loading the story." : "Pick a scenario, then press Play."
-                  )->React.string}
-                </p>
-              </div>
-            }}
-            <ExplainPanel lines={story->Option.mapOr([], s => s.explain)} />
-          </div>
+          )
+          ->React.array}
+          <SequenceDiagram story onRowClick={row => setSelectedRow(_ => Some(row))} />
+          {switch story {
+          | Some(s) if !(s.invoice->isEmptyDict) => <InvoicePanel story=s onAttemptClick />
+          | Some(_) =>
+            <p className={`${Typography.body.md.medium} text-nd_gray-500`}>
+              {"The invoice page appears once the sandbox has recorded the invoice."->React.string}
+            </p>
+          | None => React.null
+          }}
         </div>
-        {switch story {
-        | Some(s) if !(s.invoice->isEmptyDict) => <AttemptsSection story=s />
-        | _ => React.null
-        }}
-        <RenderIf condition={showRequests}>
-          <RequestsPanel requests={story->Option.mapOr([], s => s.requests)} />
-        </RenderIf>
       </div>
     </PageLoaderWrapper>
+    <ExplainDrawer row=selectedRow story onClose={() => setSelectedRow(_ => None)} />
   </div>
 }

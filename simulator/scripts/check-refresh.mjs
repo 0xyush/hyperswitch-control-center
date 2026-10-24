@@ -15,10 +15,10 @@ const pages = [
   ["/dashboard/v2/recovery", "Try the simulator"],
   ["/dashboard/v2/recovery/home", "Try the simulator"],
   ["/dashboard/v2/recovery/invoices", "List of Invoices"],
-  ["/dashboard/v2/recovery/simulator/story", "Invoice story"],
-  ["/dashboard/v2/recovery/simulator/unknown-page", "Invoice story"],
+  ["/dashboard/v2/recovery/simulator/story", "Billing system"],
+  ["/dashboard/v2/recovery/simulator/unknown-page", "Billing system"],
   ...(storyId
-    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "Scenario"]]
+    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "What happened"]]
     : []),
 ];
 
