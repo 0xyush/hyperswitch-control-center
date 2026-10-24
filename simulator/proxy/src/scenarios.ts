@@ -3,9 +3,16 @@
 // that Rev Rec retries. Since 23 Oct the sandbox checks each reported charge with Stripe and
 // records Stripe's real decline, so the decline reason comes from the card that failed.
 
-export type CardId = "4242" | "0341" | "0002" | "9995" | "9979";
+export type CardId =
+  | "4242"
+  | "0341"
+  | "0002"
+  | "9995"
+  | "9979"
+  | "0119"
+  | "0069";
 export type SavedCardId = "4242" | "0341";
-export type FirstChargeId = "0341" | "0002" | "9995" | "9979";
+export type FirstChargeId = "0341" | "0002" | "9995" | "9979" | "0119" | "0069";
 
 export type Card = {
   last4: CardId;
@@ -65,7 +72,29 @@ export const CARDS: Record<CardId, Card> = {
     behaviour:
       "Stripe test card 9979 declines with stolen_card. Stripe will not save it.",
   },
+  // Used by the portfolio run's bank rules; not in the story form.
+  "0119": {
+    last4: "0119",
+    pm: "pm_card_chargeDeclinedProcessingError",
+    isin: "400000",
+    network: "Visa",
+    declineCode: "processing_error",
+    label: "Processing error 0119 (first charge)",
+    behaviour: "Stripe test card 0119 declines with processing_error.",
+  },
+  "0069": {
+    last4: "0069",
+    pm: "pm_card_chargeDeclinedExpiredCard",
+    isin: "400000",
+    network: "Visa",
+    declineCode: "expired_card",
+    label: "Expired card 0069 (first charge)",
+    behaviour: "Stripe test card 0069 declines with expired_card.",
+  },
 };
+
+// The cards the story form offers (redesign brief).
+export const FORM_CARDS: CardId[] = ["4242", "0341", "0002", "9995", "9979"];
 
 export const SAVED_CARDS: SavedCardId[] = ["4242", "0341"];
 export const FIRST_CHARGE_CARDS: FirstChargeId[] = [
@@ -73,6 +102,8 @@ export const FIRST_CHARGE_CARDS: FirstChargeId[] = [
   "0002",
   "9995",
   "9979",
+  "0119",
+  "0069",
 ];
 export const CURRENCIES = ["USD", "EUR", "GBP"];
 
@@ -96,7 +127,13 @@ export const DECLINES: Record<
     ndc: "19",
     plain: "a temporary problem at the bank",
   },
+  processing_error: {
+    soft: true,
+    ndc: "96",
+    plain: "an error at the bank while processing",
+  },
   stolen_card: { soft: false, ndc: "43", plain: "the card is reported stolen" },
+  expired_card: { soft: false, ndc: "54", plain: "the card has expired" },
 };
 
 // The brief's single "card" field, mapped to the two cards a story needs.
@@ -278,7 +315,7 @@ export function publicPresets() {
       reportAgainMode: p.reportAgainMode,
       hint: p.hint,
     })),
-    cards: Object.values(CARDS).map((c) => ({
+    cards: FORM_CARDS.map((id) => CARDS[id]).map((c) => ({
       id: c.last4,
       label: c.label,
       behaviour: c.behaviour,

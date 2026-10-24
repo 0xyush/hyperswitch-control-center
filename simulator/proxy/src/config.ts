@@ -82,6 +82,33 @@ export const config = {
   dataDir: read("SIM_DATA_DIR") || path.join(PROXY_ROOT, "data"),
 };
 
+// The two profiles of the portfolio run. Until the smart profile exists (scripts/setup-profiles.ts),
+// both default to the existing profile, so both runs use the same retry mode.
+export type ProfileKey = "static" | "smart";
+export type ProfileRef = {
+  key: ProfileKey;
+  profileId: string;
+  billingMcaId: string;
+  paymentMcaId: string;
+};
+const profileRef = (key: ProfileKey, prefix: string): ProfileRef => ({
+  key,
+  profileId: read(`${prefix}_PROFILE_ID`) || config.hsProfileId,
+  billingMcaId: read(`${prefix}_BILLING_MCA_ID`) || config.hsBillingMcaId,
+  paymentMcaId: read(`${prefix}_PAYMENT_MCA_ID`) || config.hsPaymentMcaId,
+});
+export const PROFILES: Record<ProfileKey, ProfileRef> = {
+  static: profileRef("static", "HS_STATIC"),
+  smart: profileRef("smart", "HS_SMART"),
+};
+
+// The portfolio run is off unless SIM_PORTFOLIO=1.
+export const portfolioConfig = {
+  enabled: read("SIM_PORTFOLIO") === "1",
+  maxInvoices: 10,
+  runsPerHour: Number(read("RATE_LIMIT_PORTFOLIO_PER_HOUR") || 1),
+};
+
 // Every secret value we hold. Used to scrub any text before it leaves the proxy.
 // auth.ts adds the switched dashboard tokens here too.
 export const SECRET_VALUES: string[] = [

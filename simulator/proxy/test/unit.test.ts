@@ -13,6 +13,7 @@ const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
 const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
 const { parseStart } = await import("../src/story.ts");
+const { parsePortfolio } = await import("../src/portfolio.ts");
 const { createServer } = await import("../src/server.ts");
 
 describe("allow-list", () => {
@@ -169,6 +170,30 @@ describe("presets and start body", () => {
   });
 });
 
+describe("portfolio dials", () => {
+  test("defaults: 10 invoices, 45 min cap, a seed", () => {
+    const d = parsePortfolio({});
+    assert.equal(d.invoices, 10);
+    assert.equal(d.maxMinutes, 45);
+    assert.ok(Number.isInteger(d.seed));
+  });
+  test("bad dials are refused", () => {
+    for (const body of [
+      { invoices: 11 },
+      { invoices: 0 },
+      { maxMinutes: 60 },
+      { mix: { lost_card: 1 } },
+      { mix: { stolen_card: 0 } },
+      { amount: 1.5 },
+    ])
+      assert.throws(
+        () => parsePortfolio(body),
+        { status: 400 },
+        JSON.stringify(body),
+      );
+  });
+});
+
 describe("server (in process, no upstream calls)", () => {
   let base = "";
   const server = createServer();
@@ -244,6 +269,14 @@ describe("server (in process, no upstream calls)", () => {
       body: JSON.stringify({ customer: "same" }),
     });
     assert.equal(r.status, 409);
+  });
+
+  test("the portfolio run is off by default", async () => {
+    const r = await fetch(`${base}/sim/portfolio/start`, {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(r.status, 404);
   });
 
   test("presets endpoint and unknown story", async () => {

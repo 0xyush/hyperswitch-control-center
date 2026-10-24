@@ -3,8 +3,15 @@
 // Run: npm start   (reads simulator/proxy/.env)
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { authStatus, refreshDashboardToken } from "./auth.ts";
-import { config, configStatus } from "./config.ts";
+import { config, configStatus, portfolioConfig } from "./config.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
+import {
+  listPortfolios,
+  parsePortfolio,
+  portfolioView,
+  startPortfolio,
+  stopPortfolio,
+} from "./portfolio.ts";
 import { scrubText } from "./redact.ts";
 import { publicPresets } from "./scenarios.ts";
 import {
@@ -210,8 +217,31 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }
     noteStart(owner, ipKey);
     // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
-    const s = startStory(opts, owner);
+    const { story: s } = startStory(opts, owner);
     return send(res, 200, await storyView(s.storyId));
+  }
+
+  // The portfolio run (M2), off unless SIM_PORTFOLIO=1.
+  if (p === "/sim/portfolio" || p.startsWith("/sim/portfolio/")) {
+    if (!portfolioConfig.enabled)
+      throw new HttpError(
+        404,
+        "the portfolio run is off; start the proxy with SIM_PORTFOLIO=1",
+      );
+    if (method === "POST" && p === "/sim/portfolio/start") {
+      const dials = parsePortfolio(await readJson(req));
+      const run = startPortfolio(dials, visitor(req).owner);
+      return send(res, 200, await portfolioView(run.runId));
+    }
+    if (method === "GET" && p === "/sim/portfolio")
+      return send(res, 200, { runs: listPortfolios() });
+    const pm = p.match(/^\/sim\/portfolio\/(pf_[a-f0-9]{8})(\/stop)?$/);
+    if (pm && method === "GET" && !pm[2])
+      return send(res, 200, await portfolioView(pm[1]));
+    if (pm && method === "POST" && pm[2]) {
+      await stopPortfolio(pm[1]);
+      return send(res, 200, await portfolioView(pm[1]));
+    }
   }
 
   const m = p.match(

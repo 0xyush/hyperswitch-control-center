@@ -7,7 +7,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { hasDashboardToken } from "./auth.ts";
-import { config } from "./config.ts";
+import {
+  config,
+  PROFILES,
+  type ProfileKey,
+  type ProfileRef,
+} from "./config.ts";
 import { redact, scrubText } from "./redact.ts";
 import {
   CARDS,
@@ -99,7 +104,22 @@ export type Story = StartOptions & {
   seenSchedules: string[]; // retry times already shown as "pick retry time" steps
   stageSeen: Record<string, string>; // first time the proxy saw each stage
   finalNoted: boolean;
+  profile: ProfileKey; // static unless the portfolio run says smart
+  paced?: boolean; // portfolio stories share the 5-calls-per-second queue
+  portfolioRunId?: string;
 };
+
+const prof = (s: Story): ProfileRef => PROFILES[s.profile ?? "static"];
+
+// Portfolio stories share one queue: at most 5 Stripe or sandbox calls per second.
+let nextSlot = 0;
+const PACE_MS = 200;
+async function pace() {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + PACE_MS;
+  if (at > now) await new Promise((ok) => setTimeout(ok, at - now));
+}
 
 const ERROR_CODES: Record<number, string> = {
   400: "bad_request",
@@ -244,6 +264,7 @@ async function stripeStep(
   pathname: string,
   params: Record<string, string>,
 ) {
+  if (story.paced) await pace();
   const r = await stripe("POST", pathname, params);
   const stepId = newStepId(story);
   story.requests.push({
@@ -269,7 +290,8 @@ async function sandboxStep(
   body: unknown,
   path = config.hsRecoveryPath,
 ) {
-  const r = await hsApiKey("POST", path, body);
+  if (story.paced) await pace();
+  const r = await hsApiKey("POST", path, body, prof(story).profileId);
   const stepId = newStepId(story);
   story.requests.push({
     stepId,
@@ -279,7 +301,7 @@ async function sandboxStep(
     request: {
       method: "POST",
       url: `${config.hsBaseUrl}/${path}`,
-      headers: shownHsHeaders("api-key"),
+      headers: shownHsHeaders("api-key", prof(story).profileId),
       body: redact(body),
     },
     response: { status: r.status, body: redact(r.json) },
@@ -423,8 +445,8 @@ function recoveryBody(
   return {
     amount_details: { order_amount: story.amount, currency: story.currency },
     merchant_reference_id: story.invoiceId,
-    billing_merchant_connector_id: config.hsBillingMcaId,
-    payment_merchant_connector_id: config.hsPaymentMcaId,
+    billing_merchant_connector_id: prof(story).billingMcaId,
+    payment_merchant_connector_id: prof(story).paymentMcaId,
     transaction_status: o.status,
     // Sent only for a charge, and it must equal the order amount.
     ...(paid ? { amount_captured: story.amount } : {}),
@@ -601,15 +623,29 @@ export function parseStart(body: any): StartOptions {
 }
 
 // Creates the story and returns at once. The billing system's steps run in the background,
-// so the dashboard sees each step appear while it polls.
-export function startStory(opts: StartOptions, owner: string): Story {
+// so the dashboard sees each step appear while it polls. `done` settles when the start ends.
+export function startStory(
+  opts: StartOptions,
+  owner: string,
+  extra: {
+    profile?: ProfileKey;
+    invoiceId?: string;
+    portfolioRunId?: string;
+    paced?: boolean;
+  } = {},
+): { story: Story; done: Promise<void> } {
   const storyId = `st_${crypto.randomBytes(6).toString("hex")}`;
   const story: Story = {
     ...opts,
     storyId,
     owner,
+    profile: extra.profile ?? "static",
+    paced: extra.paced,
+    portfolioRunId: extra.portfolioRunId,
     // "SIM-" prefix lets later sessions hide old demo invoices (the sandbox has no delete).
-    invoiceId: `SIM-${opts.presetId ?? 0}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString("hex")}`,
+    invoiceId:
+      extra.invoiceId ??
+      `SIM-${opts.presetId ?? 0}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString("hex")}`,
     recoveryId: null,
     startedAt: nowIso(),
     stripeCustomerId: "",
@@ -629,13 +665,13 @@ export function startStory(opts: StartOptions, owner: string): Story {
   };
   stories.set(storyId, story);
   save();
-  withLock(storyId, () => runStart(story)).catch((e) => {
+  const done = withLock(storyId, () => runStart(story)).catch((e) => {
     story.error = scrubText(String((e as Error).message ?? e));
     console.log(`story ${storyId} start failed: ${story.error}`);
     viewCache.delete(storyId);
     save();
   });
-  return story;
+  return { story, done };
 }
 
 // The visitor's last story that has a Stripe customer.
@@ -716,7 +752,7 @@ async function runStart(story: Story) {
 
   // Start rule N = Rev Rec takes over after more than N failures. The /v2/recovery API has no retry
   // count field, so the billing system makes its own N retries first, each a real failed charge.
-  story.startRule = await readStartRule();
+  story.startRule = await readStartRule(prof(story));
   const total = story.sendDuplicateOnStart
     ? 1
     : Math.min((story.startRule ?? 0) + 1, MAX_START_FAILURES);
@@ -936,6 +972,10 @@ const STATUS_ALIASES: Record<string, string> = {
   no_picked: "monitoring",
   partially_captured_and_processing: "processing",
 };
+export const normalizeStatus = (sandboxStatus: string | null | undefined) =>
+  sandboxStatus ? (STATUS_ALIASES[sandboxStatus] ?? sandboxStatus) : null;
+export const isFinalStatus = (status: string | null) =>
+  status === "recovered" || status === "terminated" || status === "cancelled";
 
 type Attempt = {
   id: string;
@@ -980,11 +1020,14 @@ function toAttempts(list: any[]): Attempt[] {
 let processTrackerPath = "v2/process-trackers/revenue-recovery-workflow";
 async function readProcessTracker(
   recoveryId: string,
+  profileId: string,
 ): Promise<Upstream | null> {
-  let r = await hsDashboard("GET", `${processTrackerPath}/${recoveryId}`);
+  let r = await hsDashboard("GET", `${processTrackerPath}/${recoveryId}`, {
+    profileId,
+  });
   if (r?.status === 404 && processTrackerPath.includes("-")) {
     const alt = "v2/process_tracker/revenue_recovery_workflow";
-    const r2 = await hsDashboard("GET", `${alt}/${recoveryId}`);
+    const r2 = await hsDashboard("GET", `${alt}/${recoveryId}`, { profileId });
     if (r2 && r2.status !== 404) {
       processTrackerPath = alt;
       r = r2;
@@ -1001,15 +1044,19 @@ type RevRecConfig = {
   gracePeriodDays: number | null;
   retryMode: string | null;
 };
-let revrecConfig: { value: RevRecConfig; at: number } | null = null;
-async function readRevRecConfig(): Promise<RevRecConfig> {
-  if (revrecConfig && Date.now() - revrecConfig.at < 300_000)
-    return revrecConfig.value;
-  const [mca, prof] = await Promise.all([
-    hsDashboard("GET", `v2/connector-accounts/${config.hsBillingMcaId}`).catch(
-      () => null,
-    ),
-    hsDashboard("GET", `v2/profiles/${config.hsProfileId}`).catch(() => null),
+const revrecConfigs = new Map<string, { value: RevRecConfig; at: number }>();
+export async function readRevRecConfig(
+  p: ProfileRef = PROFILES.static,
+): Promise<RevRecConfig> {
+  const cached = revrecConfigs.get(p.profileId + p.billingMcaId);
+  if (cached && Date.now() - cached.at < 300_000) return cached.value;
+  const [mca, profile] = await Promise.all([
+    hsDashboard("GET", `v2/connector-accounts/${p.billingMcaId}`, {
+      profileId: p.profileId,
+    }).catch(() => null),
+    hsDashboard("GET", `v2/profiles/${p.profileId}`, {
+      profileId: p.profileId,
+    }).catch(() => null),
   ]);
   const rr =
     mca?.status === 200
@@ -1021,16 +1068,17 @@ async function readRevRecConfig(): Promise<RevRecConfig> {
     maxRetries: num(rr.max_retry_count),
     gracePeriodDays: num(rr.grace_period_days),
     retryMode:
-      prof?.status === 200
-        ? (prof.json?.revenue_recovery_retry_algorithm_type ?? null)
+      profile?.status === 200
+        ? (profile.json?.revenue_recovery_retry_algorithm_type ?? null)
         : null,
   };
   // Do not cache a miss, so a token that arrives later is used at once.
-  if (mca?.status === 200) revrecConfig = { value, at: Date.now() };
+  if (mca?.status === 200)
+    revrecConfigs.set(p.profileId + p.billingMcaId, { value, at: Date.now() });
   return value;
 }
-const readStartRule = async () =>
-  (await readRevRecConfig().catch(() => null))?.startRule ?? null;
+const readStartRule = async (p: ProfileRef) =>
+  (await readRevRecConfig(p).catch(() => null))?.startRule ?? null;
 
 // Process-tracker business status codes in plain words (hyperswitch diesel_models/process_tracker.rs).
 const TASK_STATUS: Record<string, string> = {
@@ -1077,6 +1125,7 @@ export async function storyView(storyId: string) {
   if (cached && Date.now() - cached.at < VIEW_TTL_MS) return cached.view;
 
   const preset = story.presetId ? (presetById(story.presetId) ?? null) : null;
+  const profileId = prof(story).profileId;
   const saved = CARDS[story.savedCard];
   const first = CARDS[story.firstCharge];
   const warnings: string[] = [];
@@ -1108,11 +1157,11 @@ export async function storyView(storyId: string) {
   if (story.recoveryId) {
     const id = story.recoveryId;
     const [list, det, att, ptr, sr] = await Promise.all([
-      settle(hsApiKey("GET", reads.list)),
-      settle(hsApiKey("GET", reads.detail)),
-      settle(hsApiKey("GET", reads.attempts)),
-      settle(readProcessTracker(id)),
-      settle(readRevRecConfig()),
+      settle(hsApiKey("GET", reads.list, undefined, profileId)),
+      settle(hsApiKey("GET", reads.detail, undefined, profileId)),
+      settle(hsApiKey("GET", reads.attempts, undefined, profileId)),
+      settle(readProcessTracker(id, profileId)),
+      settle(readRevRecConfig(prof(story))),
     ]);
     reads.tracker = `${processTrackerPath}/${id}`;
     const note = (name: string, p: string, r: Upstream | null) =>
@@ -1206,7 +1255,7 @@ export async function storyView(storyId: string) {
       request: {
         method: "GET",
         url: `${config.hsBaseUrl}/${reads.tracker}`,
-        headers: shownHsHeaders("jwt"),
+        headers: shownHsHeaders("jwt", profileId),
       },
       response: { status: 200, body: pt },
       ms: null,
@@ -1255,7 +1304,7 @@ export async function storyView(storyId: string) {
       request: {
         method: "GET",
         url: `${config.hsBaseUrl}/${reads.list}`,
-        headers: shownHsHeaders("api-key"),
+        headers: shownHsHeaders("api-key", profileId),
       },
       response: { status: 200, body: redact(row) },
       ms: null,
@@ -1339,7 +1388,7 @@ export async function storyView(storyId: string) {
       request: {
         method: "GET",
         url: `${config.hsBaseUrl}/${reads.attempts}`,
-        headers: shownHsHeaders("api-key"),
+        headers: shownHsHeaders("api-key", profileId),
       },
       response: { status: 200, body: raw },
       ms: null,

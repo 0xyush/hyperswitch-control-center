@@ -27,13 +27,16 @@ async function call(url: string, init: RequestInit): Promise<Upstream> {
 }
 
 // Headers we show in the "Show requests" panel. The real auth value never leaves the proxy.
-export function shownHsHeaders(auth: "api-key" | "jwt") {
+export function shownHsHeaders(
+  auth: "api-key" | "jwt",
+  profileId = config.hsProfileId,
+) {
   return {
     Authorization:
       auth === "api-key"
         ? "api-key=<hidden by proxy>"
         : "Bearer <hidden by proxy>",
-    "X-Profile-Id": config.hsProfileId,
+    "X-Profile-Id": profileId,
     ...(auth === "jwt" && revrecMerchantId()
       ? { "X-Merchant-Id": revrecMerchantId() }
       : {}),
@@ -46,12 +49,13 @@ export function hsApiKey(
   method: string,
   pathAndQuery: string,
   body?: unknown,
+  profileId = config.hsProfileId,
 ): Promise<Upstream> {
   return call(`${config.hsBaseUrl}/${pathAndQuery.replace(/^\/+/, "")}`, {
     method,
     headers: {
       Authorization: `api-key=${config.hsApiKey}`,
-      "X-Profile-Id": config.hsProfileId,
+      "X-Profile-Id": profileId,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -61,10 +65,11 @@ export function hsApiKey(
 
 // Sandbox call as the demo dashboard user (process tracker, config reads).
 // Returns null when no token scoped to the Rev Rec merchant is ready.
+// A body is sent only by the operator setup script (scripts/setup-profiles.ts).
 export async function hsDashboard(
   method: string,
   pathAndQuery: string,
-  opts: { profileId?: string } = {},
+  opts: { profileId?: string; body?: unknown } = {},
 ): Promise<Upstream | null> {
   const token = await dashboardToken();
   if (!token) return null;
@@ -77,7 +82,11 @@ export async function hsDashboard(
         "X-Merchant-Id": revrecMerchantId(),
         "X-Profile-Id": opts.profileId || config.hsProfileId,
         Accept: "application/json",
+        ...(opts.body === undefined
+          ? {}
+          : { "Content-Type": "application/json" }),
       },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     },
   );
   if (r.status === 401) dropDashboardToken();
