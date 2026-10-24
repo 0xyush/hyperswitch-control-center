@@ -1,0 +1,20 @@
+# gcloud builds submit . --config simulator/deploy/cloudbuild.dashboard.yaml \
+#   --substitutions _IMAGE=$DASH_IMAGE,_GIT_COMMIT=$(git rev-parse HEAD)
+steps:
+  - name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      - build
+      - -f
+      - simulator/deploy/dashboard.Dockerfile
+      - --build-arg
+      - GIT_COMMIT_HASH=${_GIT_COMMIT}
+      - -t
+      - ${_IMAGE}
+      - .
+images: ["${_IMAGE}"]
+options:
+  # The webpack production build needs more than 6 GB (it was killed in a 4-CPU, 6 GB local
+  # Docker VM on 23 Oct); this machine has 32 GB.
+  machineType: E2_HIGHCPU_32
+timeout: 1800s
