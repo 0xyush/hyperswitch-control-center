@@ -1076,10 +1076,14 @@ async function readProcessTracker(
   let r = await hsDashboard("GET", `${processTrackerPath}/${recoveryId}`, {
     profileId,
   });
-  if (r?.status === 404 && processTrackerPath.includes("-")) {
+  // 404, or 403 from CloudFront (it blocked the hyphen spelling of list-attempts on 24 Oct).
+  if (
+    (r?.status === 404 || r?.status === 403) &&
+    processTrackerPath.includes("-")
+  ) {
     const alt = "v2/process_tracker/revenue_recovery_workflow";
     const r2 = await hsDashboard("GET", `${alt}/${recoveryId}`, { profileId });
-    if (r2 && r2.status !== 404) {
+    if (r2 && r2.status !== 404 && r2.status !== 403) {
       processTrackerPath = alt;
       r = r2;
     }

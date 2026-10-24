@@ -101,16 +101,6 @@ async function main() {
       },
     );
     const profileId: string = profile?.id ?? `<new ${t.name} profile id>`;
-    // ProfileCreate has no retry-mode field, and a new profile starts in monitoring.
-    await call(
-      `set retry mode ${t.mode}`,
-      "PUT",
-      `v2/profiles/${profileId}`,
-      profileId,
-      {
-        revenue_recovery_retry_algorithm_type: t.mode,
-      },
-    );
 
     const pay = await call(
       `add Stripe payment connector to ${t.name}`,
@@ -152,6 +142,18 @@ async function main() {
       },
     );
     const billId: string = bill?.id ?? `<new ${t.name} billing connector id>`;
+
+    // The retry mode goes last: creating a billing connector puts its profile back into
+    // monitoring (upstream core/admin.rs connector_create), which undid this step on 24 Oct.
+    await call(
+      `set retry mode ${t.mode}`,
+      "PUT",
+      `v2/profiles/${profileId}`,
+      profileId,
+      {
+        revenue_recovery_retry_algorithm_type: t.mode,
+      },
+    );
 
     envLines.push(
       `${t.env}_PROFILE_ID=${profileId}`,
