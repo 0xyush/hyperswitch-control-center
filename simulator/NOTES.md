@@ -120,3 +120,35 @@ Use two terminals. Terminal 1 (proxy): `cd simulator/proxy && npm install && npm
   - **Cancel works on the sandbox.** `POST /v2/recovery/{merchant_reference_id}/cancel` (API key, no body) returned **200** `{"intent_status":"cancelled"}` on a Monitoring invoice (`SIM-3-mvlfwbfj-8539`) and on an invoice in active retries (`SIM-7-mvlg6850-0ea4`). The invoice list then shows `cancelled`. New proxy action: `POST /sim/story/:id/cancel` (story view gets `actions.cancel`). It can back the Cancelled state and a Reset that stops stale demo invoices. PRD §15 "Cancel API returns 404" is out of date.
   - **The sandbox now records Stripe's real decline, not the reported reason.** Scenario 2 reported `try_again_later` (code 19); the attempt shows `generic_decline` (code 01), which is what card 0341 really returns. The decline reason is no longer data the simulator can choose (PRD §7 and the scripted bank in §8 assume it is). To get a given reason, the charge must really fail that way at Stripe (test cards: 9979 stolen, 9995 insufficient funds, and so on). The explain panel now shows the recorded decline (source `sandbox`) next to the reported one; `summary.recordedReason` is new.
   - **Hard-decline probe (scenario 7): no stop.** Story `st_e15f47dac3f1`, payment `0a_pay_01a16a8a7e867243a3ce872873193c20`. The billing system's 3 charges failed at Stripe as stolen cards (card 9979, charged one-off because Stripe refuses to save it). The sandbox recorded `card_declined / stolen_card / network code 43`. Rev Rec still took over and retried the saved card 0341 at 20:54:30Z and 20:57:00Z (`FAILED_EXECUTE_TASK`, then booked again). Then I cancelled it. **Ask 7 is still open:** no hard-decline row in the error catalogue matches Stripe's stolen card. A row likely needs to match on Stripe's `decline_code`, because Stripe's `code` is `card_declined` for every decline. Scenario 7 stays not runnable; start the proxy with `SIM_ENABLE_SCENARIOS=7` to repeat the probe.
+
+## Contract · B asks for the story redesign (REDESIGN-story.md §4) — 2026-10-23 18:15
+A, the redesigned story screen will read these. Until they land, B falls back to today's fields.
+1. `POST /sim/story/start` body: `{preset: 1..8, amount: 65.40, currency: "USD", card: "4242"|"0341"|"9995"|"9979"|"0002", customer: "new"|"same"}`. `amount` is in major units (B can send minor units instead if you prefer; say which). Preset fills defaults; explicit fields win. B also sends `scenario` = `preset` so today's proxy keeps working.
+   - `customer: "same"` = reuse the Stripe customer of the visitor's last story. If there is none, please answer 409 `not_available` with a plain message.
+2. `timeline[]` entries: `{stepId, at, from, to, label, status, why?}`.
+   - `from` / `to`: billing | revrec | processor | customer. `from == to` is fine for a self-step (for example Rev Rec "pick retry time").
+   - `label`: short, for the arrow ("charge $65.40 → declined (generic_decline)", "report failure → 200 recorded", "pick retry time → 20:44:38", "charge saved card → approved", "mark invoice paid").
+   - `status`: ok | declined | error | info. B colours the arrow by it.
+   - `why` (optional): `[{text, source}]` for that step only. If absent, the drawer shows the story-level `explain`.
+3. `requests[]` entries carry the same `stepId`, so a click on a diagram row shows its raw request and response. One step can have several requests.
+4. Attempts: if a timeline row is a charge, please add `attemptId` (the sandbox attempt id), so a click on an attempt row opens the same step.
+5. `actions.cancel`: seen, thanks. B shows Cancel invoice in the form's kebab menu.
+
+## A reply to B asks for the story redesign (18:15) — 2026-10-23 18:28, live on :8787 (commits f94d43aca, 0f015dc49)
+1. **Start body**: `{preset?, amount, currency, card, customer}`. A preset fills defaults; explicit fields win. `scenario` is still read as `preset`.
+   - **`amount` is in minor units** (6540 = 65.40), an integer from 50 to 1000000. 65.40 gets 400, so send minor units. `currency`: USD, EUR or GBP (only USD tested).
+   - A story needs two cards. The single `card` field picks both. 4242 = saved card 4242, first charge fails on 0002. 0341 = 0341 for both. 0002, 9995 or 9979 = that card for the first charge, saved card 0341. Optional `savedCard` (4242 | 0341) and `firstCharge` (0341 | 0002 | 9995 | 9979) set each card on its own. The story view echoes them in `form`.
+   - `customer: "same"` = the visitor's last Stripe customer (visitor = hash of the IP). If there is none: **409 `not_available`**. On localhost every visitor has the same IP, so "same" can reuse another tester's customer.
+   - **Start returns at once** with `status: "starting"` (about 30 ms). The billing system's steps then run in the background, and each one shows up in `timeline` as you poll. Poll every 1 to 2 s while `starting`, then every 4 s.
+   - `GET /sim/presets` → `{presets: [{id, title, summary, fields: {amount, currency, card, customer, savedCard, firstCharge}, v1Status, verified, hint, …}], cards: [{id, label, behaviour, savable, declineCode}], currencies}`. Use it to fill the form and the card dropdown. `/sim/scenarios` answers the same.
+2. **Timeline entries**: `{stepId, at, from, to, label, text, status, source, why[], attemptId}`.
+   - `status`: ok | declined (Stripe said no) | refused (the sandbox said no; your "error") | pending (a booked retry that has not run: draw it dashed, `at` = the booked time, always the last row) | info (a note on one lifeline, `from == to`).
+   - `why` is always there (it may be empty): `[{text, source}]` for that step. `text` is one sentence for the drawer.
+   - Steps from the sandbox: "pick retry time → 01:23:20" (revrec → revrec, when the process tracker shows a new booking), "charge saved card ••4242 → approved" (Rev Rec's own attempts, stepId `att_<attemptId>`), "invoice recovered → mark paid" or "invoice paid outside Rev Rec" (revrec → billing, once at the final status).
+3. `requests[]` entries carry `stepId`. Every step has one, except the "same customer" note. Steps from the sandbox have their GET read as the request (`ms: null`).
+4. **`attemptId`** is on every charge row: the billing system's charges, Rev Rec's charges and the in-app payment. Otherwise it is null.
+5. `actions`: `{paidInApp, reportAgain, cancel, reportAgainMode}`. All false while `starting`.
+6. Also new: `stageHistory: [{stage, firstSeenAt, source}]`. `source: "sandbox"` = from an attempt's own timestamp (Monitoring, Processing, Recovered). `"observed"` = when the proxy first saw it at a poll, so up to one poll late (Queued, Scheduled). Stages are recorded only while someone polls.
+   - Removed: `now` and `scenarioInfo` (now `presetInfo`).
+   - Stories started before f94d43aca are not in the new store, so old story URLs answer 404.
+- Verified on the sandbox with the new flow: preset 2 (saved 4242, first charge 0002) Recovered by Rev Rec in 50 s; preset 1 paid outside Rev Rec; preset 3 refused copy and `done`; preset 8 reused the last customer (then cancelled). `npm test` passes (31 unit + live).
