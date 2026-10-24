@@ -179,7 +179,7 @@ let make = (~storyIdFromUrl: option<string>) => {
         renderType=NotFound
       />}>
       <div className="flex flex-col xl:flex-row gap-10 items-start">
-        <div className="w-full xl:w-1/3 shrink-0 xl:sticky xl:top-0">
+        <div className="w-full xl:w-1/3 shrink-0 xl:sticky xl:top-6">
           <BillingSystemForm
             options
             form

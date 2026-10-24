@@ -18,6 +18,9 @@ let pollIntervalMs = 4000
 
 // Amount on the wire is in minor units (6540 = 65.40); the form shows major units
 let toMajorText = minor => (minor->Int.toFloat /. 100.0)->Float.toFixedWithPrecision(~digits=2)
+// Two decimals, as the billing system would show it
+let toAmountText = majorText =>
+  majorText->getFloatFromString(0.0)->Float.toFixedWithPrecision(~digits=2)
 let toMinor = majorText => (majorText->getFloatFromString(0.0) *. 100.0)->Math.round->Float.toInt
 
 let presetMapper = (dict): preset => {

@@ -16,11 +16,22 @@ let stepColor = status =>
   }
 
 // A form input outside react-final-form, fed from React state
-let makeInput = (~name, ~value, ~onChange): ReactFinalForm.fieldRenderPropsInput => {
+let makeInput = (
+  ~name,
+  ~value,
+  ~onChange,
+  ~onBlur=() => (),
+): ReactFinalForm.fieldRenderPropsInput => {
   name,
-  onBlur: _ => (),
+  onBlur: _ => onBlur(),
   onFocus: _ => (),
-  onChange: event => onChange(event->Identity.formReactEventToString),
+  // Selects send the new value as a string; text inputs send a change event
+  onChange: event =>
+    onChange(
+      Js.typeof(event) == "string"
+        ? event->Identity.formReactEventToString
+        : ReactEvent.Form.target(event)["value"],
+    ),
   value: value->JSON.Encode.string,
   checked: false,
 }
@@ -139,12 +150,14 @@ module BillingSystemForm = {
         }}
       </div>
       <FormField label="Amount">
-        {InputFields.numericTextInput(
-          ~customStyle="w-full border-nd_gray-200 rounded-lg",
-          ~precision=2,
-        )(
-          ~input=makeInput(~name="amount", ~value=form.amount, ~onChange=amount =>
-            setForm(prev => {...prev, amount})
+        // A text input keeps "65.40" as typed; the number input would show 65.4
+        {InputFields.textInput(~customStyle="w-full border-nd_gray-200 rounded-lg")(
+          ~input=makeInput(
+            ~name="amount",
+            ~value=form.amount,
+            ~onChange=text =>
+              setForm(prev => {...prev, amount: text->String.replaceRegExp(%re("/[^\d.]/g"), "")}),
+            ~onBlur=() => setForm(prev => {...prev, amount: prev.amount->toAmountText}),
           ),
           ~placeholder="Enter amount",
         )}
