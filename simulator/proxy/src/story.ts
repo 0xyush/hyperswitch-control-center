@@ -209,7 +209,10 @@ export function listStories() {
 // Invoices for the contract test's read-back: the newest one, and the newest one where the
 // proxy saw Rev Rec book a retry (so it has a process-tracker task).
 export function contractTargets() {
-  const newest = [...stories.values()].reverse();
+  // Only stories on the story profile: the contract test reads with that profile's id.
+  const newest = [...stories.values()]
+    .reverse()
+    .filter((s) => prof(s).profileId === PROFILES.story.profileId);
   return {
     any: newest.find((s) => s.recoveryId)?.recoveryId ?? null,
     withTask:
@@ -1197,7 +1200,8 @@ export async function storyView(storyId: string) {
   const reads = {
     list: `v2/payments/recovery-list?payment_id=${story.recoveryId}`,
     detail: `v2/payments/${story.recoveryId}/get-revenue-recovery-intent`,
-    attempts: `v2/payments/${story.recoveryId}/list-attempts`,
+    // Underscore spelling: since 24 Oct CloudFront blocks list-attempts (403 HTML page).
+    attempts: `v2/payments/${story.recoveryId}/list_attempts`,
     tracker: `${processTrackerPath}/${story.recoveryId}`,
   };
   let changed = false;

@@ -468,7 +468,7 @@ async function poll(run: Run) {
   await eachLimited(toRead, 5, async ({ c, side }) => {
     const r = await hsApiKey(
       "GET",
-      `v2/payments/${c.recoveryId}/list-attempts`,
+      `v2/payments/${c.recoveryId}/list_attempts`,
       undefined,
       pairOf(run)[side].profileId,
     ).catch(() => null);

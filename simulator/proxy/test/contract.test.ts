@@ -61,7 +61,7 @@ test("field drift is reported: a field gone, a new field, a response field missi
           },
         },
       });
-    if (url.includes("list-attempts"))
+    if (url.includes("list_attempts"))
       return reply(200, {
         payment_attempt_list: [
           {

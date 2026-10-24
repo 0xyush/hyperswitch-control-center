@@ -105,7 +105,19 @@ export async function runContractTest(): Promise<ContractResult> {
     checks.push({ name, ok, detail });
   const reads = (name: string, r: Upstream | null) => {
     if (!r || r.status !== 200) {
-      check(name, false, r ? `HTTP ${r.status}` : "no dashboard token");
+      // A path block shows up as an HTML page from CloudFront, not a JSON error from the API.
+      const blocked = /Request blocked|could not be satisfied/i.test(
+        String(r?.json?.raw ?? ""),
+      );
+      check(
+        name,
+        false,
+        !r
+          ? "no dashboard token"
+          : blocked
+            ? `HTTP ${r.status}: blocked by CloudFront in front of the sandbox (path change, not field drift)`
+            : `HTTP ${r.status}`,
+      );
       return;
     }
     const missing: string[] = [];
@@ -197,7 +209,7 @@ export async function runContractTest(): Promise<ContractResult> {
         undefined,
         profileId,
       ),
-      hsApiKey("GET", `v2/payments/${id}/list-attempts`, undefined, profileId),
+      hsApiKey("GET", `v2/payments/${id}/list_attempts`, undefined, profileId),
     ]);
     reads("invoice detail", detail);
     reads("attempts", attempts);
