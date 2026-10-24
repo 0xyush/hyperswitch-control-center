@@ -33,6 +33,7 @@ let revenueRecoverySummary = {
 let homePath = "/v2/recovery/home"
 let simulatorStoryPath = "/v2/recovery/simulator/story"
 let simulatorTourPath = "/v2/recovery/simulator/tour"
+let simulatorPortfolioPath = "/v2/recovery/simulator/portfolio"
 
 let revenueRecoverySimulatorHome = {
   Link({
@@ -61,12 +62,22 @@ let revenueRecoverySimulatorTour = {
   })
 }
 
+let revenueRecoverySimulatorPortfolio = {
+  Link({
+    name: "Portfolio Run",
+    link: simulatorPortfolioPath,
+    access: Access,
+    icon: "nd-analytics",
+  })
+}
+
 let recoverySidebars = (_isLiveMode, ~showSimulator) => {
   showSimulator
     ? [
         revenueRecoverySimulatorHome,
         revenueRecoveryInvoices,
         revenueRecoverySimulatorStory,
+        revenueRecoverySimulatorPortfolio,
         revenueRecoverySimulatorTour,
         revenueRecoverySummary,
       ]

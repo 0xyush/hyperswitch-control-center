@@ -9,12 +9,6 @@ let drawerSubHeading = "Learn how Rev Rec recovers failed subscription payments,
 let stepText = (text: string) =>
   <p className={`${body.md.medium} text-nd_gray-600`}> {text->SimulatorGlossary.linkTerms} </p>
 
-let comingSoon =
-  <span
-    className={`w-fit text-nd_gray-600 bg-nd_gray-50 px-2 py-0.5 border border-nd_gray-200 rounded ${body.sm.semibold}`}>
-    {"Coming soon"->React.string}
-  </span>
-
 let steps: array<stepDetails> = [
   {
     title: "What Rev Rec is",
@@ -59,11 +53,16 @@ let steps: array<stepDetails> = [
       {stepText(
         "Run a batch of invoices twice: once with static retries and once with smart retries. Compare the recovery rate, the recovered amount and the attempts used, side by side.",
       )}
-      comingSoon
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_run_a_portfolio",
-    cta: None,
+    cta: Some((
+      "Open the portfolio run →",
+      InternalRoute({
+        url: RevenueRecoverySidebarValues.simulatorPortfolioPath,
+        trackingEvent: "redirect_to_simulator_portfolio",
+      }),
+    )),
   },
   {
     title: "Tour the features",

@@ -145,6 +145,12 @@ module Card = {
     ~statType=LogicUtilsTypes.Default,
     ~currency="",
     ~amountFormat=false,
+    // Optional, for other simulators (the Rev Rec portfolio run): column labels, metric
+    // direction and an element next to the title
+    ~baselineLabel="Without Intelligence",
+    ~modelLabel="With Intelligence",
+    ~lowerIsBetter=false,
+    ~titleAccessory=React.null,
   ) => {
     open LogicUtils
     open CurrencyFormatUtils
@@ -162,10 +168,12 @@ module Card = {
         ~secondaryValue,
       )
 
-      let (textColor, iconColor, icon) = switch direction {
-      | Upward => ("#12B76A", "text-nd_green-600", "nd-arrow-up-no-underline")
-      | Downward => ("#F04E42", "text-nd_red-600", "nd-arrow-down-no-underline")
-      | No_Change => ("#A0A0A0", "", "")
+      let (textColor, iconColor, icon) = switch (direction, lowerIsBetter) {
+      | (Upward, false) => ("#12B76A", "text-nd_green-600", "nd-arrow-up-no-underline")
+      | (Downward, false) => ("#F04E42", "text-nd_red-600", "nd-arrow-down-no-underline")
+      | (Upward, true) => ("#F04E42", "text-nd_red-600", "nd-arrow-up-no-underline")
+      | (Downward, true) => ("#12B76A", "text-nd_green-600", "nd-arrow-down-no-underline")
+      | (No_Change, _) => ("#A0A0A0", "", "")
       }
 
       <div className={`flex gap-2`}>
@@ -174,14 +182,24 @@ module Card = {
       </div>
     }
 
+    // Red only when a lower-is-better value went up; otherwise the pill stays green as before
+    let pillColors = switch InsightsUtils.calculatePercentageChange(
+      ~primaryValue=simulatedValue,
+      ~secondaryValue=actualValue,
+    ) {
+    | (_, Upward) if lowerIsBetter => "text-red-800 bg-red-100"
+    | _ => "text-green-800 bg-green-200"
+    }
+
     <div className="flex flex-col gap-6 items-start border rounded-xl border-nd_gray-150 p-4">
       <div className="w-full flex items-center justify-between">
         <p className="text-nd_gray-500 text-md leading-4 font-medium"> {title->React.string} </p>
+        titleAccessory
       </div>
       <div className="w-full flex gap-6">
         <div className="w-full flex flex-col gap-2 items-start justify-between">
           <p className="text-nd_gray-400 text-sm leading-4 font-medium">
-            {"Without Intelligence"->React.string}
+            {baselineLabel->React.string}
           </p>
           <p className="text-nd_gray-500 font-semibold leading-8 text-lg text-nowrap">
             {displayValue(actualValue)->React.string}
@@ -189,14 +207,14 @@ module Card = {
         </div>
         <div className="w-full flex flex-col gap-2 items-start justify-between">
           <p className="text-nd_gray-400 text-sm leading-4 font-medium">
-            {"With Intelligence"->React.string}
+            {modelLabel->React.string}
           </p>
           <div className="flex gap-4">
             <p className="text-nd_gray-700 font-semibold leading-8 text-lg text-nowrap">
               {displayValue(simulatedValue)->React.string}
             </p>
             <div
-              className="flex items-center gap-1 text-green-800 bg-green-200 rounded-md px-2 text-sm leading-1 font-semibold">
+              className={`flex items-center gap-1 ${pillColors} rounded-md px-2 text-sm leading-1 font-semibold`}>
               {getPercentageChange(~primaryValue=simulatedValue, ~secondaryValue=actualValue)}
             </div>
           </div>

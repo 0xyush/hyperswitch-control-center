@@ -15,6 +15,10 @@ let make = () => {
     | list{"v2", "recovery", "simulator", "story", storyId} if devRecoverySimulator =>
       <SimulatorStory storyIdFromUrl=Some(storyId) />
     | list{"v2", "recovery", "simulator", "tour"} if devRecoverySimulator => <SimulatorTour />
+    | list{"v2", "recovery", "simulator", "portfolio"} if devRecoverySimulator =>
+      <SimulatorPortfolio runIdFromUrl=None />
+    | list{"v2", "recovery", "simulator", "portfolio", runId} if devRecoverySimulator =>
+      <SimulatorPortfolio runIdFromUrl=Some(runId) />
     | list{"v2", "recovery", "simulator", ..._} if devRecoverySimulator =>
       <EmptyPage path=RevenueRecoverySidebarValues.simulatorStoryPath />
     | _ => <RecoveryConnectorContainer />

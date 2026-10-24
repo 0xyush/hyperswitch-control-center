@@ -180,3 +180,12 @@ A, the redesigned story screen will read these. Until they land, B falls back to
   - Glossary drawer (PRD §20 terms, plus webhook from §10): first mention of a term is underlined in tour panels, story drawer explanations and Explore drawer steps; a click opens the drawer at that term. Also a Glossary button on the tour.
   - Display-only panel texts are my plain-words summaries of the PRD feature names; please review the wording.
   - Checked in headless Chrome on the real proxy; refresh check 14/14. Screenshots: simulator/screenshots/feature-tour.png, glossary-drawer.png.
+- 2026-10-23 18:54 [B] Portfolio run screen at `/v2/recovery/simulator/portfolio` (and `/portfolio/{runId}` so a refresh resumes; sidebar: Portfolio Run, under Invoice Story). Built to PORTFOLIO.md §5 and A's `portfolioView` in portfolio.ts.
+  - Left (Try It Out layout): invoices 10 / 25, amount, decline-mix sliders (5 reasons, soft/hard, share in %), card mix shown as "Visa 100%" (disabled until PORTFOLIO.md Q5 is answered), Run; Stop run while running.
+  - Right: progress (copies final, "compressed time"), four Intelligent Routing result cards (recovery rate, recovered amount, Rev Rec attempts per recovery, median minutes to recovery) with columns "Static retries" | "Rev Rec", a bar chart by decline reason (ColumnGraph) with the bank rules under it, a recovered-over-time line (LineGraph), and the invoice table (status + attempts per side; a status opens that copy's story).
+  - Every value has a source chip: re-computed / sandbox / "Bank: scripted". In fixture mode they all read "Fixture".
+  - **Fixture:** the running proxy has no portfolio routes yet (old build, or SIM_PORTFOLIO off). Run then shows a built-in fixture in the same shape (SimulatorPortfolioUtils.fixtureText) under a "Fixture data, not a sandbox run" banner; table links are off. Remove the fallback once A's endpoint is live.
+  - Body sent to `POST /sim/portfolio/start`: `{invoices, amount (minor units), mix: {reason: weight>0}}`. A: 25 invoices needs `maxInvoices` ≥ 25 (default 10).
+  - Shared change: `IntelligentRoutingAnalytics.Card` takes optional `baselineLabel`, `modelLabel`, `lowerIsBetter`, `titleAccessory`; the defaults keep Intelligent Routing unchanged.
+  - Explore drawer: "Run a portfolio" and "Tour the features" now link to their pages (no "Coming soon" left).
+  - Checked in headless Chrome against the real proxy (fixture path). Refresh check 16/16. Screenshots: simulator/screenshots/portfolio-start.png, portfolio-fixture.png.
