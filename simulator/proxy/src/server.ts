@@ -170,6 +170,15 @@ async function healthz() {
     stripe: stripeCheck,
     config: cfg,
     dashboard: authStatus(),
+    // For the operator page, which lists every key here.
+    limits: {
+      storyStartsPerHour: config.startsPerHour,
+      storyStartsPerIpHour: config.startsPerIpHour,
+      portfolioEnabled: portfolioConfig.enabled,
+      portfolioRunsPerHour: portfolioConfig.runsPerHour,
+      portfolioMaxInvoices: portfolioConfig.maxInvoices,
+      portfolioRunsAtOnce: 1,
+    },
     contract: contract ?? {
       ok: null,
       note: "first run 20 s after start, then every hour",
