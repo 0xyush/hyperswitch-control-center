@@ -1,8 +1,8 @@
 open SimulatorPortfolioTypes
 open LogicUtils
 
-// A run lasts up to 45 minutes and the proxy refreshes every 30 s, so a 10 s poll is enough
-let pollIntervalMs = 10000
+// The proxy refreshes a run every 30 s, so the screen polls at the same pace
+let pollIntervalMs = 30000
 
 let portfolioPath = RevenueRecoverySidebarValues.simulatorPortfolioPath
 
