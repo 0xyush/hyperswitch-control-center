@@ -12,7 +12,8 @@
     "dev": "node --watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 test/*.test.ts",
-    "test:unit": "node --test test/unit.test.ts"
+    "test:unit": "node --test test/unit.test.ts",
+    "setup:profiles": "node scripts/setup-profiles.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -354,9 +354,9 @@ async function tick(run: Run) {
   try {
     await flipDue(run);
     await poll(run);
-    const minute = Math.round(
-      (Date.now() - Date.parse(run.startedAt)) / 60_000,
-    );
+    // Half-minute steps: one point per 30 s tick.
+    const minute =
+      Math.round(((Date.now() - Date.parse(run.startedAt)) / 60_000) * 2) / 2;
     const recovered = (side: ProfileKey) =>
       run.invoices.filter((inv) => inv.copies[side]?.status === "recovered")
         .length;
@@ -425,7 +425,11 @@ async function poll(run: Run) {
       const c = inv.copies[side];
       if (!c?.recoveryId) continue;
       const next = normalizeStatus(status.get(c.recoveryId));
-      if (!next || next === c.status) continue;
+      // Read attempts again while a recovered copy has no recovery time yet: the paying attempt
+      // can show up in the attempts list a poll later than the status.
+      const settled =
+        next === c.status && !(next === "recovered" && !c.recoveredAt);
+      if (!next || settled) continue;
       c.status = next;
       const r = await hsApiKey(
         "GET",
@@ -626,12 +630,10 @@ export async function portfolioView(runId: string) {
 }
 
 export function listPortfolios() {
-  return [...runs.values()]
-    .reverse()
-    .map((r) => ({
-      runId: r.runId,
-      status: r.status,
-      startedAt: r.startedAt,
-      invoices: r.invoices.length,
-    }));
+  return [...runs.values()].reverse().map((r) => ({
+    runId: r.runId,
+    status: r.status,
+    startedAt: r.startedAt,
+    invoices: r.invoices.length,
+  }));
 }
