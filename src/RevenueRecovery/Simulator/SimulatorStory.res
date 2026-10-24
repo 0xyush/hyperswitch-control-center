@@ -7,10 +7,8 @@ open SimulatorStoryHelper
 
 @react.component
 let make = (~storyIdFromUrl: option<string>) => {
-  open APIUtils
   open LogicUtils
-  let fetchDetails = useGetMethod(~showErrorToast=false)
-  let updateDetails = useUpdateMethod(~showErrorToast=false)
+  let simFetch = SimulatorApi.useSimFetch()
   let showToast = ToastAdapter.useShowToast()
   let mixpanelEvent = MixpanelHook.useSendEvent()
 
@@ -32,7 +30,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   let fetchPresets = async () => {
     try {
       setScreenState(_ => PageLoaderWrapper.Loading)
-      let json = await fetchDetails(getSimUrl("/sim/presets"))
+      let json = await simFetch(~path="/sim/presets", ~method_=Get)
       let formOptions = json->getFormOptions
       setOptions(_ => formOptions)
       formOptions.presets->Array.get(0)->Option.forEach(preset => setForm(_ => preset.fields))
@@ -57,7 +55,7 @@ let make = (~storyIdFromUrl: option<string>) => {
           if !inFlight.contents {
             inFlight := true
             try {
-              let json = await fetchDetails(getSimUrl(`/sim/story/${id}`))
+              let json = await simFetch(~path=`/sim/story/${id}`, ~method_=Get)
               if !cancelled.contents {
                 let polledStory = json->storyMapper
                 if formStoryId.current != id {
@@ -96,7 +94,7 @@ let make = (~storyIdFromUrl: option<string>) => {
     setIsBusy(_ => true)
     mixpanelEvent(~eventName="recovery_simulator_charge_customer")
     try {
-      let json = await updateDetails(getSimUrl("/sim/story/start"), form->startBody, Post)
+      let json = await simFetch(~path="/sim/story/start", ~method_=Post, ~body=form->startBody)
       let newStory = json->storyMapper
       formStoryId.current = newStory.storyId
       setStory(_ => Some(newStory))
@@ -119,10 +117,10 @@ let make = (~storyIdFromUrl: option<string>) => {
       setIsBusy(_ => true)
       mixpanelEvent(~eventName)
       try {
-        let json = await updateDetails(
-          getSimUrl(`/sim/story/${id}/${action}`),
-          Dict.make()->JSON.Encode.object,
-          Post,
+        let json = await simFetch(
+          ~path=`/sim/story/${id}/${action}`,
+          ~method_=Post,
+          ~body=Dict.make()->JSON.Encode.object,
         )
         setStory(_ => Some(json->storyMapper))
       } catch {
