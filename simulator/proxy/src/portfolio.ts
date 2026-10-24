@@ -569,6 +569,10 @@ export async function portfolioView(runId: string) {
     ),
   );
   const sameProfile = PROFILES.static.profileId === PROFILES.smart.profileId;
+  // Same strategy on both sides (one profile, or two profiles in the same mode): the two cards
+  // can differ only by sandbox timing. The first run measured about 1.5 min and 2 attempts.
+  const sameStrategy =
+    sameProfile || (modes[0] !== null && modes[0] === modes[1]);
   const reasons = [...new Set(run.invoices.map((inv) => inv.reason))];
   return {
     runId: run.runId,
@@ -620,6 +624,13 @@ export async function portfolioView(runId: string) {
       attempts: "sandbox",
       cards: "recomputed",
       bank: "scripted",
+    },
+    comparison: {
+      sameStrategy,
+      label: sameStrategy
+        ? "Same strategy on both sides, differences are sandbox timing noise"
+        : `${modes[0] ?? "static"} vs ${modes[1] ?? "smart"}`,
+      source: "recomputed",
     },
     warnings: sameProfile
       ? [
