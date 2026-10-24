@@ -177,7 +177,7 @@ export async function runContractTest(): Promise<ContractResult> {
   }
 
   // 2. The read paths, on the newest demo invoice.
-  const profileId = PROFILES.static.profileId;
+  const profileId = PROFILES.story.profileId;
   const list = await hsApiKey(
     "GET",
     "v2/payments/recovery-list?limit=1",
@@ -226,7 +226,7 @@ export async function runContractTest(): Promise<ContractResult> {
     "billing connector",
     await hsDashboard(
       "GET",
-      `v2/connector-accounts/${PROFILES.static.billingMcaId}`,
+      `v2/connector-accounts/${PROFILES.story.billingMcaId}`,
       { profileId },
     ),
   );

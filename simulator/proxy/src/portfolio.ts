@@ -10,7 +10,7 @@ import {
   config,
   PROFILES,
   portfolioConfig,
-  type ProfileKey,
+  type ProfileRef,
 } from "./config.ts";
 import { scrubText } from "./redact.ts";
 import type { FirstChargeId } from "./scenarios.ts";
@@ -68,7 +68,9 @@ const BANK: Record<
   },
 };
 
-const SIDES: ProfileKey[] = ["static", "smart"];
+// The two sides of a run: a copy of each invoice runs on each.
+type Side = "static" | "smart";
+const SIDES: Side[] = ["static", "smart"];
 const TICK_MS = 30_000;
 
 type Copy = {
@@ -88,7 +90,7 @@ type PfInvoice = {
   startedAt: string | null;
   flipAt: string | null;
   flippedAt: string | null;
-  copies: Partial<Record<ProfileKey, Copy>>;
+  copies: Partial<Record<Side, Copy>>;
 };
 
 export type Dials = {
@@ -111,7 +113,12 @@ type Run = {
   invoices: PfInvoice[];
   trend: { minute: number; static: number; smart: number }[];
   error: string | null;
+  // The pair the run used. Runs before 24 Oct have none: both sides ran on the story profile.
+  profiles?: Record<Side, ProfileRef>;
 };
+
+const pairOf = (run: Run): Record<Side, ProfileRef> =>
+  run.profiles ?? { static: PROFILES.story, smart: PROFILES.story };
 
 // ---------- store (data/portfolio.json) ----------
 
@@ -267,6 +274,7 @@ export function startPortfolio(dials: Dials, owner: string): Run {
     invoices: buildInvoices(dials),
     trend: [],
     error: null,
+    profiles: { static: PROFILES.static, smart: PROFILES.smart },
   };
   runs.set(run.runId, run);
   save();
@@ -363,7 +371,7 @@ async function tick(run: Run) {
     // Half-minute steps: one point per 30 s tick.
     const minute =
       Math.round(((Date.now() - Date.parse(run.startedAt)) / 60_000) * 2) / 2;
-    const recovered = (side: ProfileKey) =>
+    const recovered = (side: Side) =>
       run.invoices.filter((inv) => inv.copies[side]?.status === "recovered")
         .length;
     run.trend.push({
@@ -428,7 +436,8 @@ async function eachLimited<T>(
 // Rev Rec retry in between (run pf_5f2dcd18 counted 3 retries where the sandbox had 7).
 async function poll(run: Run) {
   const status = new Map<string, string>();
-  for (const profileId of new Set(SIDES.map((s) => PROFILES[s].profileId))) {
+  const pair = pairOf(run);
+  for (const profileId of new Set(SIDES.map((s) => pair[s].profileId))) {
     for (let offset = 0; offset < 500; offset += 100) {
       const q = `profile_id=${profileId}&created.gte=${encodeURIComponent(run.startedAt)}&limit=100&offset=${offset}`;
       const r = await hsApiKey(
@@ -442,7 +451,7 @@ async function poll(run: Run) {
       if (rows.length < 100) break;
     }
   }
-  const toRead: { c: Copy; side: ProfileKey }[] = [];
+  const toRead: { c: Copy; side: Side }[] = [];
   for (const inv of run.invoices)
     for (const side of SIDES) {
       const c = inv.copies[side];
@@ -461,7 +470,7 @@ async function poll(run: Run) {
       "GET",
       `v2/payments/${c.recoveryId}/list-attempts`,
       undefined,
-      PROFILES[side].profileId,
+      pairOf(run)[side].profileId,
     ).catch(() => null);
     if (r?.status !== 200) return;
     const own = (r.json?.payment_attempt_list ?? []).filter(
@@ -552,7 +561,7 @@ function quantile(sorted: number[], q: number) {
   return Math.round(sorted[Math.max(0, idx)] * 10) / 10;
 }
 
-function card(run: Run, side: ProfileKey) {
+function card(run: Run, side: Side) {
   const rows = run.invoices
     .map((inv) => ({ inv, c: inv.copies[side] }))
     .filter((x): x is { inv: PfInvoice; c: Copy } => x.c !== undefined);
@@ -594,15 +603,16 @@ function card(run: Run, side: ProfileKey) {
 
 export async function portfolioView(runId: string) {
   const run = getRun(runId);
+  const pair = pairOf(run);
   const modes = await Promise.all(
     SIDES.map((s) =>
-      readRevRecConfig(PROFILES[s]).then(
+      readRevRecConfig(pair[s]).then(
         (c) => c.retryMode,
         () => null,
       ),
     ),
   );
-  const sameProfile = PROFILES.static.profileId === PROFILES.smart.profileId;
+  const sameProfile = pair.static.profileId === pair.smart.profileId;
   // Same strategy on both sides (one profile, or two profiles in the same mode): the two cards
   // can differ only by sandbox timing. The first run measured about 1.5 min and 2 attempts.
   const sameStrategy =
@@ -619,13 +629,13 @@ export async function portfolioView(runId: string) {
     error: run.error,
     dials: run.dials,
     profiles: {
-      static: { profileId: PROFILES.static.profileId, mode: modes[0] },
-      smart: { profileId: PROFILES.smart.profileId, mode: modes[1] },
+      static: { profileId: pair.static.profileId, mode: modes[0] },
+      smart: { profileId: pair.smart.profileId, mode: modes[1] },
     },
     cards: { static: card(run, "static"), smart: card(run, "smart") },
     byReason: reasons.map((reason) => {
       const of = run.invoices.filter((inv) => inv.reason === reason);
-      const rec = (s: ProfileKey) =>
+      const rec = (s: Side) =>
         of.filter((inv) => inv.copies[s]?.status === "recovered").length;
       return {
         reason,
@@ -670,7 +680,7 @@ export async function portfolioView(runId: string) {
     warnings: [
       ...(sameProfile
         ? [
-            `Both runs use the same profile (${PROFILES.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
+            `Both runs use the same profile (${pair.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
           ]
         : []),
       // The scripted bank must be on time to be a fair test. A late flip comes from the proxy

@@ -86,9 +86,10 @@ export const config = {
   dataDir: read("SIM_DATA_DIR") || path.join(PROXY_ROOT, "data"),
 };
 
-// The two profiles of the portfolio run. Until the smart profile exists (scripts/setup-profiles.ts),
-// both default to the existing profile, so both runs use the same retry mode.
-export type ProfileKey = "static" | "smart";
+// "story" is the existing demo profile (HS_PROFILE_ID): the invoice story runs there.
+// "static" and "smart" are the portfolio run's pair (scripts/setup-profiles.ts). Until they
+// exist, both fall back to the story profile, so both runs use the same retry mode.
+export type ProfileKey = "story" | "static" | "smart";
 export type ProfileRef = {
   key: ProfileKey;
   profileId: string;
@@ -102,6 +103,7 @@ const profileRef = (key: ProfileKey, prefix: string): ProfileRef => ({
   paymentMcaId: read(`${prefix}_PAYMENT_MCA_ID`) || config.hsPaymentMcaId,
 });
 export const PROFILES: Record<ProfileKey, ProfileRef> = {
+  story: profileRef("story", "HS_STORY"),
   static: profileRef("static", "HS_STATIC"),
   smart: profileRef("smart", "HS_SMART"),
 };

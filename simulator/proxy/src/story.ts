@@ -104,12 +104,15 @@ export type Story = StartOptions & {
   seenSchedules: string[]; // retry times already shown as "pick retry time" steps
   stageSeen: Record<string, string>; // first time the proxy saw each stage
   finalNoted: boolean;
-  profile: ProfileKey; // static unless the portfolio run says smart
+  profile: ProfileKey; // "story" unless the portfolio run says static or smart
+  // The profile and connectors the story ran on, kept so a later .env change does not move it.
+  // Stories saved before 24 Oct have none: they all ran on the story profile.
+  profileRef?: ProfileRef;
   paced?: boolean; // portfolio stories share the 5-calls-per-second queue
   portfolioRunId?: string;
 };
 
-const prof = (s: Story): ProfileRef => PROFILES[s.profile ?? "static"];
+const prof = (s: Story): ProfileRef => s.profileRef ?? PROFILES.story;
 
 // Portfolio stories share one queue: at most 5 Stripe or sandbox calls per second.
 let nextSlot = 0;
@@ -683,7 +686,8 @@ export function startStory(
     ...opts,
     storyId,
     owner,
-    profile: extra.profile ?? "static",
+    profile: extra.profile ?? "story",
+    profileRef: PROFILES[extra.profile ?? "story"],
     paced: extra.paced,
     portfolioRunId: extra.portfolioRunId,
     // "SIM-" prefix lets later sessions hide old demo invoices (the sandbox has no delete).
@@ -1090,7 +1094,7 @@ type RevRecConfig = {
 };
 const revrecConfigs = new Map<string, { value: RevRecConfig; at: number }>();
 export async function readRevRecConfig(
-  p: ProfileRef = PROFILES.static,
+  p: ProfileRef = PROFILES.story,
 ): Promise<RevRecConfig> {
   const cached = revrecConfigs.get(p.profileId + p.billingMcaId);
   if (cached && Date.now() - cached.at < 300_000) return cached.value;
