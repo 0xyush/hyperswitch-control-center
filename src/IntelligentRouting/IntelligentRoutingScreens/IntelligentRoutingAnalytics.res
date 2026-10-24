@@ -150,6 +150,8 @@ module Card = {
     ~baselineLabel="Without Intelligence",
     ~modelLabel="With Intelligence",
     ~lowerIsBetter=false,
+    // When true, the pill turns red whenever the second value is worse
+    ~colorByDirection=false,
     ~titleAccessory=React.null,
   ) => {
     open LogicUtils
@@ -188,6 +190,7 @@ module Card = {
       ~secondaryValue=actualValue,
     ) {
     | (_, Upward) if lowerIsBetter => "text-red-800 bg-red-100"
+    | (_, Downward) if colorByDirection && !lowerIsBetter => "text-red-800 bg-red-100"
     | _ => "text-green-800 bg-green-200"
     }
 

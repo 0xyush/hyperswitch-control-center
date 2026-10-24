@@ -74,10 +74,18 @@ module DialsForm = {
       <SimulatorStoryHelper.SelectField
         label="Number of invoices"
         name="invoices"
-        options={["10", "25"]->SelectBox.makeOptions}
+        options=invoiceCountOptions
         value={dials.invoiceCount->Int.toString}
         onChange={value =>
           setDials(prev => {...prev, invoiceCount: value->Int.fromString->Option.getOr(10)})}
+      />
+      <SimulatorStoryHelper.SelectField
+        label="Stop after"
+        name="maxMinutes"
+        options=maxMinutesOptions
+        value={dials.maxMinutes->Int.toString}
+        onChange={value =>
+          setDials(prev => {...prev, maxMinutes: value->Int.fromString->Option.getOr(20)})}
       />
       <SimulatorStoryHelper.FormField label="Amount per invoice (USD)">
         {InputFields.textInput(~customStyle="w-full border-nd_gray-200 rounded-lg")(
@@ -163,7 +171,11 @@ module DialsForm = {
 module Progress = {
   @react.component
   let make = (~run: portfolioRun) => {
-    let total = run.staticCard.invoices + run.smartCard.invoices
+    // During setup the cards count only the copies created so far; the dials give the plan
+    let total = Math.Int.max(
+      run.plannedInvoices * 2,
+      run.staticCard.invoices + run.smartCard.invoices,
+    )
     let finished = run.staticCard->finishedCopies + run.smartCard->finishedCopies
     let percent = total > 0 ? finished * 100 / total : 0
     let caption = switch run.status {
@@ -218,6 +230,7 @@ module ResultCards = {
           baselineLabel="Static retries"
           modelLabel="Rev Rec"
           lowerIsBetter
+          colorByDirection=true
           titleAccessory=accessory
         />
       | _ =>
@@ -395,6 +408,8 @@ let make = (~runIdFromUrl: option<string>) => {
   let (run, setRun) = React.useState(_ => None)
   let (isBusy, setIsBusy) = React.useState(_ => false)
   let (pollError, setPollError) = React.useState(_ => "")
+  // The run whose dials the form shows, so a reopened run fills the form once
+  let dialsRunId = React.useRef("")
 
   let isOver = run->Option.mapOr(false, (r: portfolioRun) => r.status->isRunOver || r.isFixture)
   let isRunning = run->Option.isSome && !isOver
@@ -408,7 +423,12 @@ let make = (~runIdFromUrl: option<string>) => {
           try {
             let json = await simFetch(~path=`/sim/portfolio/${id}`, ~method_=Get)
             if !cancelled.contents {
-              setRun(_ => Some(json->runMapper(~isFixture=false)))
+              let polledRun = json->runMapper(~isFixture=false)
+              if dialsRunId.current != id {
+                dialsRunId.current = id
+                setDials(_ => polledRun.dials)
+              }
+              setRun(_ => Some(polledRun))
               setPollError(_ => "")
             }
           } catch {
@@ -441,6 +461,7 @@ let make = (~runIdFromUrl: option<string>) => {
     try {
       let json = await simFetch(~path="/sim/portfolio/start", ~method_=Post, ~body=dials->startBody)
       let newRun = json->runMapper(~isFixture=false)
+      dialsRunId.current = newRun.runId
       setRun(_ => Some(newRun))
       RescriptReactRouter.replace(
         GlobalVars.appendDashboardPath(~url=`${portfolioPath}/${newRun.runId}`),
@@ -449,15 +470,7 @@ let make = (~runIdFromUrl: option<string>) => {
     | exn => {
         let message = exn->SimulatorUtils.getSimErrorMessage(~default="The run could not start.")
 
-        // Until the proxy's portfolio run is on, show the fixture so the screen can be reviewed
-        // ("no route" comes from proxies built before the portfolio run existed)
-        if (
-          message->String.includes("portfolio run is off") || message->String.includes("no route")
-        ) {
-          setRun(_ => Some(fixtureRun()))
-        } else {
-          showToast(~message, ~toastType=ToastError)
-        }
+        showToast(~message, ~toastType=ToastError)
       }
     }
     setIsBusy(_ => false)
@@ -507,7 +520,7 @@ let make = (~runIdFromUrl: option<string>) => {
         <PageUtils.PageHeading
           title="Static retries vs Rev Rec"
           subTitle={run->Option.mapOr(false, r => r.isFixture)
-            ? "Fixture data until the proxy's portfolio run is on"
+            ? "Fixture data, not from the sandbox"
             : "Live from the sandbox"}
           showPermLink=false
           customTitleStyle="!font-medium !text-xl !text-nd_gray-600"
@@ -522,7 +535,7 @@ let make = (~runIdFromUrl: option<string>) => {
                   slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
                 }}
                 heading="Fixture data, not a sandbox run"
-                description="The proxy's portfolio run is off (SIM_PORTFOLIO), so this is a built-in example in the real result shape. The numbers are made up."
+                description="A built-in example in the real result shape, for tests and layout checks. The numbers are made up."
               />
             </RenderIf>
             {[pollError]
@@ -540,19 +553,37 @@ let make = (~runIdFromUrl: option<string>) => {
             )
             ->React.array}
             <Progress run />
-            <ResultCards run />
-            <div className={`flex flex-wrap gap-x-6 gap-y-2 ${body.md.medium} text-nd_gray-500`}>
-              <span className="flex items-center gap-2">
-                {`Static profile mode: ${run.staticMode->SimulatorTourUtils.retryModeText}`->React.string}
-                <SourceChip kind=FromSandbox isFixture=run.isFixture />
-              </span>
-              <span className="flex items-center gap-2">
-                {`Rev Rec profile mode: ${run.smartMode->SimulatorTourUtils.retryModeText}`->React.string}
-                <SourceChip kind=FromSandbox isFixture=run.isFixture />
-              </span>
-            </div>
-            <Charts run />
-            <InvoiceTable run />
+            // Results wait for the first copy to finish; before that every value is 0
+            {if run.isFixture || run.status->isRunOver || hasFinishedCopy(run) {
+              <>
+                // Both sides on one profile or mode: say next to the numbers that differences are noise
+                <RenderIf condition={run.sameStrategy && run.comparisonLabel->isNonEmptyString}>
+                  <p className={`${body.md.semibold} text-nd_gray-600`}>
+                    {`${run.comparisonLabel}.`->React.string}
+                  </p>
+                </RenderIf>
+                <ResultCards run />
+                <div
+                  className={`flex flex-wrap gap-x-6 gap-y-2 ${body.md.medium} text-nd_gray-500`}>
+                  <span className="flex items-center gap-2">
+                    {`Static profile mode: ${run.staticMode->SimulatorTourUtils.retryModeText}`->React.string}
+                    <SourceChip kind=FromSandbox isFixture=run.isFixture />
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {`Rev Rec profile mode: ${run.smartMode->SimulatorTourUtils.retryModeText}`->React.string}
+                    <SourceChip kind=FromSandbox isFixture=run.isFixture />
+                  </span>
+                </div>
+                <Charts run />
+                <InvoiceTable run />
+              </>
+            } else {
+              <div className={`${cardStyle} px-6 py-8`}>
+                <p className={`${body.md.medium} text-nd_gray-500 text-center`}>
+                  {"Results appear here as soon as the first copies reach an end state."->React.string}
+                </p>
+              </div>
+            }}
           </>
         | None =>
           <div className={`${cardStyle} px-6 py-10`}>

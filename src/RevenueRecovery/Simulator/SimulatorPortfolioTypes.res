@@ -49,10 +49,23 @@ type bankRule = {reason: string, firstChargeCard: string, rule: string}
 
 type trendPoint = {minute: float, staticSoFar: float, smartSoFar: float}
 
+// The dials in the left panel. Amount is typed text in major units.
+type portfolioDials = {
+  invoiceCount: int,
+  amount: string,
+  mix: Dict.t<int>,
+  // The run stops after this many minutes; open copies are then cancelled
+  maxMinutes: int,
+}
+
 type portfolioRun = {
   runId: string,
   seed: int,
   status: runStatus,
+  // The dials the run was started with
+  dials: portfolioDials,
+  // Invoices asked for in the dials; copies appear one by one during setup
+  plannedInvoices: int,
   startedAt: string,
   endReason: string,
   error: string,
@@ -65,13 +78,9 @@ type portfolioRun = {
   trend: array<trendPoint>,
   invoices: array<portfolioInvoice>,
   warnings: array<string>,
+  // True while both sides share one profile or retry mode: then differences are sandbox noise
+  sameStrategy: bool,
+  comparisonLabel: string,
   // True when the numbers come from the built-in fixture, not a run on the sandbox
   isFixture: bool,
-}
-
-// The dials in the left panel. Amount is typed text in major units.
-type portfolioDials = {
-  invoiceCount: int,
-  amount: string,
-  mix: Dict.t<int>,
 }
