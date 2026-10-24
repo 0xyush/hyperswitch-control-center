@@ -1,0 +1,9 @@
+.env
+.env.*
+node_modules
+data
+test
+scripts
+README.md
+Dockerfile
+.dockerignore
