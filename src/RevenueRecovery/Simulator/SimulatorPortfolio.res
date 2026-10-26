@@ -186,7 +186,15 @@ module MixBar = {
 // Left panel: the dials, as tiles and one number field (UX-PASS-2 C, same pieces as the story form)
 module DialsForm = {
   @react.component
-  let make = (~dials: portfolioDials, ~setDials, ~isBusy, ~isRunning, ~onRun, ~onStop) => {
+  let make = (
+    ~dials: portfolioDials,
+    ~setDials,
+    ~limits: portfolioLimits,
+    ~isBusy,
+    ~isRunning,
+    ~onRun,
+    ~onStop,
+  ) => {
     let isLocked = isBusy || isRunning
     let total = dials.mix->mixTotal
 
@@ -195,14 +203,16 @@ module DialsForm = {
         <div className="grid grid-cols-2 gap-3">
           {invoiceCounts
           ->Array.map(count => {
-            let isAboveLimit = count > maxInvoicesNow
+            let isAboveLimit = count > limits.maxInvoices
             <SimulatorFormTiles.Tile
               key={count->Int.toString}
               title={`${count->Int.toString} invoices`}
               isSelected={dials.invoiceCount == count}
               isDisabled={isLocked || isAboveLimit}
               tag={isAboveLimit ? "Soon" : ""}
-              hint={isAboveLimit ? "The proxy allows 10 invoices for now." : ""}
+              hint={isAboveLimit
+                ? `The proxy allows ${limits.maxInvoices->Int.toString} invoices for now.`
+                : ""}
               onClick={() => setDials(prev => {...prev, invoiceCount: count})}
             />
           })
@@ -211,11 +221,11 @@ module DialsForm = {
       </SimulatorStoryHelper.FormField>
       <SimulatorStoryHelper.FormField label="Stop after">
         <div className="grid grid-cols-3 gap-3">
-          {stopAfterMinutes
+          {limits.stopAfterMinutes
           ->Array.map(minutes =>
             <SimulatorFormTiles.Tile
-              key={minutes->Int.toString}
-              title={`${minutes->Int.toString} min`}
+              key={minutes->Float.toString}
+              title={minutes->stopAfterLabel}
               isSelected={dials.maxMinutes == minutes}
               isDisabled=isLocked
               onClick={() => setDials(prev => {...prev, maxMinutes: minutes})}
@@ -273,45 +283,135 @@ module WhyButton = {
     />
 }
 
-// While the proxy creates the invoices: a big ring with the count
-module SetupRing = {
+// While the proxy creates the invoices: one column per side, one row per invoice that fills in
+// as its copy is charged and reported, under a thin bar with the elapsed time and the time left.
+// The dots and chips are the invoice story's.
+module SetupBoard = {
+  open SimulatorStorySteps
+
+  let stateLook = state =>
+    switch state {
+    | SetupWaiting => (ToneInfo, None, "Waiting")
+    | SetupCreating => (TonePending, Some(SimulatorTypes.Billing), "Charging")
+    | SetupCharged => (ToneRevRec, Some(SimulatorTypes.Billing), "Charged")
+    | SetupReported => (ToneOk, Some(SimulatorTypes.RevRec), "Reported")
+    | SetupFailed => (ToneDeclined, Some(SimulatorTypes.Billing), "Failed")
+    }
+
+  module CopyRow = {
+    @react.component
+    let make = (~invoice: portfolioInvoice, ~state) => {
+      let (tone, actor, statusText) = state->stateLook
+      <div className="flex items-center gap-2 h-8">
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ease-in-out ${tone->dotClass}`}
+        />
+        <span className={`w-5 shrink-0 ${body.sm.medium} text-nd_gray-400`}>
+          {`#${invoice.index->Int.toString}`->React.string}
+        </span>
+        <span
+          title={invoice.reason->reasonLabel}
+          className={`flex-1 min-w-0 truncate ${body.sm.medium} ${state == SetupWaiting
+              ? "text-nd_gray-400"
+              : "text-nd_gray-700"}`}>
+          {invoice.reason->reasonLabel->React.string}
+        </span>
+        {switch actor {
+        | Some(actor) =>
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 ${body.xs.semibold} ${actor->actorChipClass}`}>
+            {actor->actorChipText->React.string}
+          </span>
+        | None => React.null
+        }}
+        <span
+          className={`shrink-0 w-16 text-center rounded px-1.5 py-0.5 ${body.xs.semibold} ${tone->toneChipClass}`}>
+          {statusText->React.string}
+        </span>
+      </div>
+    }
+  }
+
   @react.component
   let make = (~run: portfolioRun) => {
-    let total = Math.Int.max(1, run.plannedInvoices * 2)
-    let created = Math.Int.min(total, run.staticCard.invoices + run.smartCard.invoices)
-    let radius = 70.0
-    let circumference = 2.0 *. Math.Constants.pi *. radius
-    let offset = circumference *. (1.0 -. created->Int.toFloat /. total->Int.toFloat)
-    <div className={`${cardStyle} px-6 py-10 flex flex-col items-center gap-5`}>
-      <div className="relative w-44 h-44">
-        <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
-          <circle
-            cx="80" cy="80" r="70" fill="none" strokeWidth="12" className="stroke-nd_gray-150"
-          />
-          <circle
-            cx="80"
-            cy="80"
-            r="70"
-            fill="none"
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={circumference->Float.toString}
-            strokeDashoffset={offset->Float.toString}
-            className="stroke-nd_primary_blue-450 transition-all duration-700"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`${heading.xl.semibold} text-nd_gray-800`}>
-            {created->Int.toString->React.string}
-          </span>
-          <span className={`${body.md.medium} text-nd_gray-500`}>
-            {`of ${total->Int.toString}`->React.string}
+    let (nowMs, setNowMs) = React.useState(_ => Date.now())
+    React.useEffect(() => {
+      let intervalId = setInterval(() => setNowMs(_ => Date.now()), 1000)
+      Some(() => clearInterval(intervalId))
+    }, [])
+    let total = Math.Int.max(run.plannedInvoices, run.invoices->Array.length)
+    let totalCopies = total * 2
+    let states =
+      run.invoices->Array.map(invoice => (
+        invoice,
+        invoice.staticCopy->copySetupState,
+        invoice.smartCopy->copySetupState,
+      ))
+    let finalCount = state => state->isSetupFinal ? 1 : 0
+    let copiesDone =
+      states->Array.reduce(0, (sum, (_, onStatic, onSmart)) =>
+        sum + onStatic->finalCount + onSmart->finalCount
+      )
+    let invoicesDone =
+      states
+      ->Array.filter(((_, onStatic, onSmart)) => onStatic->isSetupFinal && onSmart->isSetupFinal)
+      ->Array.length
+    let current = Math.Int.min(total, invoicesDone + 1)
+    let elapsed = Math.Int.max(
+      0,
+      ((nowMs -. run.startedAt->Date.fromString->Date.getTime) /. 1000.0)->Float.toInt,
+    )
+    let percent = totalCopies > 0 ? copiesDone * 100 / totalCopies : 0
+    // The time left from the pace so far (seconds per finished copy), rounded to 5 s
+    let leftText = if copiesDone < 2 {
+      "Measuring the pace…"
+    } else if copiesDone < totalCopies {
+      let left = (totalCopies - copiesDone) * elapsed / copiesDone
+      `About ${((left + 4) / 5 * 5)->durationText} left`
+    } else {
+      "Almost done"
+    }
+    let column = (~title, ~isStatic) => {
+      let reported =
+        states
+        ->Array.filter(((_, onStatic, onSmart)) => (isStatic ? onStatic : onSmart) == SetupReported)
+        ->Array.length
+      <div className="flex flex-col gap-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-nd_gray-150">
+          <span className={`${body.md.semibold} text-nd_gray-800`}> {title->React.string} </span>
+          <span className={`${body.sm.medium} text-nd_gray-500`}>
+            {`${reported->Int.toString} of ${total->Int.toString} reported`->React.string}
           </span>
         </div>
+        {states
+        ->Array.map(((invoice, onStatic, onSmart)) =>
+          <CopyRow
+            key={invoice.index->Int.toString} invoice state={isStatic ? onStatic : onSmart}
+          />
+        )
+        ->React.array}
       </div>
-      <p className={`${heading.sm.semibold} text-nd_gray-700`}>
-        {`Creating ${run.plannedInvoices->Int.toString} invoices twice…`->React.string}
-      </p>
+    }
+
+    <div className={`${cardStyle} p-6 flex flex-col gap-6`}>
+      <div className="flex flex-col gap-2">
+        <div className={`flex justify-between gap-3 ${body.md.semibold} text-nd_gray-700`}>
+          <span>
+            {`Creating invoice ${current->Int.toString} of ${total->Int.toString} · ${elapsed->durationText} elapsed`->React.string}
+          </span>
+          <span className="whitespace-nowrap text-nd_gray-500"> {leftText->React.string} </span>
+        </div>
+        <div className="w-full h-1.5 rounded-full bg-nd_gray-150 overflow-hidden">
+          <div
+            className="h-1.5 rounded-full bg-nd_primary_blue-450 transition-all duration-500 ease-in-out"
+            style={width: `${percent->Int.toString}%`}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {column(~title="Static retries", ~isStatic=true)}
+        {column(~title="Rev Rec", ~isStatic=false)}
+      </div>
     </div>
   }
 }
@@ -638,6 +738,36 @@ let make = (~runIdFromUrl: option<string>) => {
 
   let isOver = run->Option.mapOr(false, (r: portfolioRun) => r.status->isRunOver || r.isFixture)
   let isRunning = run->Option.isSome && !isOver
+  let isSettingUp = run->Option.mapOr(false, (r: portfolioRun) => r.status == SettingUp)
+  let (limits, setLimits) = React.useState(_ => defaultLimits)
+
+  // The proxy's limits: how many invoices, and the stop-after choices
+  React.useEffect(() => {
+    let read = async () => {
+      try {
+        let proxyLimits = (await simFetch(~path="/healthz", ~method_=Get))->limitsMapper
+        setLimits(_ => proxyLimits)
+
+        // A fresh form picks the middle choice when its default is not offered
+        if dialsRunId.current->isEmptyString {
+          setDials(prev =>
+            proxyLimits.stopAfterMinutes->Array.includes(prev.maxMinutes)
+              ? prev
+              : {
+                  ...prev,
+                  maxMinutes: proxyLimits.stopAfterMinutes
+                  ->Array.get(proxyLimits.stopAfterMinutes->Array.length / 2)
+                  ->Option.getOr(prev.maxMinutes),
+                }
+          )
+        }
+      } catch {
+      | _ => ()
+      }
+    }
+    read()->ignore
+    None
+  }, [])
 
   // Poll a real run until it is done
   React.useEffect(() => {
@@ -668,7 +798,10 @@ let make = (~runIdFromUrl: option<string>) => {
           }
         }
         poll()->ignore
-        let intervalId = setInterval(() => poll()->ignore, pollIntervalMs)
+        let intervalId = setInterval(
+          () => poll()->ignore,
+          isSettingUp ? setupPollIntervalMs : pollIntervalMs,
+        )
         Some(
           () => {
             cancelled := true
@@ -678,7 +811,7 @@ let make = (~runIdFromUrl: option<string>) => {
       }
     | _ => None
     }
-  }, (runIdFromUrl, isOver))
+  }, (runIdFromUrl, isOver, isSettingUp))
 
   let onRun = async () => {
     setIsBusy(_ => true)
@@ -734,6 +867,7 @@ let make = (~runIdFromUrl: option<string>) => {
         <DialsForm
           dials
           setDials
+          limits
           isBusy
           isRunning
           onRun={() => onRun()->ignore}
@@ -741,14 +875,6 @@ let make = (~runIdFromUrl: option<string>) => {
         />
       </div>
       <div className="w-full min-w-0 flex flex-col gap-6">
-        <PageUtils.PageHeading
-          title="Static retries vs Rev Rec"
-          subTitle={run->Option.mapOr(false, r => r.isFixture)
-            ? "Fixture data, not from the sandbox"
-            : "Live from the sandbox"}
-          showPermLink=false
-          customTitleStyle="!font-medium !text-xl !text-nd_gray-600"
-        />
         {switch run {
         | Some(run) =>
           <>
@@ -773,7 +899,7 @@ let make = (~runIdFromUrl: option<string>) => {
             </RenderIf>
             <RunNotes notes={run.warnings->Array.filter(isNonEmptyString)} />
             {switch run.status {
-            | SettingUp => <SetupRing run />
+            | SettingUp => <SetupBoard run />
             | _ =>
               <>
                 <RunStatus run />

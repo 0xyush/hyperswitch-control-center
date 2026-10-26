@@ -26,7 +26,17 @@ type invoiceCopy = {
   status: string,
   revrecAttempts: int,
   recoveredAt: option<string>,
+  // Set when the copy could not be created
+  error: string,
+  // Setup progress from the proxy: "pending", "charged" or "reported" (older runs have none)
+  setupStage: option<string>,
 }
+
+// One copy during setup: not started, being created, charged, reported to Rev Rec, or failed
+type setupState = SetupWaiting | SetupCreating | SetupCharged | SetupReported | SetupFailed
+
+// From GET /healthz "limits"; the defaults when the proxy does not say
+type portfolioLimits = {maxInvoices: int, stopAfterMinutes: array<float>}
 
 type portfolioInvoice = {
   index: int,
@@ -54,8 +64,8 @@ type portfolioDials = {
   invoiceCount: int,
   amount: string,
   mix: Dict.t<int>,
-  // The run stops after this many minutes; open copies are then cancelled
-  maxMinutes: int,
+  // The run stops after this many minutes (0.5 on a fast stack); open copies are then cancelled
+  maxMinutes: float,
 }
 
 type portfolioRun = {

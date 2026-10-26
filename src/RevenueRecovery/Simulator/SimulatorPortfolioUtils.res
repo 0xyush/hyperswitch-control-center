@@ -1,8 +1,10 @@
 open SimulatorPortfolioTypes
 open LogicUtils
 
-// The proxy refreshes a run every 30 s, so the screen polls at the same pace
+// The proxy refreshes a run every 30 s, so the screen polls at the same pace. During setup the
+// proxy only reads its own memory, so the live board polls every 2 s.
 let pollIntervalMs = 30000
+let setupPollIntervalMs = 2000
 
 let portfolioPath = RevenueRecoverySidebarValues.simulatorPortfolioPath
 
@@ -38,14 +40,34 @@ let defaultDials: portfolioDials = {
     ("stolen_card", 1),
     ("expired_card", 0),
   ]->Dict.fromArray,
-  maxMinutes: 20,
+  maxMinutes: 20.0,
 }
 
-// The tiles of the form. The proxy allows 10 invoices for now (portfolioConfig.maxInvoices),
-// so 25 waits for a raise.
+// The tiles of the form. The limits come from GET /healthz; these are the values when the proxy
+// does not report them (10 invoices, stop after 10, 20 or 45 min).
 let invoiceCounts = [10, 25]
-let maxInvoicesNow = 10
-let stopAfterMinutes = [10, 20, 45]
+let defaultLimits: portfolioLimits = {maxInvoices: 10, stopAfterMinutes: [10.0, 20.0, 45.0]}
+
+let limitsMapper = (json): portfolioLimits => {
+  let limits = json->getDictFromJsonObject->getDictfromDict("limits")
+  let stopAfter =
+    limits
+    ->getArrayFromDict("portfolioStopAfterMinutes", [])
+    ->Array.filterMap(JSON.Decode.float)
+    ->Array.filter(minutes => minutes > 0.0)
+  {
+    maxInvoices: limits->getInt("portfolioMaxInvoices", defaultLimits.maxInvoices),
+    stopAfterMinutes: stopAfter->Array.length > 0 ? stopAfter : defaultLimits.stopAfterMinutes,
+  }
+}
+
+// "30 s" under a minute, "10 min" or "1.5 min" above
+let stopAfterLabel = minutes =>
+  if minutes < 1.0 {
+    `${(minutes *. 60.0)->Math.round->Float.toInt->Int.toString} s`
+  } else {
+    `${minutes->Float.toString} min`
+  }
 
 let mixTotal = (mix: Dict.t<int>) => mix->Dict.valuesToArray->Array.reduce(0, (sum, w) => sum + w)
 
@@ -111,7 +133,7 @@ let startBody = (dials: portfolioDials) => {
     ("invoices", dials.invoiceCount->JSON.Encode.int),
     ("amount", dials.amount->SimulatorUtils.toMinor->JSON.Encode.int),
     ("mix", mix),
-    ("maxMinutes", dials.maxMinutes->JSON.Encode.int),
+    ("maxMinutes", dials.maxMinutes->JSON.Encode.float),
   ]->getJsonFromArrayOfJson
 }
 
@@ -132,7 +154,7 @@ let dialsMapper = (dict): portfolioDials => {
   mix: reasons
   ->Array.map(reason => (reason, dict->getDictfromDict("mix")->getInt(reason, 0)))
   ->Dict.fromArray,
-  maxMinutes: dict->getInt("maxMinutes", defaultDials.maxMinutes),
+  maxMinutes: dict->getFloat("maxMinutes", defaultDials.maxMinutes),
 }
 
 let sideCardMapper = (dict): sideCard => {
@@ -161,6 +183,8 @@ let invoiceCopyMapper = (dict): option<invoiceCopy> =>
         status: dict->getString("status", ""),
         revrecAttempts: dict->getInt("revrecAttempts", 0),
         recoveredAt: dict->getOptionString("recoveredAt"),
+        error: dict->getString("error", ""),
+        setupStage: dict->getOptionString("setupStage"),
       })
 
 let runMapper = (json, ~isFixture): portfolioRun => {
@@ -233,6 +257,30 @@ let noRetriesWhy = (~mode) =>
   mode == "smart"
     ? "Smart mode needs a decider service; this sandbox has none yet."
     : "The sandbox booked no retry task for these invoices."
+
+// The proxy sends every copy with a setupStage: "pending" (no story id yet: waiting; with one:
+// being charged), "charged" or "reported". Older runs send null for a copy not started yet and
+// no stage; then a copy is reported once it has a recovery id.
+let copySetupState = (copy: option<invoiceCopy>) =>
+  switch copy {
+  | None => SetupWaiting
+  | Some(copy) if copy.error->isNonEmptyString => SetupFailed
+  | Some(copy) =>
+    switch copy.setupStage {
+    | Some("reported") => SetupReported
+    | Some("charged") => SetupCharged
+    | Some(_) => copy.storyId->isEmptyString ? SetupWaiting : SetupCreating
+    | None => copy.recoveryId->isNonEmptyString ? SetupReported : SetupCreating
+    }
+  }
+
+let isSetupFinal = state => state == SetupReported || state == SetupFailed
+
+// "40 s" or "2 min 10 s"
+let durationText = seconds =>
+  seconds < 60
+    ? `${seconds->Int.toString} s`
+    : `${(seconds / 60)->Int.toString} min ${mod(seconds, 60)->Int.toString} s`
 
 let hasFinishedCopy = (run: portfolioRun) =>
   run.staticCard->finishedCopies + run.smartCard->finishedCopies > 0
