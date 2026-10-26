@@ -610,102 +610,100 @@ module OutcomeCard = {
   }
 }
 
-// The phases, as a horizontal step indicator in the dashboard's style. "The customer acts"
-// shows only when the customer did act.
-module PhaseStrip = {
+// The invoice state as one glyph in a 40 px disc, in the Invoices badge colours
+module StateDisc = {
   @react.component
-  let make = (~items: array<storyItem>, ~isFinished, ~onPhaseClick) => {
-    let reached = phase => items->Array.some(item => item.phase == phase)
-    let phases = [1, 2, 3, 4, 5, outcomePhase]->Array.filter(phase => phase != 5 || reached(5))
-    let current = isFinished ? None : items->Array.at(-1)->Option.map(item => item.phase)
-    let lastIndex = phases->Array.length - 1
-
-    <div className="flex items-start">
-      {phases
-      ->Array.mapWithIndex((phase, index) => {
-        let isReached = reached(phase)
-        let isCurrent = current == Some(phase)
-        let circleClass = switch (isCurrent, isReached) {
-        | (true, _) => "bg-nd_primary_blue-450 border-nd_primary_blue-450 text-white animate-pulse"
-        | (false, true) => "bg-nd_primary_blue-450 border-nd_primary_blue-450 text-white"
-        | _ => "bg-white border-nd_gray-200 text-nd_gray-400"
-        }
-        let nextReached = phases->Array.get(index + 1)->Option.mapOr(false, reached)
-        <React.Fragment key={phase->Int.toString}>
-          <div
-            className={`flex flex-col items-center gap-2 w-20 shrink-0 ${isReached
-                ? "cursor-pointer"
-                : ""}`}
-            onClick={_ => isReached ? onPhaseClick(phase) : ()}>
-            <div
-              className={`flex items-center justify-center rounded-full w-8 h-8 border ${circleClass}`}>
-              {isReached && !isCurrent
-                ? <Icon name="nd-check" size=14 className="text-white" />
-                : <span className={body.sm.semibold}>
-                    {(index + 1)->Int.toString->React.string}
-                  </span>}
-            </div>
-            <span
-              className={`text-center ${isReached
-                  ? `text-nd_gray-700 ${body.sm.semibold}`
-                  : `text-nd_gray-400 ${body.sm.medium}`}`}>
-              {phase->phaseTitle->React.string}
-            </span>
-          </div>
-          <RenderIf condition={index < lastIndex}>
-            <div
-              className={`flex-1 border-t mt-4 ${nextReached
-                  ? "border-nd_primary_blue-450"
-                  : "border-gray-150"}`}
-            />
-          </RenderIf>
-        </React.Fragment>
-      })
-      ->React.array}
+  let make = (~stage) => {
+    let (glyph, discClass) = switch stage {
+    | Monitoring => (<Icon name="nd-eye-on" size=20 />, "bg-nd_gray-150 text-nd_gray-600")
+    | Queued => (<Icon name="clock" size=18 />, "bg-nd_gray-150 text-nd_gray-600")
+    | Scheduled => (<Icon name="calendar" size=18 />, "bg-nd_orange-50 text-nd_orange-600")
+    | Processing => (
+        <Icon name="nd-loading" size=20 className="animate-spin" />,
+        "bg-nd_primary_blue-50 text-nd_primary_blue-450",
+      )
+    | Recovered | PartiallyRecovered => (
+        <Icon name="nd-check" size=20 />,
+        "bg-nd_green-50 text-nd_green-600",
+      )
+    | Terminated | StoryError => (<Icon name="nd-cross" size=16 />, "bg-nd_red-50 text-nd_red-600")
+    // No slash in the icon set: a thin bar drawn across the disc
+    | Cancelled => (
+        <span className="block w-5 h-0.5 rounded-full bg-current -rotate-45" />,
+        "bg-nd_gray-150 text-nd_gray-500",
+      )
+    | Starting => (
+        <Icon name="nd-loading" size=20 className="animate-spin" />,
+        "bg-nd_gray-150 text-nd_gray-500",
+      )
+    }
+    <div
+      title={stage->stageName}
+      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${discClass}`}>
+      glyph
     </div>
   }
 }
 
-// Under the phase strip: the invoice's live status badge (the Invoices list's own), the amount
-// recovered and Rev Rec's attempts, so the visitor need not open the invoice page
-module StatusLine = {
+// One tiny glyph-in-disc counter; hover says whose attempts they are
+module AttemptCounter = {
   @react.component
-  let make = (~story: story) => {
-    let order = story.invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
-    let order = {...order, status: story.stage->toInvoiceStatus(~default=order.status)}
-    let sign =
-      story.form->Option.mapOr("USD", form => form.currency)->SimulatorFormTiles.currencySign
+  let make = (~icon, ~count, ~who) => {
+    <span title={`${who}: ${count->Int.toString}`} className="flex items-center gap-1">
+      <span
+        className="w-5 h-5 rounded-full bg-nd_gray-150 text-nd_gray-600 flex items-center justify-center">
+        <Icon name=icon size=12 />
+      </span>
+      <span className={`${body.sm.semibold} text-nd_gray-700`}>
+        {count->Int.toString->React.string}
+      </span>
+    </span>
+  }
+}
+
+// The top of the panel (STORY header, third pass): the state disc, the Invoices badge, the amount
+// recovered and who made how many attempts. The rail below shows the steps.
+module StatusRow = {
+  @react.component
+  let make = (~story: option<story>, ~form: option<billingForm>) => {
+    let stage = story->Option.mapOr(Starting, s => s.stage)
+    let invoice = story->Option.mapOr(Dict.make(), s => s.invoice)
+    let order = invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
+    let order = {...order, status: stage->toInvoiceStatus(~default=order.status)}
+    let sign = form->Option.mapOr("USD", form => form.currency)->SimulatorFormTiles.currencySign
     // Until the sandbox records the invoice, the amount is the one the billing system charged
     let total =
-      story.invoice->LogicUtils.isEmptyDict
-        ? story.form->Option.mapOr(0.0, form => form.amount->LogicUtils.getFloatFromString(0.0))
+      invoice->LogicUtils.isEmptyDict
+        ? form->Option.mapOr(0.0, form => form.amount->LogicUtils.getFloatFromString(0.0))
         : order.order_amount
     let money = amount => `${sign}${amount->Float.toFixedWithPrecision(~digits=2)}`
-    let revRecAttempts = story->attemptCount(~by="revrec")
+    let count = by => story->Option.mapOr(0, s => s->attemptCount(~by))
 
-    <div
-      className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${body.md.medium} text-nd_gray-600`}>
+    <div className={`flex-1 min-w-0 flex items-center gap-3 ${body.md.medium} text-nd_gray-600`}>
+      <StateDisc stage />
       <RenderIf condition={order.status->LogicUtils.isNonEmptyString}>
         <Table.TableCell cell={RevenueRecoveryEntity.getCell(order, Status)} />
       </RenderIf>
-      <span>
+      <span className="min-w-0 truncate">
         <span className={`${body.md.semibold} text-nd_gray-800`}>
           {order.amount_captured->money->React.string}
         </span>
         {` of ${total->money} recovered`->React.string}
       </span>
-      <span className="text-nd_gray-300"> {"·"->React.string} </span>
-      <span>
-        {`${revRecAttempts->Int.toString} Rev Rec attempt${revRecAttempts == 1
-            ? ""
-            : "s"}`->React.string}
+      <span
+        className="shrink-0 flex items-center gap-2 h-7 px-2 rounded-full border border-nd_gray-200">
+        <AttemptCounter icon="juspay-logo" count={count("revrec")} who="Rev Rec attempts" />
+        <span className="text-nd_gray-300"> {"·"->React.string} </span>
+        <AttemptCounter
+          icon="nd-merchant-retires" count={count("billing")} who="Billing system attempts"
+        />
       </span>
     </div>
   }
 }
 
-// The story, step by step: the phase strip as the header, a status line, then the steps on one
-// rail grouped by phase.
+// The story, step by step: one status row at the top, then the steps on one rail grouped by
+// phase.
 // The raw event list and the sequence diagram are optional, behind a link and a button.
 module StoryView = {
   @react.component
@@ -772,25 +770,19 @@ module StoryView = {
 
     <div className={`${cardStyle} px-6 py-5 flex flex-col gap-5`}>
       <style> {revealCss->React.string} </style>
-      // The phase strip is the header; before a story it shows what is coming
-      <div className="flex items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <PhaseStrip
-            items={hasStory ? shownItems : []}
-            isFinished
-            onPhaseClick={phase => scrollToElement(phaseDomId(phase))}
-          />
-        </div>
+      // One status row, at most 56 px: the state, the amount and the attempts, then the menu
+      <div className="flex items-center gap-3 min-h-10 max-h-14">
+        {if hasStory {
+          <StatusRow story form={optimistic->Option.orElse(story->Option.flatMap(s => s.form))} />
+        } else {
+          <p className={`flex-1 ${body.md.medium} text-nd_gray-500`}>
+            {"Press Charge customer. Each step appears here."->React.string}
+          </p>
+        }}
         <ActionMenu options=menuOptions />
       </div>
-      {switch story {
-      | Some(s) => <StatusLine story=s />
-      | None => React.null
-      }}
       {if !hasStory {
-        <p className={`${body.md.medium} text-nd_gray-500 py-6 text-center`}>
-          {"Press Charge customer. Each step appears here."->React.string}
-        </p>
+        React.null
       } else {
         <>
           <div className="max-w-[760px] w-full flex flex-col gap-4">

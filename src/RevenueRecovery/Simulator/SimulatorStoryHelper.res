@@ -444,16 +444,6 @@ let useRevealDelays = (~storyKey: string, ~itemCount: int, ~initialCount: int) =
 let stepDomId = index => `sim-step-${index->Int.toString}`
 let doneDomId = "sim-step-done"
 
-@val @scope("document")
-external getElementById: string => Nullable.t<Dom.element> = "getElementById"
-
-let scrollToElement = id =>
-  getElementById(id)
-  ->Nullable.toOption
-  ->Option.forEach(element =>
-    element->Webapi.Dom.Element.scrollIntoViewWithOptions({"behavior": "smooth", "block": "center"})
-  )
-
 let revealProps = (delay: option<int>) => (
   delay->Option.isSome ? "sim-step-reveal" : "",
   delay->Option.map(ms => `${ms->Int.toString}ms`),

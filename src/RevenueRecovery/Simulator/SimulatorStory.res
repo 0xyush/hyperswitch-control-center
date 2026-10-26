@@ -292,12 +292,6 @@ let make = (~storyIdFromUrl: option<string>) => {
           />
         </div>
         <div className="w-full min-w-0 flex flex-col gap-8">
-          <PageUtils.PageHeading
-            title="Revenue Recovery"
-            subTitle="Live from the sandbox"
-            showPermLink=false
-            customTitleStyle="!font-medium !text-xl !text-nd_gray-600"
-          />
           {warnings
           ->Array.mapWithIndex((warning, index) =>
             <AlertV2Binding
