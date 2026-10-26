@@ -39,3 +39,17 @@ feel alive and to read as numbered steps: step 1, step 2, step 3… each appeari
 - Press Charge customer: a step card and a loading state appear within 100 ms.
 - Preset 2 end to end: steps 1..N appear one by one, the phase strip advances 1→5, final "Done" card is green.
 - Refresh mid-story: all steps already known render at once (no replay animation), phase strip correct.
+
+## 6. Addendum (26 Oct, second screenshot): steps are the main view, diagram is secondary
+- **Default view = the step list** (numbered step cards in one column, each with its badge, title, who → who, time, status
+  colour, and a "Why" link that opens the drawer). The sequence diagram is NOT shown by default; a toggle "Show
+  sequence diagram" (same place as "Invoice states") reveals it under the steps for people who want the lifelines.
+- **User-driven pacing.** The viewer walks the story: after the billing system's charge and report (steps 1..k), the
+  story PAUSES with a prominent **"Next: let Rev Rec retry →"** button on the last card. Pressing it reveals the Rev Rec
+  steps that have already arrived (pick retry time, booked retry with countdown, the retry charge, outcome), one at a
+  time. If a step has not arrived yet, the button shows "Waiting for Rev Rec… (countdown)" and reveals it when it lands.
+  Keep an "Auto-play" switch (off by default) that reveals steps as they arrive without pressing.
+- Same for the customer actions: "Customer pays in app" and "Report another failure" become the next step cards
+  when pressed (they already exist on the form; also offer them inline on the last card where they make sense).
+- The phase strip (section 3) stays above the step list and is the quick summary; the step list is the detail.
+- The hover tooltip that duplicates the label (seen in the screenshot: "new invoice $65.40") is noise: remove it.
