@@ -7,7 +7,7 @@ The dashboard talks only to this server. It holds the keys, plays the merchant's
 1. Use Node 24 or later (`node --version`). TypeScript runs directly, with no build step.
 2. Copy `.env.example` to `.env` and fill it in. `.env` is git-ignored. Never commit or print its values.
 3. Install the dev tools: `npm install`.
-4. Start the proxy: `npm start`. It listens on http://127.0.0.1:8787.
+4. Start the proxy: `npm start`. It listens on http://127.0.0.1:8787. On a Mac laptop, use `npm run start:awake` instead (it runs under `caffeinate -i`). Idle sleep stops the proxy's timers, which made two portfolio runs late on 23 and 24 Oct.
 5. Check it: `curl -s localhost:8787/healthz`. Expect `"ok": true`, and `"dashboard": {"ok": true}` when the dashboard token works.
 
 At start, the proxy switches the pasted dashboard token (`HS_DASHBOARD_JWT`) to the Rev Rec merchant with `POST v2/user/switch/merchant`. It never uses a token that is scoped to another merchant. If the token expires, re-grab it (`bash simulator/scripts/grab-jwt.sh`) and restart.
