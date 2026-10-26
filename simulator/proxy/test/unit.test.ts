@@ -249,22 +249,26 @@ describe("portfolio dials", () => {
     assert.equal(setupStage(copy("st_gone0000000", "0a_pay_9")), "reported");
     assert.equal(setupStage(copy("st_gone0000000")), "pending");
   });
-  test("stop-after choices: default 10/20/45; the env list allows caps down to 0.5", () => {
+  test("stop-after: maxMinutes must be one of the choices (default 10/20/45; env 0.5,1,2)", () => {
     assert.deepEqual(portfolioConfig.stopAfterMinutes, [10, 20, 45]);
     assert.deepEqual(parseStopAfter(""), [10, 20, 45]);
     assert.deepEqual(parseStopAfter("2, 0.5,1,1,x,0.25,60"), [0.5, 1, 2]);
     assert.deepEqual(parseStopAfter("0.3,abc"), [10, 20, 45]);
-    // Default list: 5 to 45, half minutes.
-    assert.equal(parsePortfolio({ maxMinutes: 7.5 }).maxMinutes, 7.5);
-    for (const maxMinutes of [0.5, 4.5, 7.2])
-      assert.throws(() => parsePortfolio({ maxMinutes }), { status: 400 });
+    // Default list: one of 10, 20, 45 only.
+    assert.equal(parsePortfolio({ maxMinutes: 20 }).maxMinutes, 20);
+    for (const maxMinutes of [0.5, 5, 7.5, 30])
+      assert.throws(
+        () => parsePortfolio({ maxMinutes }),
+        { status: 400 },
+        String(maxMinutes),
+      );
     const saved = portfolioConfig.stopAfterMinutes;
     portfolioConfig.stopAfterMinutes = [0.5, 1, 2];
     try {
       assert.equal(parsePortfolio({}).maxMinutes, 2);
       assert.equal(parsePortfolio({ maxMinutes: 0.5 }).maxMinutes, 0.5);
       assert.equal(parsePortfolio({ maxMinutes: "1" }).maxMinutes, 1);
-      for (const maxMinutes of [0, 0.25, 46, null])
+      for (const maxMinutes of [0, 0.25, 1.5, 10, 46, null])
         assert.throws(
           () => parsePortfolio({ maxMinutes }),
           { status: 400 },

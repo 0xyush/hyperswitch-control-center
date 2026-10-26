@@ -188,14 +188,13 @@ export function parsePortfolio(body: any): Dials {
   }
   if (!Object.keys(mix).length)
     throw bad("mix needs at least one weight above 0");
-  // Half minutes from 5 to 45, or down to the smallest stop-after choice when the env lists one
-  // below 5 (PORTFOLIO_STOP_AFTER_MINUTES). The default is the largest choice.
+  // One of the form's stop-after choices (PORTFOLIO_STOP_AFTER_MINUTES, default 10, 20, 45;
+  // floats such as 0.5 on the self-hosted stack). The default is the largest choice.
   const choices = portfolioConfig.stopAfterMinutes;
-  const lo = Math.min(5, choices[0]);
   const maxMinutes =
     body.maxMinutes === undefined ? choices.at(-1)! : Number(body.maxMinutes);
-  if (!Number.isInteger(maxMinutes * 2) || maxMinutes < lo || maxMinutes > 45)
-    throw bad(`maxMinutes must be from ${lo} to 45, in steps of 0.5`);
+  if (!choices.includes(maxMinutes))
+    throw bad(`maxMinutes must be one of ${choices.join(", ")}`);
   return {
     invoices: int(
       body.invoices,
