@@ -113,6 +113,8 @@ type story = {
   waiting: option<waitingNote>,
   invoice: Dict.t<JSON.t>,
   attempts: JSON.t,
+  // Who made each sandbox attempt, from the proxy's attemptSummary: "billing" or "revrec"
+  attemptBy: array<string>,
   processTracker: Dict.t<JSON.t>,
   explain: array<explainLine>,
   timeline: array<diagramRow>,

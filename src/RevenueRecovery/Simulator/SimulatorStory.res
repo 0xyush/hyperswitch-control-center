@@ -207,15 +207,6 @@ let make = (~storyIdFromUrl: option<string>) => {
     )
   }
 
-  // An attempt row opens the step of the same charge, or one built from the attempt
-  let onAttemptClick = (attempt: RevenueRecoveryOrderTypes.attempts) => {
-    let row =
-      story
-      ->Option.flatMap(s => s.timeline->rowForAttempt(attempt))
-      ->Option.getOr(attempt->attemptRow)
-    setDrawerContent(_ => Some(StepDetails(row)))
-  }
-
   // Pacing (STORY-STEPS.md section 6), over the grouped steps of STORY-DESIGN.md
   let (_, items) = React.useMemo1(
     () => story->Option.mapOr(("", []), SimulatorStorySteps.buildStoryItems),
@@ -343,12 +334,8 @@ let make = (~storyIdFromUrl: option<string>) => {
             onWaitingClick={() => setDrawerContent(_ => Some(WaitingDetails))}
           />
           {switch story {
-          | Some(s) if !(s.invoice->isEmptyDict) => <InvoicePanel story=s onAttemptClick />
-          | Some(_) =>
-            <p className={`${Typography.body.md.medium} text-nd_gray-500`}>
-              {"The invoice page appears once the sandbox has recorded the invoice."->React.string}
-            </p>
-          | None => React.null
+          | Some(s) if !(s.invoice->isEmptyDict) => <InvoiceCard story=s />
+          | _ => React.null
           }}
         </div>
       </div>

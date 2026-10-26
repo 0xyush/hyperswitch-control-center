@@ -604,87 +604,52 @@ module NextControls = {
   }
 }
 
-// Below the diagram: the real invoice detail page, fed by the story's raw sandbox JSON
-module InvoicePanel = {
-  @react.component
-  let make = (~story: story, ~onAttemptClick) => {
-    let getURL = APIUtils.useGetURL()
-    let fetchDetails = APIUtils.useGetMethod(~showErrorToast=false)
-    let (startRetryThreshold, setStartRetryThreshold) = React.useState(_ => 0)
+// How many sandbox attempts each side made: "Billing 3 · Rev Rec 1"
+let attemptCount = (story: story, ~by) =>
+  story.attemptBy->Array.filter(who => who == by)->Array.length
 
+// Below the story (UX-PASS-2 A5): one compact card in place of the invoice page. The steps
+// already show each attempt; the real page is one click away.
+module InvoiceCard = {
+  @react.component
+  let make = (~story: story) => {
     let order = story.invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
     let order = {...order, status: story.stage->toInvoiceStatus(~default=order.status)}
-    let attemptsList =
-      story.attempts
-      ->RevenueRecoveryEntity.getAttempts
-      ->Array.filter(item => item.status !== "started")
-    // Newest first, like the invoice page
-    attemptsList->Array.reverse
-    let detailsFields: array<RevenueRecoveryOrderTypes.colType> = [
-      Id,
-      Created,
-      OrderAmount,
-      Status,
-      Connector,
-    ]
+    let mixpanelEvent = MixpanelHook.useSendEvent()
+    // The invoice page's path carries the profile, merchant and org, as the Invoices list's does
+    let {profileId, merchantId, orgId} = React.useContext(
+      UserInfoProvider.defaultContext,
+    ).getCommonSessionDetails()
+    let invoicePath = `/v2/recovery/invoices/${story.recoveryId}/${story.invoice->LogicUtils.getString(
+        "profile_id",
+        profileId,
+      )}/${merchantId}/${orgId}`
 
-    // The start rule decides when the attempts table shows Rev Rec's section, as on the invoice page
-    let fetchStartRetryThreshold = async billingConnectorId => {
-      try {
-        let url = getURL(
-          ~entityName=V2(V2_CONNECTOR),
-          ~methodType=Get,
-          ~id=Some(billingConnectorId),
-        )
-        let json = await fetchDetails(url, ~version=V2)
-        let threshold =
-          json
-          ->LogicUtils.getDictFromJsonObject
-          ->LogicUtils.getDictfromDict("feature_metadata")
-          ->LogicUtils.getDictfromDict("revenue_recovery")
-          ->LogicUtils.getInt("billing_connector_retry_threshold", 0)
-        setStartRetryThreshold(_ => threshold)
-      } catch {
-      | _ => ()
-      }
-    }
-
-    React.useEffect(() => {
-      if order.billing_connector_id->LogicUtils.isNonEmptyString {
-        fetchStartRetryThreshold(order.billing_connector_id)->ignore
-      }
-      None
-    }, [order.billing_connector_id])
-
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <p className={`${heading.md.semibold} text-nd_gray-900`}>
-          {"Invoice Recovery Details"->React.string}
-        </p>
-        <p className={`${body.md.medium} text-nd_gray-500`}>
-          {`The same page as Invoices › ${story.recoveryId}, updated live.`->React.string}
-        </p>
-      </div>
-      // The invoice page puts the details card in a side column. This panel is narrower,
-      // so the same components stack; -ml-6 cancels the card's built-in left margin.
-      <div className="w-full flex flex-col gap-7">
-        <ShowRevenueRecovery.RecoveryAmountStatus order processTracker=story.processTracker />
-        <div className="-ml-6">
-          <ShowRevenueRecovery.OrderDetailsCard
-            order
-            getHeading=RevenueRecoveryEntity.getHeading
-            getCell=RevenueRecoveryEntity.getCell
-            detailsFields
-          />
+    <div className={`${cardStyle} px-6 py-4 flex flex-col gap-3`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <p className={`${body.lg.semibold} text-nd_gray-800`}> {"Invoice"->React.string} </p>
+          <Table.TableCell cell={RevenueRecoveryEntity.getCell(order, Status)} />
         </div>
-        <RecoveryInvoicesHelper.AttemptsHistory
-          order
-          attemptsList
-          processTracker={story.processTracker->Some}
-          startRetryThreshold
-          onAttemptClick
-        />
+        <span
+          className={`cursor-pointer text-blue-500 hover:text-blue-700 ${body.md.semibold}`}
+          onClick={_ => {
+            mixpanelEvent(~eventName="recovery_simulator_open_invoice")
+            RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=invoicePath))
+          }}>
+          {"Open invoice page →"->React.string}
+        </span>
       </div>
+      <RecoveryInvoicesHelper.SegmentedProgressBar
+        orderAmount=order.order_amount amountCaptured=order.amount_captured
+      />
+      <p className={`${body.md.medium} text-nd_gray-500`}>
+        {`Attempts: Billing ${story
+          ->attemptCount(~by="billing")
+          ->Int.toString} · Rev Rec ${story
+          ->attemptCount(~by="revrec")
+          ->Int.toString}`->React.string}
+      </p>
     </div>
   }
 }

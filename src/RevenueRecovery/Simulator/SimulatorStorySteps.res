@@ -681,10 +681,7 @@ module StatusLine = {
         ? story.form->Option.mapOr(0.0, form => form.amount->LogicUtils.getFloatFromString(0.0))
         : order.order_amount
     let money = amount => `${sign}${amount->Float.toFixedWithPrecision(~digits=2)}`
-    let revRecAttempts =
-      story.timeline
-      ->Array.filter(row => row.from == RevRec && row.to == Processor && row.status != StepPending)
-      ->Array.length
+    let revRecAttempts = story->attemptCount(~by="revrec")
 
     <div
       className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${body.md.medium} text-nd_gray-600`}>

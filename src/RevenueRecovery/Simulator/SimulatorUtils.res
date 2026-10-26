@@ -308,6 +308,9 @@ let storyMapper = (json): story => {
     }),
     invoice: dict->getDictfromDict("invoice"),
     attempts: dict->getArrayFromDict("attempts", [])->JSON.Encode.array,
+    attemptBy: dict
+    ->getArrayFromDict("attemptSummary", [])
+    ->Array.map(item => item->getDictFromJsonObject->getString("by", "")),
     processTracker: dict->getDictfromDict("processTracker"),
     explain: dict->getArrayFromDict("explain", [])->Array.map(explainLineMapper),
     timeline: dict
@@ -421,38 +424,6 @@ let requestsForRow = (requests: array<requestLog>, row: diagramRow) =>
     let rowMillis = row.at->toMillis
     requests->Array.filter(request => Math.abs(request.at->toMillis -. rowMillis) <= 3000.0)
   }
-
-// An attempt row with no diagram row yet: describe the charge from the attempt itself
-let attemptRow = (attempt: RevenueRecoveryOrderTypes.attempts): diagramRow => {
-  let isInternal =
-    attempt.attempt_triggered_by->RevenueRecoveryOrderUtils.attemptTriggeredByVariantMapper ==
-      INTERNAL
-  let charged = attempt.status->HSwitchOrderUtils.paymentAttemptStatusVariantMapper == #CHARGED
-  let reason = attempt.error->isNonEmptyString ? ` (${attempt.error})` : ""
-  let outcome = charged ? "approved" : "declined"
-  {
-    stepId: `attempt-${attempt.id}`,
-    at: attempt.created,
-    from: isInternal ? RevRec : Billing,
-    to: Processor,
-    label: `charge ${attempt.net_amount->InvoiceDetailsPageUtils.formatCurrency} → ${outcome}${reason}`,
-    text: `${isInternal
-        ? "Rev Rec"
-        : "The billing system"} charged the card. The processor answered ${attempt.status}.`,
-    status: charged ? StepOk : StepDeclined,
-    why: [],
-    attemptId: Some(attempt.id),
-    phase: isInternal ? 4 : 1,
-  }
-}
-
-// The diagram row of an attempt: by its id, else the row whose explanation names the attempt
-let rowForAttempt = (rows: array<diagramRow>, attempt: RevenueRecoveryOrderTypes.attempts) =>
-  rows->Array.find(row =>
-    row.attemptId == Some(attempt.id) ||
-    row.text->String.includes(attempt.id) ||
-    row.why->Array.some(line => line.text->String.includes(attempt.id))
-  )
 
 // Preset 0 = no preset (a portfolio copy)
 let noPresetOption: SelectBox.dropdownOption = {label: "None (a portfolio copy)", value: "0"}
