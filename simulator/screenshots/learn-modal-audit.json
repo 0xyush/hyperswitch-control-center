@@ -1,0 +1,4210 @@
+{
+  "before": {
+    "measuredAt": "2026-10-26T20:32:51.205Z",
+    "viewport": "1440x1000",
+    "level": 1,
+    "panes": {
+      "idea": {
+        "panel": {
+          "x": 432,
+          "y": 248,
+          "width": 576,
+          "height": 504,
+          "right": 1008,
+          "bottom": 752,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 574
+        },
+        "header": {
+          "x": 433,
+          "y": 249,
+          "width": 574,
+          "height": 93,
+          "right": 1007,
+          "bottom": 342,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "16px",
+            "16px",
+            "16px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 457,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 566.1,
+          "bottom": 291,
+          "cx": 511.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 457,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 969,
+          "bottom": 325,
+          "cx": 713,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 457,
+          "y": 350,
+          "width": 526,
+          "height": 24,
+          "right": 983,
+          "bottom": 374,
+          "cx": 720,
+          "cy": 362
+        },
+        "circles": [
+          {
+            "x": 457,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 481,
+            "bottom": 374,
+            "cx": 469,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 670.4,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 694.4,
+            "bottom": 374,
+            "cx": 682.4,
+            "cy": 362,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 915.8,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 939.8,
+            "bottom": 374,
+            "cx": 927.8,
+            "cy": 362,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 520.3,
+            "y": 361.5,
+            "width": 142.1,
+            "height": 1,
+            "right": 662.4,
+            "bottom": 362.5,
+            "cx": 591.3,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(236, 239, 243)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 765.7,
+            "y": 361.5,
+            "width": 142.2,
+            "height": 1,
+            "right": 907.8,
+            "bottom": 362.5,
+            "cx": 836.7,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(236, 239, 243)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 489,
+            "y": 353,
+            "width": 23.3,
+            "height": 18,
+            "right": 512.3,
+            "bottom": 371,
+            "cx": 500.6,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(34, 37, 48)"
+          },
+          {
+            "text": "Real value",
+            "x": 702.4,
+            "y": 353,
+            "width": 55.3,
+            "height": 18,
+            "right": 757.7,
+            "bottom": 371,
+            "cx": 730,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Check",
+            "x": 947.8,
+            "y": 353,
+            "width": 35.2,
+            "height": 18,
+            "right": 983,
+            "bottom": 371,
+            "cx": 965.4,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          }
+        ],
+        "pane": {
+          "x": 457,
+          "y": 398,
+          "width": 526,
+          "height": 256,
+          "right": 983,
+          "bottom": 654,
+          "cx": 720,
+          "cy": 526
+        },
+        "block": {
+          "x": 457,
+          "y": 452,
+          "width": 526,
+          "height": 148,
+          "right": 983,
+          "bottom": 600,
+          "cx": 720,
+          "cy": 526,
+          "source": "pane child (no hook)"
+        },
+        "badge": {
+          "x": 680,
+          "y": 452,
+          "width": 80,
+          "height": 80,
+          "right": 760,
+          "bottom": 532,
+          "cx": 720,
+          "cy": 492
+        },
+        "headline": {
+          "x": 473,
+          "y": 552,
+          "width": 494,
+          "height": 48,
+          "right": 967,
+          "bottom": 600,
+          "cx": 720,
+          "cy": 576,
+          "fontSize": "18px",
+          "fontWeight": "600",
+          "lineHeight": "24px",
+          "color": "rgb(34, 37, 48)"
+        },
+        "footer": {
+          "x": 457,
+          "y": 678,
+          "width": 526,
+          "height": 49,
+          "right": 983,
+          "bottom": 727,
+          "cx": 720,
+          "cy": 702.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Next",
+            "x": 846,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 983,
+            "bottom": 727,
+            "cx": 914.5,
+            "cy": 711
+          }
+        ],
+        "footerLink": {
+          "x": 457,
+          "y": 701,
+          "width": 122.1,
+          "height": 20,
+          "right": 579.1,
+          "bottom": 721,
+          "cx": 518,
+          "cy": 711
+        }
+      },
+      "value": {
+        "panel": {
+          "x": 432,
+          "y": 248,
+          "width": 576,
+          "height": 504,
+          "right": 1008,
+          "bottom": 752,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 574
+        },
+        "header": {
+          "x": 433,
+          "y": 249,
+          "width": 574,
+          "height": 93,
+          "right": 1007,
+          "bottom": 342,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "16px",
+            "16px",
+            "16px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 457,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 566.1,
+          "bottom": 291,
+          "cx": 511.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 457,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 969,
+          "bottom": 325,
+          "cx": 713,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 457,
+          "y": 350,
+          "width": 526,
+          "height": 24,
+          "right": 983,
+          "bottom": 374,
+          "cx": 720,
+          "cy": 362
+        },
+        "circles": [
+          {
+            "x": 457,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 481,
+            "bottom": 374,
+            "cx": 469,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 670.4,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 694.4,
+            "bottom": 374,
+            "cx": 682.4,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 915.8,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 939.8,
+            "bottom": 374,
+            "cx": 927.8,
+            "cy": 362,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 520.3,
+            "y": 361.5,
+            "width": 142.1,
+            "height": 1,
+            "right": 662.4,
+            "bottom": 362.5,
+            "cx": 591.3,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 765.7,
+            "y": 361.5,
+            "width": 142.2,
+            "height": 1,
+            "right": 907.8,
+            "bottom": 362.5,
+            "cx": 836.7,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(236, 239, 243)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 489,
+            "y": 353,
+            "width": 23.3,
+            "height": 18,
+            "right": 512.3,
+            "bottom": 371,
+            "cx": 500.6,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Real value",
+            "x": 702.4,
+            "y": 353,
+            "width": 55.3,
+            "height": 18,
+            "right": 757.7,
+            "bottom": 371,
+            "cx": 730,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(34, 37, 48)"
+          },
+          {
+            "text": "Check",
+            "x": 947.8,
+            "y": 353,
+            "width": 35.2,
+            "height": 18,
+            "right": 983,
+            "bottom": 371,
+            "cx": 965.4,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          }
+        ],
+        "pane": {
+          "x": 457,
+          "y": 398,
+          "width": 526,
+          "height": 256,
+          "right": 983,
+          "bottom": 654,
+          "cx": 720,
+          "cy": 526
+        },
+        "block": {
+          "x": 457,
+          "y": 450,
+          "width": 526,
+          "height": 152,
+          "right": 983,
+          "bottom": 602,
+          "cx": 720,
+          "cy": 526,
+          "source": "pane child (no hook)"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 457,
+          "y": 678,
+          "width": 526,
+          "height": 49,
+          "right": 983,
+          "bottom": 727,
+          "cx": 720,
+          "cy": 702.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 697,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 834,
+            "bottom": 727,
+            "cx": 765.5,
+            "cy": 711
+          },
+          {
+            "text": "Next",
+            "x": 846,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 983,
+            "bottom": 727,
+            "cx": 914.5,
+            "cy": 711
+          }
+        ],
+        "footerLink": {
+          "x": 457,
+          "y": 701,
+          "width": 122.1,
+          "height": 20,
+          "right": 579.1,
+          "bottom": 721,
+          "cx": 518,
+          "cy": 711
+        }
+      },
+      "check": {
+        "panel": {
+          "x": 432,
+          "y": 248,
+          "width": 576,
+          "height": 504,
+          "right": 1008,
+          "bottom": 752,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 574
+        },
+        "header": {
+          "x": 433,
+          "y": 249,
+          "width": 574,
+          "height": 93,
+          "right": 1007,
+          "bottom": 342,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "16px",
+            "16px",
+            "16px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 457,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 566.1,
+          "bottom": 291,
+          "cx": 511.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 457,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 969,
+          "bottom": 325,
+          "cx": 713,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 457,
+          "y": 350,
+          "width": 526,
+          "height": 24,
+          "right": 983,
+          "bottom": 374,
+          "cx": 720,
+          "cy": 362
+        },
+        "circles": [
+          {
+            "x": 457,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 481,
+            "bottom": 374,
+            "cx": 469,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 670.4,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 694.4,
+            "bottom": 374,
+            "cx": 682.4,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 915.8,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 939.8,
+            "bottom": 374,
+            "cx": 927.8,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 520.3,
+            "y": 361.5,
+            "width": 142.1,
+            "height": 1,
+            "right": 662.4,
+            "bottom": 362.5,
+            "cx": 591.3,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 765.7,
+            "y": 361.5,
+            "width": 142.2,
+            "height": 1,
+            "right": 907.8,
+            "bottom": 362.5,
+            "cx": 836.7,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 489,
+            "y": 353,
+            "width": 23.3,
+            "height": 18,
+            "right": 512.3,
+            "bottom": 371,
+            "cx": 500.6,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Real value",
+            "x": 702.4,
+            "y": 353,
+            "width": 55.3,
+            "height": 18,
+            "right": 757.7,
+            "bottom": 371,
+            "cx": 730,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Check",
+            "x": 947.8,
+            "y": 353,
+            "width": 35.2,
+            "height": 18,
+            "right": 983,
+            "bottom": 371,
+            "cx": 965.4,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(34, 37, 48)"
+          }
+        ],
+        "pane": {
+          "x": 457,
+          "y": 398,
+          "width": 526,
+          "height": 256,
+          "right": 983,
+          "bottom": 654,
+          "cx": 720,
+          "cy": 526
+        },
+        "block": {
+          "x": 457,
+          "y": 427,
+          "width": 526,
+          "height": 198,
+          "right": 983,
+          "bottom": 625,
+          "cx": 720,
+          "cy": 526,
+          "source": "pane child (no hook)"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 457,
+          "y": 678,
+          "width": 526,
+          "height": 49,
+          "right": 983,
+          "bottom": 727,
+          "cx": 720,
+          "cy": 702.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 697,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 834,
+            "bottom": 727,
+            "cx": 765.5,
+            "cy": 711
+          },
+          {
+            "text": "Done",
+            "x": 846,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 983,
+            "bottom": 727,
+            "cx": 914.5,
+            "cy": 711
+          }
+        ],
+        "footerLink": {
+          "x": 457,
+          "y": 701,
+          "width": 122.1,
+          "height": 20,
+          "right": 579.1,
+          "bottom": 721,
+          "cx": 518,
+          "cy": 711
+        }
+      },
+      "checkAnswered": {
+        "panel": {
+          "x": 432,
+          "y": 248,
+          "width": 576,
+          "height": 504,
+          "right": 1008,
+          "bottom": 752,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 574
+        },
+        "header": {
+          "x": 433,
+          "y": 249,
+          "width": 574,
+          "height": 93,
+          "right": 1007,
+          "bottom": 342,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "16px",
+            "16px",
+            "16px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 457,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 566.1,
+          "bottom": 291,
+          "cx": 511.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 457,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 969,
+          "bottom": 325,
+          "cx": 713,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 457,
+          "y": 350,
+          "width": 526,
+          "height": 24,
+          "right": 983,
+          "bottom": 374,
+          "cx": 720,
+          "cy": 362
+        },
+        "circles": [
+          {
+            "x": 457,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 481,
+            "bottom": 374,
+            "cx": 469,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 670.4,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 694.4,
+            "bottom": 374,
+            "cx": 682.4,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 915.8,
+            "y": 350,
+            "width": 24,
+            "height": 24,
+            "right": 939.8,
+            "bottom": 374,
+            "cx": 927.8,
+            "cy": 362,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 520.3,
+            "y": 361.5,
+            "width": 142.1,
+            "height": 1,
+            "right": 662.4,
+            "bottom": 362.5,
+            "cx": 591.3,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "x": 765.7,
+            "y": 361.5,
+            "width": 142.2,
+            "height": 1,
+            "right": 907.8,
+            "bottom": 362.5,
+            "cx": 836.7,
+            "cy": 362,
+            "borderTopWidth": "1px",
+            "borderTopColor": "rgb(36, 125, 249)",
+            "background": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 489,
+            "y": 353,
+            "width": 23.3,
+            "height": 18,
+            "right": 512.3,
+            "bottom": 371,
+            "cx": 500.6,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Real value",
+            "x": 702.4,
+            "y": 353,
+            "width": 55.3,
+            "height": 18,
+            "right": 757.7,
+            "bottom": 371,
+            "cx": 730,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Check",
+            "x": 947.8,
+            "y": 353,
+            "width": 35.2,
+            "height": 18,
+            "right": 983,
+            "bottom": 371,
+            "cx": 965.4,
+            "cy": 362,
+            "fontSize": "12px",
+            "fontWeight": "600",
+            "lineHeight": "18px",
+            "color": "rgb(34, 37, 48)"
+          }
+        ],
+        "pane": {
+          "x": 457,
+          "y": 398,
+          "width": 526,
+          "height": 256,
+          "right": 983,
+          "bottom": 654,
+          "cx": 720,
+          "cy": 526
+        },
+        "block": {
+          "x": 457,
+          "y": 411,
+          "width": 526,
+          "height": 230,
+          "right": 983,
+          "bottom": 641,
+          "cx": 720,
+          "cy": 526,
+          "source": "pane child (no hook)"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 457,
+          "y": 678,
+          "width": 526,
+          "height": 49,
+          "right": 983,
+          "bottom": 727,
+          "cx": 720,
+          "cy": 702.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 697,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 834,
+            "bottom": 727,
+            "cx": 765.5,
+            "cy": 711
+          },
+          {
+            "text": "Done",
+            "x": 846,
+            "y": 695,
+            "width": 137,
+            "height": 32,
+            "right": 983,
+            "bottom": 727,
+            "cx": 914.5,
+            "cy": 711
+          }
+        ],
+        "footerLink": {
+          "x": 457,
+          "y": 701,
+          "width": 122.1,
+          "height": 20,
+          "right": 579.1,
+          "bottom": 721,
+          "cx": 518,
+          "cy": 711
+        }
+      }
+    },
+    "transitions": {
+      "open": {
+        "animated": false,
+        "minOpacity": 1,
+        "startTranslateX": 0,
+        "maxAbsTranslateX": 0,
+        "settledAtMs": null,
+        "samples": [
+          {
+            "t": 20,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 20,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 35,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 52,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 68,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 85,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 102,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 118,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 135,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 151,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 168,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 185,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 202,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 218,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 235,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 251,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 268,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 285,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 302,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 318,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 335,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 352,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 368,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 385,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 401,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      },
+      "next": {
+        "animated": false,
+        "minOpacity": 1,
+        "startTranslateX": 0,
+        "maxAbsTranslateX": 0,
+        "settledAtMs": null,
+        "samples": [
+          {
+            "t": 11,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 27,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 44,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 61,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 78,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 95,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 110,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 128,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 145,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 161,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 178,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 195,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 211,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 228,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 245,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 261,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 278,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 294,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 311,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 328,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 345,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 361,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 378,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 394,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 411,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      },
+      "back": {
+        "animated": false,
+        "minOpacity": 1,
+        "startTranslateX": 0,
+        "maxAbsTranslateX": 0,
+        "settledAtMs": null,
+        "samples": [
+          {
+            "t": 13,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 29,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 46,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 63,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 79,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 96,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 112,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 129,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 146,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 162,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 179,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 196,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 212,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 229,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 246,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 262,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 279,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 295,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 312,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 329,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 345,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 362,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 379,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 396,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 412,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      }
+    },
+    "levels": [
+      {
+        "title": "The start rule",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 152,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Static vs smart retries",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Max retries & grace period",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Hard declines",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Card network limits",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Invoice queuing",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Paid outside Rev Rec",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 152,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Record back & webhooks",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 148,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 198,
+            "paneHeight": 256,
+            "footerY": 678,
+            "headlineLines": null
+          }
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "name": "idea: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors same length",
+        "value": 0.1,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors same colour",
+        "value": [
+          "rgb(236, 239, 243)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "idea: labels same font size",
+        "value": [
+          "12px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "idea: label weights (active bold)",
+        "value": [
+          "600",
+          "600",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": false
+      },
+      {
+        "name": "idea: block centred between stepper and footer",
+        "value": {
+          "above": 78,
+          "below": 78,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "idea: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "idea: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "value: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors same length",
+        "value": 0.1,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors same colour",
+        "value": [
+          "rgb(36, 125, 249)",
+          "rgb(236, 239, 243)"
+        ],
+        "rule": "one colour",
+        "pass": false
+      },
+      {
+        "name": "value: labels same font size",
+        "value": [
+          "12px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "value: label weights (active bold)",
+        "value": [
+          "600",
+          "600",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": false
+      },
+      {
+        "name": "value: block centred between stepper and footer",
+        "value": {
+          "above": 76,
+          "below": 76,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "value: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "value: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "check: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors same length",
+        "value": 0.1,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors same colour",
+        "value": [
+          "rgb(36, 125, 249)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "check: labels same font size",
+        "value": [
+          "12px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "check: label weights (active bold)",
+        "value": [
+          "600",
+          "600",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": false
+      },
+      {
+        "name": "check: block centred between stepper and footer",
+        "value": {
+          "above": 53,
+          "below": 53,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "check: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "check: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors same length",
+        "value": 0.1,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors same colour",
+        "value": [
+          "rgb(36, 125, 249)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: labels same font size",
+        "value": [
+          "12px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: label weights (active bold)",
+        "value": [
+          "600",
+          "600",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": false
+      },
+      {
+        "name": "checkAnswered: block centred between stepper and footer",
+        "value": {
+          "above": 37,
+          "below": 37,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "header padding 24 px",
+        "value": [
+          "16px",
+          "16px",
+          "16px",
+          "24px"
+        ],
+        "rule": "all sides 24 px",
+        "pass": false
+      },
+      {
+        "name": "stepper 16 px below the divider",
+        "value": 8,
+        "rule": "16 +- 1 px",
+        "pass": false
+      },
+      {
+        "name": "stepper spans the content width (24 px side padding)",
+        "value": {
+          "left": 24,
+          "right": 24
+        },
+        "rule": "24 +- 1 px each side",
+        "pass": true
+      },
+      {
+        "name": "badge 96 px",
+        "value": [
+          80,
+          80
+        ],
+        "rule": "96 x 96",
+        "pass": false
+      },
+      {
+        "name": "badge to headline 16 px",
+        "value": 20,
+        "rule": "16 +- 1 px",
+        "pass": false
+      },
+      {
+        "name": "headline 22 px",
+        "value": "18px",
+        "rule": "22px",
+        "pass": false
+      },
+      {
+        "name": "headline at most 2 lines",
+        "value": 2,
+        "rule": "<= 2",
+        "pass": true
+      },
+      {
+        "name": "headline max width 560 px",
+        "value": 494,
+        "rule": "<= 560 px",
+        "pass": true
+      },
+      {
+        "name": "headline centred in the panel",
+        "value": 0,
+        "rule": "centre x +- 1 px",
+        "pass": true
+      },
+      {
+        "name": "on open the pane does not slide (the modal has its own entrance)",
+        "value": {
+          "animated": false,
+          "maxAbsTranslateX": 0
+        },
+        "rule": "no pane motion",
+        "pass": true
+      },
+      {
+        "name": "transition on Next: fade + 8 px slide",
+        "value": {
+          "minOpacity": 1,
+          "startTranslateX": 0,
+          "settledAtMs": null
+        },
+        "rule": "opacity from < 0.5, slide +8 px, settled by ~180 ms (+ 2 frames)",
+        "pass": false
+      },
+      {
+        "name": "transition on Back: fade + 8 px slide",
+        "value": {
+          "minOpacity": 1,
+          "startTranslateX": 0,
+          "settledAtMs": null
+        },
+        "rule": "opacity from < 0.5, slide -8 px, settled by ~180 ms (+ 2 frames)",
+        "pass": false
+      },
+      {
+        "name": "answering does not move the check pane",
+        "value": -16,
+        "rule": "block top diff <= 0.5 px",
+        "pass": false
+      },
+      {
+        "name": "level \"The start rule\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            152,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Static vs smart retries\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Max retries & grace period\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Hard declines\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Card network limits\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Invoice queuing\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Paid outside Rev Rec\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            152,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Record back & webhooks\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            148,
+            190,
+            198
+          ],
+          "paneHeight": 256,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "no page errors",
+        "value": [],
+        "rule": "none",
+        "pass": true
+      }
+    ],
+    "passed": 45,
+    "failed": 13
+  },
+  "after": {
+    "measuredAt": "2026-10-26T20:33:43.194Z",
+    "viewport": "1440x1000",
+    "level": 1,
+    "panes": {
+      "idea": {
+        "panel": {
+          "x": 384,
+          "y": 240,
+          "width": 672,
+          "height": 520,
+          "right": 1056,
+          "bottom": 760,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 670
+        },
+        "header": {
+          "x": 385,
+          "y": 241,
+          "width": 670,
+          "height": 109,
+          "right": 1055,
+          "bottom": 350,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "24px",
+            "24px",
+            "24px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 409,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 518.1,
+          "bottom": 291,
+          "cx": 463.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 409,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 921,
+          "bottom": 325,
+          "cx": 665,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 409,
+          "y": 366,
+          "width": 622,
+          "height": 32,
+          "right": 1031,
+          "bottom": 398,
+          "cx": 720,
+          "cy": 382
+        },
+        "circles": [
+          {
+            "x": 409,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 441,
+            "bottom": 398,
+            "cx": 425,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(36, 125, 249)"
+          },
+          {
+            "x": 661.8,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 693.8,
+            "bottom": 398,
+            "cx": 677.8,
+            "cy": 382,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 950.6,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 982.6,
+            "bottom": 398,
+            "cx": 966.6,
+            "cy": 382,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgb(255, 255, 255)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 488.1,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 649.8,
+            "bottom": 382.5,
+            "cx": 569,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          },
+          {
+            "x": 777,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 938.6,
+            "bottom": 382.5,
+            "cx": 857.8,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 449,
+            "y": 372,
+            "width": 27.1,
+            "height": 20,
+            "right": 476.1,
+            "bottom": 392,
+            "cx": 462.6,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "600",
+            "lineHeight": "20px",
+            "color": "rgb(34, 37, 48)"
+          },
+          {
+            "text": "Real value",
+            "x": 701.8,
+            "y": 372,
+            "width": 63.2,
+            "height": 20,
+            "right": 765,
+            "bottom": 392,
+            "cx": 733.4,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(153, 160, 174)"
+          },
+          {
+            "text": "Check",
+            "x": 990.6,
+            "y": 372,
+            "width": 40.4,
+            "height": 20,
+            "right": 1031,
+            "bottom": 392,
+            "cx": 1010.8,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(153, 160, 174)"
+          }
+        ],
+        "pane": {
+          "x": 409,
+          "y": 422,
+          "width": 622,
+          "height": 240,
+          "right": 1031,
+          "bottom": 662,
+          "cx": 720,
+          "cy": 542
+        },
+        "block": {
+          "x": 440,
+          "y": 454,
+          "width": 560,
+          "height": 176,
+          "right": 1000,
+          "bottom": 630,
+          "cx": 720,
+          "cy": 542,
+          "source": "data-learn"
+        },
+        "badge": {
+          "x": 672,
+          "y": 454,
+          "width": 96,
+          "height": 96,
+          "right": 768,
+          "bottom": 550,
+          "cx": 720,
+          "cy": 502
+        },
+        "headline": {
+          "x": 440,
+          "y": 566,
+          "width": 560,
+          "height": 64,
+          "right": 1000,
+          "bottom": 630,
+          "cx": 720,
+          "cy": 598,
+          "fontSize": "22px",
+          "fontWeight": "600",
+          "lineHeight": "32px",
+          "color": "rgb(34, 37, 48)"
+        },
+        "footer": {
+          "x": 409,
+          "y": 686,
+          "width": 622,
+          "height": 49,
+          "right": 1031,
+          "bottom": 735,
+          "cx": 720,
+          "cy": 710.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Next",
+            "x": 894,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 1031,
+            "bottom": 735,
+            "cx": 962.5,
+            "cy": 719
+          }
+        ],
+        "footerLink": {
+          "x": 409,
+          "y": 709,
+          "width": 122.1,
+          "height": 20,
+          "right": 531.1,
+          "bottom": 729,
+          "cx": 470,
+          "cy": 719
+        }
+      },
+      "value": {
+        "panel": {
+          "x": 384,
+          "y": 240,
+          "width": 672,
+          "height": 520,
+          "right": 1056,
+          "bottom": 760,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 670
+        },
+        "header": {
+          "x": 385,
+          "y": 241,
+          "width": 670,
+          "height": 109,
+          "right": 1055,
+          "bottom": 350,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "24px",
+            "24px",
+            "24px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 409,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 518.1,
+          "bottom": 291,
+          "cx": 463.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 409,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 921,
+          "bottom": 325,
+          "cx": 665,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 409,
+          "y": 366,
+          "width": 622,
+          "height": 32,
+          "right": 1031,
+          "bottom": 398,
+          "cx": 720,
+          "cy": 382
+        },
+        "circles": [
+          {
+            "x": 409,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 441,
+            "bottom": 398,
+            "cx": 425,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 660.9,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 692.9,
+            "bottom": 398,
+            "cx": 676.9,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(36, 125, 249)"
+          },
+          {
+            "x": 950.6,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 982.6,
+            "bottom": 398,
+            "cx": 966.6,
+            "cy": 382,
+            "borderColor": "rgb(225, 228, 234)",
+            "background": "rgb(255, 255, 255)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 487.6,
+            "y": 381.5,
+            "width": 161.3,
+            "height": 1,
+            "right": 648.9,
+            "bottom": 382.5,
+            "cx": 568.2,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          },
+          {
+            "x": 777.3,
+            "y": 381.5,
+            "width": 161.3,
+            "height": 1,
+            "right": 938.6,
+            "bottom": 382.5,
+            "cx": 858,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 449,
+            "y": 372,
+            "width": 26.6,
+            "height": 20,
+            "right": 475.6,
+            "bottom": 392,
+            "cx": 462.3,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(82, 88, 102)"
+          },
+          {
+            "text": "Real value",
+            "x": 700.9,
+            "y": 372,
+            "width": 64.5,
+            "height": 20,
+            "right": 765.3,
+            "bottom": 392,
+            "cx": 733.1,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "600",
+            "lineHeight": "20px",
+            "color": "rgb(34, 37, 48)"
+          },
+          {
+            "text": "Check",
+            "x": 990.6,
+            "y": 372,
+            "width": 40.4,
+            "height": 20,
+            "right": 1031,
+            "bottom": 392,
+            "cx": 1010.8,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(153, 160, 174)"
+          }
+        ],
+        "pane": {
+          "x": 409,
+          "y": 422,
+          "width": 622,
+          "height": 240,
+          "right": 1031,
+          "bottom": 662,
+          "cx": 720,
+          "cy": 542
+        },
+        "block": {
+          "x": 605.5,
+          "y": 466,
+          "width": 228.9,
+          "height": 152,
+          "right": 834.5,
+          "bottom": 618,
+          "cx": 720,
+          "cy": 542,
+          "source": "data-learn"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 409,
+          "y": 686,
+          "width": 622,
+          "height": 49,
+          "right": 1031,
+          "bottom": 735,
+          "cx": 720,
+          "cy": 710.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 745,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 882,
+            "bottom": 735,
+            "cx": 813.5,
+            "cy": 719
+          },
+          {
+            "text": "Next",
+            "x": 894,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 1031,
+            "bottom": 735,
+            "cx": 962.5,
+            "cy": 719
+          }
+        ],
+        "footerLink": {
+          "x": 409,
+          "y": 709,
+          "width": 122.1,
+          "height": 20,
+          "right": 531.1,
+          "bottom": 729,
+          "cx": 470,
+          "cy": 719
+        }
+      },
+      "check": {
+        "panel": {
+          "x": 384,
+          "y": 240,
+          "width": 672,
+          "height": 520,
+          "right": 1056,
+          "bottom": 760,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 670
+        },
+        "header": {
+          "x": 385,
+          "y": 241,
+          "width": 670,
+          "height": 109,
+          "right": 1055,
+          "bottom": 350,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "24px",
+            "24px",
+            "24px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 409,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 518.1,
+          "bottom": 291,
+          "cx": 463.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 409,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 921,
+          "bottom": 325,
+          "cx": 665,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 409,
+          "y": 366,
+          "width": 622,
+          "height": 32,
+          "right": 1031,
+          "bottom": 398,
+          "cx": 720,
+          "cy": 382
+        },
+        "circles": [
+          {
+            "x": 409,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 441,
+            "bottom": 398,
+            "cx": 425,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 661.1,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 693.1,
+            "bottom": 398,
+            "cx": 677.1,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 950,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 982,
+            "bottom": 398,
+            "cx": 966,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(36, 125, 249)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 487.6,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 649.1,
+            "bottom": 382.5,
+            "cx": 568.4,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          },
+          {
+            "x": 776.4,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 938,
+            "bottom": 382.5,
+            "cx": 857.2,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 449,
+            "y": 372,
+            "width": 26.6,
+            "height": 20,
+            "right": 475.6,
+            "bottom": 392,
+            "cx": 462.3,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(82, 88, 102)"
+          },
+          {
+            "text": "Real value",
+            "x": 701.1,
+            "y": 372,
+            "width": 63.2,
+            "height": 20,
+            "right": 764.4,
+            "bottom": 392,
+            "cx": 732.8,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(82, 88, 102)"
+          },
+          {
+            "text": "Check",
+            "x": 990,
+            "y": 372,
+            "width": 41,
+            "height": 20,
+            "right": 1031,
+            "bottom": 392,
+            "cx": 1010.5,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "600",
+            "lineHeight": "20px",
+            "color": "rgb(34, 37, 48)"
+          }
+        ],
+        "pane": {
+          "x": 409,
+          "y": 422,
+          "width": 622,
+          "height": 240,
+          "right": 1031,
+          "bottom": 662,
+          "cx": 720,
+          "cy": 542
+        },
+        "block": {
+          "x": 409,
+          "y": 427,
+          "width": 622,
+          "height": 230,
+          "right": 1031,
+          "bottom": 657,
+          "cx": 720,
+          "cy": 542,
+          "source": "data-learn"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 409,
+          "y": 686,
+          "width": 622,
+          "height": 49,
+          "right": 1031,
+          "bottom": 735,
+          "cx": 720,
+          "cy": 710.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 745,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 882,
+            "bottom": 735,
+            "cx": 813.5,
+            "cy": 719
+          },
+          {
+            "text": "Done",
+            "x": 894,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 1031,
+            "bottom": 735,
+            "cx": 962.5,
+            "cy": 719
+          }
+        ],
+        "footerLink": {
+          "x": 409,
+          "y": 709,
+          "width": 122.1,
+          "height": 20,
+          "right": 531.1,
+          "bottom": 729,
+          "cx": 470,
+          "cy": 719
+        }
+      },
+      "checkAnswered": {
+        "panel": {
+          "x": 384,
+          "y": 240,
+          "width": 672,
+          "height": 520,
+          "right": 1056,
+          "bottom": 760,
+          "cx": 720,
+          "cy": 500,
+          "clientLeft": 1,
+          "clientWidth": 670
+        },
+        "header": {
+          "x": 385,
+          "y": 241,
+          "width": 670,
+          "height": 109,
+          "right": 1055,
+          "bottom": 350,
+          "cx": 720,
+          "cy": 295.5,
+          "padding": [
+            "24px",
+            "24px",
+            "24px",
+            "24px"
+          ],
+          "borderBottomWidth": "1px"
+        },
+        "title": {
+          "x": 409,
+          "y": 267,
+          "width": 109.1,
+          "height": 24,
+          "right": 518.1,
+          "bottom": 291,
+          "cx": 463.5,
+          "cy": 279
+        },
+        "description": {
+          "x": 409,
+          "y": 301,
+          "width": 512,
+          "height": 24,
+          "right": 921,
+          "bottom": 325,
+          "cx": 665,
+          "cy": 313
+        },
+        "stepper": {
+          "x": 409,
+          "y": 366,
+          "width": 622,
+          "height": 32,
+          "right": 1031,
+          "bottom": 398,
+          "cx": 720,
+          "cy": 382
+        },
+        "circles": [
+          {
+            "x": 409,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 441,
+            "bottom": 398,
+            "cx": 425,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 661.1,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 693.1,
+            "bottom": 398,
+            "cx": 677.1,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(255, 255, 255)"
+          },
+          {
+            "x": 950,
+            "y": 366,
+            "width": 32,
+            "height": 32,
+            "right": 982,
+            "bottom": 398,
+            "cx": 966,
+            "cy": 382,
+            "borderColor": "rgb(36, 125, 249)",
+            "background": "rgb(36, 125, 249)"
+          }
+        ],
+        "connectors": [
+          {
+            "x": 487.6,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 649.1,
+            "bottom": 382.5,
+            "cx": 568.4,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          },
+          {
+            "x": 776.4,
+            "y": 381.5,
+            "width": 161.6,
+            "height": 1,
+            "right": 938,
+            "bottom": 382.5,
+            "cx": 857.2,
+            "cy": 382,
+            "borderTopWidth": "0px",
+            "borderTopColor": "rgb(229, 231, 235)",
+            "background": "rgb(225, 228, 234)"
+          }
+        ],
+        "labels": [
+          {
+            "text": "Idea",
+            "x": 449,
+            "y": 372,
+            "width": 26.6,
+            "height": 20,
+            "right": 475.6,
+            "bottom": 392,
+            "cx": 462.3,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(82, 88, 102)"
+          },
+          {
+            "text": "Real value",
+            "x": 701.1,
+            "y": 372,
+            "width": 63.2,
+            "height": 20,
+            "right": 764.4,
+            "bottom": 392,
+            "cx": 732.8,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "lineHeight": "20px",
+            "color": "rgb(82, 88, 102)"
+          },
+          {
+            "text": "Check",
+            "x": 990,
+            "y": 372,
+            "width": 41,
+            "height": 20,
+            "right": 1031,
+            "bottom": 392,
+            "cx": 1010.5,
+            "cy": 382,
+            "fontSize": "14px",
+            "fontWeight": "600",
+            "lineHeight": "20px",
+            "color": "rgb(34, 37, 48)"
+          }
+        ],
+        "pane": {
+          "x": 409,
+          "y": 422,
+          "width": 622,
+          "height": 240,
+          "right": 1031,
+          "bottom": 662,
+          "cx": 720,
+          "cy": 542
+        },
+        "block": {
+          "x": 409,
+          "y": 427,
+          "width": 622,
+          "height": 230,
+          "right": 1031,
+          "bottom": 657,
+          "cx": 720,
+          "cy": 542,
+          "source": "data-learn"
+        },
+        "badge": null,
+        "headline": null,
+        "footer": {
+          "x": 409,
+          "y": 686,
+          "width": 622,
+          "height": 49,
+          "right": 1031,
+          "bottom": 735,
+          "cx": 720,
+          "cy": 710.5,
+          "borderTopWidth": "1px"
+        },
+        "footerButtons": [
+          {
+            "text": "Back",
+            "x": 745,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 882,
+            "bottom": 735,
+            "cx": 813.5,
+            "cy": 719
+          },
+          {
+            "text": "Done",
+            "x": 894,
+            "y": 703,
+            "width": 137,
+            "height": 32,
+            "right": 1031,
+            "bottom": 735,
+            "cx": 962.5,
+            "cy": 719
+          }
+        ],
+        "footerLink": {
+          "x": 409,
+          "y": 709,
+          "width": 122.1,
+          "height": 20,
+          "right": 531.1,
+          "bottom": 729,
+          "cx": 470,
+          "cy": 719
+        }
+      }
+    },
+    "transitions": {
+      "open": {
+        "animated": false,
+        "minOpacity": 1,
+        "startTranslateX": 0,
+        "maxAbsTranslateX": 0,
+        "settledAtMs": null,
+        "samples": [
+          {
+            "t": 32,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 34,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 50,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 67,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 83,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 100,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 116,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 133,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 149,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 167,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 183,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 200,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 216,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 233,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 249,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 266,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 283,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 300,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 316,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 333,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 350,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 367,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 383,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 400,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      },
+      "next": {
+        "animated": true,
+        "minOpacity": 0,
+        "startTranslateX": 8,
+        "maxAbsTranslateX": 8,
+        "settledAtMs": 193,
+        "samples": [
+          {
+            "t": 10,
+            "opacity": 0,
+            "translateX": 8
+          },
+          {
+            "t": 30,
+            "opacity": 0.031,
+            "translateX": 8
+          },
+          {
+            "t": 43,
+            "opacity": 0.097,
+            "translateX": 7.6
+          },
+          {
+            "t": 60,
+            "opacity": 0.201,
+            "translateX": 7.1
+          },
+          {
+            "t": 77,
+            "opacity": 0.337,
+            "translateX": 6.3
+          },
+          {
+            "t": 93,
+            "opacity": 0.492,
+            "translateX": 5.2
+          },
+          {
+            "t": 110,
+            "opacity": 0.649,
+            "translateX": 4
+          },
+          {
+            "t": 126,
+            "opacity": 0.787,
+            "translateX": 2.7
+          },
+          {
+            "t": 143,
+            "opacity": 0.894,
+            "translateX": 1.7
+          },
+          {
+            "t": 159,
+            "opacity": 0.964,
+            "translateX": 0.8
+          },
+          {
+            "t": 177,
+            "opacity": 0.997,
+            "translateX": 0.3
+          },
+          {
+            "t": 193,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 210,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 226,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 243,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 259,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 277,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 293,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 309,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 326,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 343,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 359,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 377,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 393,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 410,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      },
+      "back": {
+        "animated": true,
+        "minOpacity": 0,
+        "startTranslateX": -8,
+        "maxAbsTranslateX": 8,
+        "settledAtMs": 196,
+        "samples": [
+          {
+            "t": 12,
+            "opacity": 0,
+            "translateX": -8
+          },
+          {
+            "t": 30,
+            "opacity": 0.045,
+            "translateX": -7.9
+          },
+          {
+            "t": 46,
+            "opacity": 0.12,
+            "translateX": -7.6
+          },
+          {
+            "t": 62,
+            "opacity": 0.233,
+            "translateX": -7
+          },
+          {
+            "t": 79,
+            "opacity": 0.375,
+            "translateX": -6.1
+          },
+          {
+            "t": 96,
+            "opacity": 0.533,
+            "translateX": -4.9
+          },
+          {
+            "t": 113,
+            "opacity": 0.687,
+            "translateX": -3.7
+          },
+          {
+            "t": 130,
+            "opacity": 0.818,
+            "translateX": -2.4
+          },
+          {
+            "t": 146,
+            "opacity": 0.916,
+            "translateX": -1.4
+          },
+          {
+            "t": 162,
+            "opacity": 0.976,
+            "translateX": -0.6
+          },
+          {
+            "t": 180,
+            "opacity": 0.999,
+            "translateX": -0.2
+          },
+          {
+            "t": 196,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 213,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 229,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 246,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 262,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 279,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 296,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 313,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 329,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 346,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 362,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 379,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 396,
+            "opacity": 1,
+            "translateX": 0
+          },
+          {
+            "t": 413,
+            "opacity": 1,
+            "translateX": 0
+          }
+        ]
+      }
+    },
+    "levels": [
+      {
+        "title": "The start rule",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 152,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Static vs smart retries",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Max retries & grace period",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Hard declines",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Card network limits",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Invoice queuing",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Paid outside Rev Rec",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 152,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      },
+      {
+        "title": "Record back & webhooks",
+        "panes": [
+          {
+            "pane": "idea",
+            "blockHeight": 176,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": 2
+          },
+          {
+            "pane": "value",
+            "blockHeight": 190,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          },
+          {
+            "pane": "check",
+            "blockHeight": 230,
+            "paneHeight": 240,
+            "footerY": 686,
+            "headlineLines": null
+          }
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "name": "idea: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors same length",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "idea: connectors same colour",
+        "value": [
+          "rgb(225, 228, 234)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "idea: labels same font size",
+        "value": [
+          "14px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "idea: label weights (active bold)",
+        "value": [
+          "600",
+          "500",
+          "500"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": true
+      },
+      {
+        "name": "idea: block centred between stepper and footer",
+        "value": {
+          "above": 56,
+          "below": 56,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "idea: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "idea: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "value: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors same length",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "value: connectors same colour",
+        "value": [
+          "rgb(225, 228, 234)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "value: labels same font size",
+        "value": [
+          "14px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "value: label weights (active bold)",
+        "value": [
+          "500",
+          "600",
+          "500"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": true
+      },
+      {
+        "name": "value: block centred between stepper and footer",
+        "value": {
+          "above": 68,
+          "below": 68,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "value: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "value: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "check: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors same length",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "check: connectors same colour",
+        "value": [
+          "rgb(225, 228, 234)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "check: labels same font size",
+        "value": [
+          "14px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "check: label weights (active bold)",
+        "value": [
+          "500",
+          "500",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": true
+      },
+      {
+        "name": "check: block centred between stepper and footer",
+        "value": {
+          "above": 29,
+          "below": 29,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "check: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "check: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: circle centres on one y",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors same length",
+        "value": 0,
+        "rule": "spread <= 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors 1 px",
+        "value": [
+          1,
+          1
+        ],
+        "rule": "all = 1 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: connectors same colour",
+        "value": [
+          "rgb(225, 228, 234)"
+        ],
+        "rule": "one colour",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: labels same font size",
+        "value": [
+          "14px"
+        ],
+        "rule": "one size",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: label weights (active bold)",
+        "value": [
+          "500",
+          "500",
+          "600"
+        ],
+        "rule": "active >= 600, others equal and < 600",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: block centred between stepper and footer",
+        "value": {
+          "above": 29,
+          "below": 29,
+          "diff": 0
+        },
+        "rule": "|above - below| <= 4 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: footer top same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "checkAnswered: modal height same as idea pane",
+        "value": 0,
+        "rule": "diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "header padding 24 px",
+        "value": [
+          "24px",
+          "24px",
+          "24px",
+          "24px"
+        ],
+        "rule": "all sides 24 px",
+        "pass": true
+      },
+      {
+        "name": "stepper 16 px below the divider",
+        "value": 16,
+        "rule": "16 +- 1 px",
+        "pass": true
+      },
+      {
+        "name": "stepper spans the content width (24 px side padding)",
+        "value": {
+          "left": 24,
+          "right": 24
+        },
+        "rule": "24 +- 1 px each side",
+        "pass": true
+      },
+      {
+        "name": "badge 96 px",
+        "value": [
+          96,
+          96
+        ],
+        "rule": "96 x 96",
+        "pass": true
+      },
+      {
+        "name": "badge to headline 16 px",
+        "value": 16,
+        "rule": "16 +- 1 px",
+        "pass": true
+      },
+      {
+        "name": "headline 22 px",
+        "value": "22px",
+        "rule": "22px",
+        "pass": true
+      },
+      {
+        "name": "headline at most 2 lines",
+        "value": 2,
+        "rule": "<= 2",
+        "pass": true
+      },
+      {
+        "name": "headline max width 560 px",
+        "value": 560,
+        "rule": "<= 560 px",
+        "pass": true
+      },
+      {
+        "name": "headline centred in the panel",
+        "value": 0,
+        "rule": "centre x +- 1 px",
+        "pass": true
+      },
+      {
+        "name": "on open the pane does not slide (the modal has its own entrance)",
+        "value": {
+          "animated": false,
+          "maxAbsTranslateX": 0
+        },
+        "rule": "no pane motion",
+        "pass": true
+      },
+      {
+        "name": "transition on Next: fade + 8 px slide",
+        "value": {
+          "minOpacity": 0,
+          "startTranslateX": 8,
+          "settledAtMs": 193
+        },
+        "rule": "opacity from < 0.5, slide +8 px, settled by ~180 ms (+ 2 frames)",
+        "pass": true
+      },
+      {
+        "name": "transition on Back: fade + 8 px slide",
+        "value": {
+          "minOpacity": 0,
+          "startTranslateX": -8,
+          "settledAtMs": 196
+        },
+        "rule": "opacity from < 0.5, slide -8 px, settled by ~180 ms (+ 2 frames)",
+        "pass": true
+      },
+      {
+        "name": "answering does not move the check pane",
+        "value": 0,
+        "rule": "block top diff <= 0.5 px",
+        "pass": true
+      },
+      {
+        "name": "level \"The start rule\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            152,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Static vs smart retries\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Max retries & grace period\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Hard declines\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Card network limits\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Invoice queuing\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Paid outside Rev Rec\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            152,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "level \"Record back & webhooks\": panes fit, footer still, headline lines",
+        "value": {
+          "blockHeights": [
+            176,
+            190,
+            230
+          ],
+          "paneHeight": 240,
+          "footerSpread": 0,
+          "headlineLines": 2
+        },
+        "rule": "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+        "pass": true
+      },
+      {
+        "name": "no page errors",
+        "value": [],
+        "rule": "none",
+        "pass": true
+      }
+    ],
+    "passed": 58,
+    "failed": 0
+  }
+}
