@@ -253,7 +253,6 @@ let make = (~storyIdFromUrl: option<string>) => {
   let inlineActions =
     [
       actions.paidInApp ? Some(("Customer pays in app", onPaidInApp)) : None,
-      actions.reportAgain ? Some(("Report another failure", onReportAgain)) : None,
     ]->Array.filterMap(action => action)
 
   let warnings = switch story {
@@ -336,6 +335,7 @@ let make = (~storyIdFromUrl: option<string>) => {
             showDiagram
             setShowDiagram
             inlineActions
+            onReportAgain=?{actions.reportAgain ? Some(onReportAgain) : None}
             isBusy
             onNext
             onRowClick={row => setDrawerContent(_ => Some(StepDetails(row)))}

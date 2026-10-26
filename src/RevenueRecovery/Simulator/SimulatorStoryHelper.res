@@ -73,7 +73,7 @@ module ActionMenu = {
         <Popover.Panel className="absolute z-20 right-0 top-8">
           {panelProps =>
             <div
-              className="relative flex flex-col bg-white py-1 overflow-hidden rounded ring-1 ring-black ring-opacity-5 w-52">
+              className="relative flex flex-col bg-white py-1 overflow-hidden rounded ring-1 ring-black ring-opacity-5 w-64">
               {options
               ->Array.map(((text, onClick)) =>
                 <Navbar.MenuOption
@@ -535,25 +535,23 @@ module StepCard = {
   }
 }
 
-// The proxy's note when Rev Rec has not booked a retry long after it should have (sandbox
-// scheduler). It replaces the countdown; "?" opens the drawer.
-module WaitingNoteLine = {
+let pillStyle = `h-9 w-fit flex items-center gap-2 px-3 rounded-full ${body.md.semibold}`
+
+// The proxy sets `waiting` when Rev Rec has not booked a retry long after it should have (sandbox
+// scheduler). A quiet amber pill says so in place of the next action; "?" opens the why.
+module StallPill = {
   @react.component
-  let make = (~waiting: waitingNote, ~onWhy) => {
-    <div
-      className={`w-fit flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 rounded-lg border bg-nd_orange-50 border-nd_orange-200 text-nd_orange-600 ${body.md.semibold}`}>
-      <Icon name="nd-toast-warning" size=16 />
-      <span> {waiting.text->React.string} </span>
-      <span className={`${body.md.medium} opacity-80`}>
-        {`· ${waiting.minutes->Int.toString} min`->React.string}
-      </span>
+  let make = (~onWhy) => {
+    <div className={`${pillStyle} border bg-nd_orange-50 border-nd_orange-200 text-nd_orange-600`}>
+      <span> {"Rev Rec hasn't booked a retry yet · sandbox"->React.string} </span>
       <HelpButton onClick=onWhy />
     </div>
   }
 }
 
-// The pause control on the last step: "Next" reveals one more step; when that step has not
-// arrived yet it waits, with the countdown to the booked retry, and shows it when it lands
+// The one next action on the last step (UX-PASS-2 A4). "Next" reveals one more step; when that
+// step has not arrived yet a quiet pill waits for it (with the countdown to a booked retry). A
+// stalled sandbox shows the amber pill instead. "Customer pays in app" sits beside, secondary.
 module NextControls = {
   @react.component
   let make = (
@@ -567,40 +565,35 @@ module NextControls = {
     ~inlineActions: array<(string, unit => unit)>,
     ~isBusy,
   ) => {
-    <RenderIf condition={showNext || inlineActions->Array.length > 0}>
+    let isStalled = waiting->Option.isSome
+    <RenderIf condition={showNext || isStalled || inlineActions->Array.length > 0}>
       // Clicks here must not open the step's drawer
       <div
         className="flex flex-wrap items-center gap-3 pt-3"
         onClick={event => event->ReactEvent.Mouse.stopPropagation}>
-        <RenderIf condition=showNext>
-          {switch (isWaiting, waiting) {
-          | (true, Some(waiting)) => <WaitingNoteLine waiting onWhy=onWaitingWhy />
-          | (true, None) =>
-            <div
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-nd_primary_blue-50 text-nd_primary_blue-450 ${body.md.semibold}`}>
-              <Loadericon size=14 iconColor="text-nd_primary_blue-450" />
-              <span> {"Waiting for Rev Rec…"->React.string} </span>
-              {switch nextRetryAt {
-              | Some(time) =>
-                <span>
-                  {"("->React.string}
-                  <Countdown nextRetryAt=time />
-                  {")"->React.string}
-                </span>
-              | None => React.null
-              }}
-            </div>
-          | (false, _) =>
-            <Button text=nextLabel buttonType=Primary buttonSize=Medium onClick={_ => onNext()} />
-          }}
-        </RenderIf>
+        {switch (isStalled, showNext, isWaiting, nextRetryAt) {
+        | (true, _, _, _) => <StallPill onWhy=onWaitingWhy />
+        | (false, false, _, _) => React.null
+        | (false, true, true, Some(time)) =>
+          <div className={`${pillStyle} bg-nd_gray-150 text-nd_gray-600`}>
+            {"Rev Rec retries "->React.string}
+            <Countdown nextRetryAt=time />
+          </div>
+        | (false, true, true, None) =>
+          <div className={`${pillStyle} bg-nd_gray-150 text-nd_gray-600`}>
+            <Loadericon size=14 iconColor="text-nd_gray-500" />
+            {"Waiting for Rev Rec…"->React.string}
+          </div>
+        | (false, true, false, _) =>
+          <Button text=nextLabel buttonType=Primary buttonSize=Medium onClick={_ => onNext()} />
+        }}
         {inlineActions
         ->Array.map(((text, onClick)) =>
           <Button
             key=text
             text
             buttonType=Secondary
-            buttonSize=Small
+            buttonSize=Medium
             buttonState={isBusy ? Disabled : Normal}
             onClick={_ => onClick()}
           />

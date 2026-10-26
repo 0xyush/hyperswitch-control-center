@@ -726,6 +726,8 @@ module StoryView = {
     ~showDiagram,
     ~setShowDiagram,
     ~inlineActions,
+    // "Billing retries once more (fails)" in the menu, when the proxy allows it
+    ~onReportAgain: option<unit => unit>=?,
     ~isBusy,
     ~onNext,
     ~onRowClick,
@@ -745,9 +747,7 @@ module StoryView = {
     let hasHistory = story->Option.mapOr(false, s => s.stageHistory->Array.length > 0)
     let hasStory = story->Option.isSome || optimistic->Option.isSome
     let nextLabel =
-      visibleItems->Array.some(item => item.phase >= 3)
-        ? "Next step →"
-        : "Next: let Rev Rec retry →"
+      visibleItems->Array.some(item => item.phase >= 3) ? "Next step →" : "Let Rev Rec retry →"
     // Rev Rec is overdue to book a retry: the proxy's note replaces the "Working…" line
     let waiting = isFinished ? None : story->Option.flatMap(s => s.waiting)
     let showWorking = hasStory && !isFinished && !showNext && waiting->Option.isNone
@@ -761,6 +761,9 @@ module StoryView = {
     let menuOptions =
       [
         Some((autoPlay ? "Turn auto-play off" : "Turn auto-play on", () => setAutoPlay(!autoPlay))),
+        isFinished
+          ? None
+          : onReportAgain->Option.map(onClick => ("Billing retries once more (fails)", onClick)),
         hasHistory ? Some(("Invoice states", onStatesClick)) : None,
         story->Option.isSome
           ? Some((
@@ -793,10 +796,6 @@ module StoryView = {
         </p>
       } else {
         <>
-          {switch waiting {
-          | Some(waiting) => <WaitingNoteLine waiting onWhy=onWaitingClick />
-          | None => React.null
-          }}
           <div className="max-w-[760px] w-full flex flex-col gap-4">
             <RenderIf condition=showWorking>
               <div className={`flex items-center gap-2 ${body.md.medium} text-nd_gray-600`}>
