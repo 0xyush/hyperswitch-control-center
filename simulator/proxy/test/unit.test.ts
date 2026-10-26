@@ -52,7 +52,7 @@ const { matchRule } = await import("../src/passthrough.ts");
 const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
 const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
-const { parseStart } = await import("../src/story.ts");
+const { parseStart, revrecChargeWhy } = await import("../src/story.ts");
 const { parsePortfolio, setupStage } = await import("../src/portfolio.ts");
 const { parseStopAfter, portfolioConfig } = await import("../src/config.ts");
 const { createServer } = await import("../src/server.ts");
@@ -208,6 +208,20 @@ describe("presets and start body", () => {
         { status: 400 },
         JSON.stringify(body),
       );
+  });
+});
+
+describe("plain why lines", () => {
+  test("Rev Rec's own charge is said in words, with no attempt id", () => {
+    assert.equal(
+      revrecChargeWhy("charged"),
+      "Rev Rec charged the saved card. Stripe approved.",
+    );
+    assert.equal(
+      revrecChargeWhy("failure"),
+      "Rev Rec charged the saved card. Stripe declined.",
+    );
+    assert.match(revrecChargeWhy("pending"), /not given its final answer/);
   });
 });
 

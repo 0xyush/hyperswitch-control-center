@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.ts";
-import { HttpError, stageInfo, storyView } from "./story.ts";
+import { HttpError, revrecChargeWhy, stageInfo, storyView } from "./story.ts";
 
 type Row = {
   stepId: string;
@@ -49,8 +49,24 @@ function save() {
 }
 
 // Rows the presenter steps through: the story's own steps, not the live "pending" row.
+// Recordings marked before 26 Oct name the attempt id in a why line and raw task codes in an
+// explain line. They are said in plain words now, as live (the drawer's facts grid shows the ids).
+const OLD_ATTEMPT_WHY =
+  /^Attempt \S+, triggered by Rev Rec \(internal\), status (\w+)\.$/;
+const OLD_TASK_LINE = /^Rev Rec's retry task \(.*?\) is \w+: (.*) \[\w+\]\.$/;
+const plainLine = <T extends { text: string }>(w: T): T => {
+  const a = OLD_ATTEMPT_WHY.exec(w.text);
+  if (a) return { ...w, text: revrecChargeWhy(a[1]) };
+  const t = OLD_TASK_LINE.exec(w.text);
+  return t ? { ...w, text: `Rev Rec's retry task: ${t[1]}.` } : w;
+};
 const rowsOf = (view: any): Row[] =>
-  (view.timeline as Row[]).filter((r) => r.status !== "pending");
+  (view.timeline as Row[])
+    .filter((r) => r.status !== "pending")
+    .map((r) => ({
+      ...r,
+      why: ((r.why as { text: string }[] | undefined) ?? []).map(plainLine),
+    }));
 
 export function listRecordings() {
   return [...recordings.values()]
@@ -229,7 +245,7 @@ function replaySlice(view: any, n: number) {
     timeline: [...shown, ...pending],
     requests: (view.requests as any[]).filter((q) => stepIds.has(q.stepId)),
     explain: atFinal(stage)
-      ? view.explain
+      ? (view.explain as { text: string }[]).map(plainLine)
       : [
           {
             id: "status",

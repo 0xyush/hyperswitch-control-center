@@ -1373,6 +1373,15 @@ const readStartRule = async (p: ProfileRef) =>
   (await readRevRecConfig(p).catch(() => null))?.startRule ?? null;
 
 // Process-tracker business status codes in plain words (hyperswitch diesel_models/process_tracker.rs).
+// Why and explain lines are plain words with no ids: the drawer's facts grid shows the ids.
+export function revrecChargeWhy(status: string): string {
+  if (status === "charged")
+    return "Rev Rec charged the saved card. Stripe approved.";
+  if (status === "failure")
+    return "Rev Rec charged the saved card. Stripe declined.";
+  return "Rev Rec charged the saved card. Stripe has not given its final answer yet.";
+}
+
 const TASK_STATUS: Record<string, string> = {
   Pending: "waiting for its booked time",
   CALCULATE_WORKFLOW_SCHEDULED: "retry time chosen",
@@ -1738,10 +1747,7 @@ export async function storyView(storyId: string) {
             : "pending",
       source: "sandbox",
       why: [
-        {
-          source: "sandbox",
-          text: `Attempt ${a.id}, triggered by Rev Rec (internal), status ${a.status}.`,
-        },
+        { source: "sandbox", text: revrecChargeWhy(a.status) },
         {
           source: "recomputed",
           text: `Card network limit: ${i + 1} of about 20 Visa retries used on this card in 30 days (limit values to confirm).`,
@@ -1820,12 +1826,9 @@ export async function storyView(storyId: string) {
         `A retry task is still booked for ${utc(staleTaskAt)}. The sandbox does not cancel it when the invoice is paid.`,
       );
     else if (pt) {
-      const plain = TASK_STATUS[pt.business_status] ?? pt.status;
-      add(
-        "task",
-        "sandbox",
-        `Rev Rec's retry task (${pt.name ?? "task"}) is ${pt.status}: ${plain} [${pt.business_status}].`,
-      );
+      const plain =
+        TASK_STATUS[pt.business_status] ?? `its status is ${pt.status}`;
+      add("task", "sandbox", `Rev Rec's retry task: ${plain}.`);
     }
     if (recoveredBy === "billing")
       add(

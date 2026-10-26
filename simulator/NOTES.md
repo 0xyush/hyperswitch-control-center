@@ -425,3 +425,11 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - `GET /sim/portfolio/:runId` `invoices[].static` / `.smart` are now always objects. `setupStage` is `pending` (not created, or the first charge has not failed yet), `charged` (the billing system's charge failed: a Stripe payment id on the story) or `reported` (Rev Rec recorded the failure). A copy not created yet has null ids and `revrecAttempts` 0.
 
 - 2026-10-26 21:30 [A] **Portfolio `maxMinutes` must be one of the stop-after choices** (C's form sends floats). `POST /sim/portfolio/start` refuses any value not in `PORTFOLIO_STOP_AFTER_MINUTES` (default `10, 20, 45`), with a 400 that lists the choices. The default is still the largest choice. This replaces the 21:10 rule (any half minute in a range). Offline tests cover 0.5 with the list `0.5,1,2`, and 5, 7.5 and 30 refused with the default list.
+
+- 2026-10-26 21:50 [A] **No raw ids in why, explain or portfolio note lines** (B's drawer shows the ids in its facts grid, 4c3014312). Source labels are unchanged.
+  - Rev Rec's own charge row: `Attempt 0a_att_…, triggered by Rev Rec (internal), status charged.` is now `Rev Rec charged the saved card. Stripe approved.` (`declined` for a failure; `has not given its final answer yet` otherwise).
+  - Explain `task`: `Rev Rec's retry task (EXECUTE_WORKFLOW) is new: … [Pending].` is now `Rev Rec's retry task: waiting for its booked time.`
+  - Portfolio note: `Both runs use the same profile (pro_…, cascading)` is now `(retry mode cascading)`.
+  - Replay rewrites those two old lines in recordings at serve time, so the four recordings show the plain words too.
+  - A scan of 37 live story views and the 4 recordings found the attempt line as the only id in why and explain lines (108 hits).
+  - Row `text` still names the Stripe charge (`pi_…`): the drawer reads it from there when the attempt list has none.

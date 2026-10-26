@@ -107,14 +107,23 @@ const view = {
       "pick retry time → 01:00:58",
       "ok",
     ),
-    row(
-      "att_a2",
-      "2026-10-24T01:01:00Z",
-      "revrec",
-      "processor",
-      "charge saved card ••4242 → approved",
-      "ok",
-    ),
+    {
+      ...row(
+        "att_a2",
+        "2026-10-24T01:01:00Z",
+        "revrec",
+        "processor",
+        "charge saved card ••4242 → approved",
+        "ok",
+      ),
+      // As recordings marked before 26 Oct have it: the attempt id in the why line.
+      why: [
+        {
+          source: "sandbox",
+          text: "Attempt 0a_att_019a1b2c3d4e5f, triggered by Rev Rec (internal), status charged.",
+        },
+      ],
+    },
     row(
       "s5",
       "2026-10-24T01:01:05Z",
@@ -147,6 +156,11 @@ const view = {
   explain: [
     { id: "status", source: "sandbox", text: "final status" },
     { id: "reason", source: "rule", text: "generic_decline means ..." },
+    {
+      id: "task",
+      source: "sandbox",
+      text: "Rev Rec's retry task (EXECUTE_WORKFLOW) is finish: the retry charged the card [COMPLETED_EXECUTE_TASK].",
+    },
   ],
   actions: {
     paidInApp: false,
@@ -235,6 +249,31 @@ test("a replay is sliced step by step", async () => {
     title: "Fixture",
   });
   assert.equal(end.actions.paidInApp, false);
+});
+
+test("replay why and explain lines carry no raw ids, at any step", async () => {
+  const ID = /\b(pi_|0a_pay_|0a_att_|pro_|mca_|cus_|pm_)/;
+  for (let n = 0; n <= 6; n++) {
+    const v = await replay(n);
+    const lines = [
+      ...v.explain.map((e: any) => e.text),
+      ...v.timeline.flatMap((r: any) => r.why.map((w: any) => w.text)),
+    ];
+    for (const text of lines)
+      assert.doesNotMatch(text, ID, `step ${n}: ${text}`);
+  }
+  const end = await replay();
+  const charge = end.timeline.find((r: any) => r.stepId === "att_a2");
+  assert.deepEqual(charge.why, [
+    {
+      source: "sandbox",
+      text: "Rev Rec charged the saved card. Stripe approved.",
+    },
+  ]);
+  assert.equal(
+    end.explain.find((e: any) => e.id === "task").text,
+    "Rev Rec's retry task: the retry charged the card.",
+  );
 });
 
 test("unknown story 404; marking through a forwarded call 403", async () => {

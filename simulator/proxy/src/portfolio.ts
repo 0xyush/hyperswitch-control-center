@@ -774,7 +774,8 @@ export async function portfolioView(runId: string) {
     warnings: [
       ...(sameProfile
         ? [
-            `Both runs use the same profile (${pair.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
+            // No ids in notes: the profile ids are in `profiles` above.
+            `Both runs use the same profile (retry mode ${modes[0] ?? "unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
           ]
         : []),
       ...pausesOf(run).map(
