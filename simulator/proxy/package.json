@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 test/*.test.ts",
     "test:unit": "node --test test/unit.test.ts",
-    "setup:profiles": "node scripts/setup-profiles.ts"
+    "setup:profiles": "node scripts/setup-profiles.ts",
+    "start:awake": "caffeinate -i node src/server.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -72,6 +72,7 @@ const BANK: Record<
 type Side = "static" | "smart";
 const SIDES: Side[] = ["static", "smart"];
 const TICK_MS = 30_000;
+const PAUSE_MS = 3 * TICK_MS;
 
 type Copy = {
   storyId: string;
@@ -115,6 +116,9 @@ type Run = {
   error: string | null;
   // The pair the run used. Runs before 24 Oct have none: both sides ran on the story profile.
   profiles?: Record<Side, ProfileRef>;
+  // Gaps of more than 90 s between ticks: the proxy did not run (on a laptop: sleep).
+  lastTickAt?: string;
+  pauses?: { from: string; to: string; minutes: number }[];
 };
 
 const pairOf = (run: Run): Record<Side, ProfileRef> =>
@@ -360,7 +364,18 @@ async function tick(run: Run) {
     return stopTimer(run);
   ticking.add(run.runId);
   try {
-    // A late tick (a slow sandbox, a busy machine) still ends the run at the cap.
+    // On 23 and 24 Oct the laptop went into idle sleep during runs; timers do not run then.
+    const now = new Date().toISOString();
+    if (
+      run.lastTickAt &&
+      Date.parse(now) - Date.parse(run.lastTickAt) > PAUSE_MS
+    ) {
+      const minutes =
+        Math.round((Date.parse(now) - Date.parse(run.lastTickAt)) / 6_000) / 10;
+      (run.pauses ??= []).push({ from: run.lastTickAt, to: now, minutes });
+    }
+    run.lastTickAt = now;
+    // A late tick (a slow sandbox, a sleeping machine) still ends the run at the cap.
     const elapsedMin = (Date.now() - Date.parse(run.startedAt)) / 60_000;
     if (run.status === "running" && elapsedMin >= run.dials.maxMinutes) {
       await poll(run);
@@ -547,6 +562,24 @@ try {
 // ---------- the result view (GET /sim/portfolio/:runId) ----------
 
 const LATE_FLIP_SEC = 90;
+
+// Runs before 26 Oct did not record pauses; their trend points (one per 30 s tick) show them.
+function pausesOf(run: Run) {
+  if (run.pauses) return run.pauses;
+  const at = (minute: number) =>
+    new Date(Date.parse(run.startedAt) + minute * 60_000).toISOString();
+  const out: { from: string; to: string; minutes: number }[] = [];
+  for (let k = 1; k < run.trend.length; k++) {
+    const gap = run.trend[k].minute - run.trend[k - 1].minute;
+    if (gap * 60_000 > PAUSE_MS)
+      out.push({
+        from: at(run.trend[k - 1].minute),
+        to: at(run.trend[k].minute),
+        minutes: gap,
+      });
+  }
+  return out;
+}
 const lateSec = (inv: PfInvoice) =>
   inv.flipAt && inv.flippedAt
     ? Math.max(
@@ -651,6 +684,7 @@ export async function portfolioView(runId: string) {
       source: "scripted",
     })),
     trend: run.trend,
+    pauses: pausesOf(run),
     invoices: run.invoices.map((inv) => ({
       i: inv.i,
       reason: inv.reason,
@@ -683,6 +717,10 @@ export async function portfolioView(runId: string) {
             `Both runs use the same profile (${pair.static.profileId}, ${modes[0] ?? "mode unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
           ]
         : []),
+      ...pausesOf(run).map(
+        (p) =>
+          `The proxy did not run from ${p.from.slice(11, 19)} to ${p.to.slice(11, 19)} UTC (${p.minutes} min; on a laptop, sleep). Bank flips and status reads in that window were late.`,
+      ),
       // The scripted bank must be on time to be a fair test. A late flip comes from the proxy
       // (a slow sandbox or a busy machine), not from Rev Rec.
       ...run.invoices
