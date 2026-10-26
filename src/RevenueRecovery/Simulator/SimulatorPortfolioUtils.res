@@ -41,19 +41,63 @@ let defaultDials: portfolioDials = {
   maxMinutes: 20,
 }
 
-// The proxy allows 10 invoices for now (portfolioConfig.maxInvoices); 25 waits for a raise
-let invoiceCountOptions: array<SelectBox.dropdownOption> = [
-  {label: "10", value: "10"},
-  {label: "25 (needs a higher proxy limit)", value: "25", isDisabled: true},
-]
-
-let maxMinutesOptions: array<SelectBox.dropdownOption> = [
-  {label: "10 minutes", value: "10"},
-  {label: "20 minutes", value: "20"},
-  {label: "45 minutes", value: "45"},
-]
+// The tiles of the form. The proxy allows 10 invoices for now (portfolioConfig.maxInvoices),
+// so 25 waits for a raise.
+let invoiceCounts = [10, 25]
+let maxInvoicesNow = 10
+let stopAfterMinutes = [10, 20, 45]
 
 let mixTotal = (mix: Dict.t<int>) => mix->Dict.valuesToArray->Array.reduce(0, (sum, w) => sum + w)
+
+// The decline mix bar: each reason's share in percent, and the four boundaries between the five
+// segments (cumulative percent). A drag moves one boundary in steps of 10%, one invoice in ten.
+let mixStep = 10
+
+let mixShares = (mix: Dict.t<int>) => {
+  let total = mix->mixTotal
+  let cumulative = ref(0)
+  let previous = ref(0)
+  reasons->Array.map(reason => {
+    cumulative := cumulative.contents + mix->Dict.get(reason)->Option.getOr(0)
+    let boundary =
+      total > 0
+        ? (cumulative.contents->Int.toFloat *. 100.0 /. total->Int.toFloat)->Math.round->Float.toInt
+        : 0
+    let share = boundary - previous.contents
+    previous := boundary
+    share
+  })
+}
+
+let mixBoundaries = (mix: Dict.t<int>) => {
+  let sum = ref(0)
+  mix
+  ->mixShares
+  ->Array.slice(~start=0, ~end=reasons->Array.length - 1)
+  ->Array.map(share => {
+    sum := sum.contents + share
+    sum.contents
+  })
+}
+
+// Back from boundaries to weights: the weights are the shares, so they add up to 100
+let mixFromBoundaries = (boundaries: array<int>) =>
+  reasons
+  ->Array.mapWithIndex((reason, index) => {
+    let low = index == 0 ? 0 : boundaries->Array.get(index - 1)->Option.getOr(0)
+    let high = boundaries->Array.get(index)->Option.getOr(100)
+    (reason, high - low)
+  })
+  ->Dict.fromArray
+
+let reasonColor = reason =>
+  switch reason {
+  | "insufficient_funds" => "bg-nd_primary_blue-450"
+  | "generic_decline" => "bg-nd_green-400"
+  | "processing_error" => "bg-nd_yellow-500"
+  | "stolen_card" => "bg-nd_red-400"
+  | _ => "bg-nd_purple-300"
+  }
 
 // POST /sim/portfolio/start body: amount in minor units; zero weights are left out
 let startBody = (dials: portfolioDials) => {
@@ -176,15 +220,19 @@ let formatMoney = minor =>
 // Copies that reached an end state, for the progress bar
 let finishedCopies = (card: sideCard) => card.recovered + card.terminated + card.cancelled
 
-// At the end of a run, a side with invoices but no Rev Rec attempts at all booked no retries
-let bookedNoRetries = (run: portfolioRun, card: sideCard) =>
-  run.status->isRunOver && card.invoices > 0 && card.revrecAttempts == 0
+// A side with invoices but no Rev Rec attempts booked no retries: at the end of the run, or
+// already while running when the other side has attempts
+let bookedNoRetries = (run: portfolioRun, ~card: sideCard, ~other: sideCard) =>
+  run.status != SettingUp &&
+  card.invoices > 0 &&
+  card.revrecAttempts == 0 &&
+  (run.status->isRunOver || other.revrecAttempts > 0)
 
 // The decider reason applies only to a smart profile
-let noRetriesText = (~mode) =>
+let noRetriesWhy = (~mode) =>
   mode == "smart"
-    ? `No retries were booked on this profile. ${SimulatorUtils.smartDeciderNote}`
-    : "No retries were booked on this profile."
+    ? "Smart mode needs a decider service; this sandbox has none yet."
+    : "The sandbox booked no retry task for these invoices."
 
 let hasFinishedCopy = (run: portfolioRun) =>
   run.staticCard->finishedCopies + run.smartCard->finishedCopies > 0

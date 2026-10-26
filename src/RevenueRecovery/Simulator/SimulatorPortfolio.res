@@ -50,102 +50,192 @@ module SectionCard = {
   }
 }
 
-// Left panel: the dials
-module DialsForm = {
-  @react.component
-  let make = (~dials: portfolioDials, ~setDials, ~isBusy, ~isRunning, ~onRun, ~onStop) => {
-    let total = dials.mix->mixTotal
-    let setWeight = (reason, weight) =>
-      setDials(prev => {
-        let mix = prev.mix->Dict.copy
-        mix->Dict.set(reason, weight)
-        {...prev, mix}
-      })
+@send external setPointerCapture: (Dom.element, Dom.eventPointerId) => unit = "setPointerCapture"
 
-    <div className={`${cardStyle} p-6 flex flex-col gap-5`}>
-      <div className="flex flex-col gap-1">
-        <p className={`${heading.sm.semibold} text-nd_gray-800`}>
-          {"Portfolio run"->React.string}
-        </p>
-        <p className={`${body.sm.medium} text-nd_gray-500`}>
-          {"The proxy creates each invoice twice: once on a static-retries profile and once on a Rev Rec (smart) profile. The customer's bank is scripted per decline reason."->React.string}
-        </p>
-      </div>
-      <SimulatorStoryHelper.SelectField
-        label="Number of invoices"
-        name="invoices"
-        options=invoiceCountOptions
-        value={dials.invoiceCount->Int.toString}
-        onChange={value =>
-          setDials(prev => {...prev, invoiceCount: value->Int.fromString->Option.getOr(10)})}
-      />
-      <SimulatorStoryHelper.SelectField
-        label="Stop after"
-        name="maxMinutes"
-        options=maxMinutesOptions
-        value={dials.maxMinutes->Int.toString}
-        onChange={value =>
-          setDials(prev => {...prev, maxMinutes: value->Int.fromString->Option.getOr(20)})}
-      />
-      <SimulatorStoryHelper.FormField label="Amount per invoice (USD)">
-        {InputFields.textInput(~customStyle="w-full border-nd_gray-200 rounded-lg")(
-          ~input=SimulatorStoryHelper.makeInput(
-            ~name="amount",
-            ~value=dials.amount,
-            ~onChange=text =>
-              setDials(prev => {
-                ...prev,
-                amount: text->String.replaceRegExp(%re("/[^\\d.]/g"), ""),
-              }),
-            ~onBlur=() =>
-              setDials(prev => {...prev, amount: prev.amount->SimulatorUtils.toAmountText}),
-          ),
-          ~placeholder="Enter amount",
-        )}
-      </SimulatorStoryHelper.FormField>
-      <SimulatorStoryHelper.FormField label="Decline mix">
-        <div className="flex flex-col gap-3 pt-1">
+// The decline mix: one stacked bar of five segments. Drag a boundary to move share between the
+// two segments next to it.
+module MixBar = {
+  @react.component
+  let make = (~mix, ~setMix, ~isDisabled) => {
+    let barRef = React.useRef(Nullable.null)
+    // While dragging: the boundaries that may move, and where the drag started (percent).
+    // Two boundaries sit on the same spot when a segment is 0%; the first move picks one.
+    let dragRef = React.useRef(None)
+    let shares = mix->mixShares
+    let boundaries = mix->mixBoundaries
+    let lastIndex = boundaries->Array.length - 1
+
+    let percentAt = event =>
+      switch barRef.current->Nullable.toOption {
+      | Some(element) =>
+        let rect = element->Window.getBoundingClientRect
+        let x = (event->ReactEvent.Pointer.clientX - rect.left)->Int.toFloat
+        Math.max(0.0, Math.min(100.0, x /. rect.width->Int.toFloat *. 100.0))
+      | None => 0.0
+      }
+
+    let onPointerDown = event =>
+      if !isDisabled {
+        let percent = event->percentAt
+        let distance = boundary => Math.abs(boundary->Int.toFloat -. percent)
+        let nearest = boundaries->Array.reduce(100.0, (best, b) => Math.min(best, b->distance))
+        let candidates =
+          boundaries
+          ->Array.mapWithIndex((b, index) => (b, index))
+          ->Array.filter(((b, _)) => b->distance == nearest)
+          ->Array.map(((_, index)) => index)
+        if nearest <= 8.0 {
+          dragRef.current = Some((candidates, percent))
+          barRef.current
+          ->Nullable.toOption
+          ->Option.forEach(element =>
+            element->setPointerCapture(event->ReactEvent.Pointer.pointerId)
+          )
+        }
+      }
+
+    let onPointerMove = event =>
+      switch dragRef.current {
+      | Some((candidates, startPercent)) =>
+        let percent = event->percentAt
+        let index = switch candidates {
+        | [index] => Some(index)
+        | _ if percent < startPercent => candidates->Array.get(0)
+        | _ if percent > startPercent => candidates->Array.at(-1)
+        | _ => None
+        }
+        index->Option.forEach(index => {
+          dragRef.current = Some(([index], startPercent))
+          let low = index == 0 ? 0 : boundaries->Array.getUnsafe(index - 1)
+          let high = index == lastIndex ? 100 : boundaries->Array.getUnsafe(index + 1)
+          let snapped = (percent /. mixStep->Int.toFloat)->Math.round->Float.toInt * mixStep
+          let next = Math.Int.max(low, Math.Int.min(high, snapped))
+          if next != boundaries->Array.getUnsafe(index) {
+            let moved = boundaries->Array.copy
+            moved->Array.setUnsafe(index, next)
+            setMix(moved->mixFromBoundaries)
+          }
+        })
+      | None => ()
+      }
+
+    let onPointerEnd = _ => dragRef.current = None
+
+    <div className="flex flex-col gap-3">
+      <div
+        ref={barRef->ReactDOM.Ref.domRef}
+        className={`relative h-10 select-none touch-none ${isDisabled
+            ? "opacity-60 cursor-not-allowed"
+            : "cursor-ew-resize"}`}
+        onPointerDown
+        onPointerMove
+        onPointerUp=onPointerEnd
+        onPointerCancel=onPointerEnd>
+        <div className="flex h-full w-full rounded-lg overflow-hidden bg-nd_gray-150">
           {reasons
-          ->Array.map(reason => {
-            let weight = dials.mix->Dict.get(reason)->Option.getOr(0)
-            let share =
-              total > 0 ? (weight->Int.toFloat /. total->Int.toFloat *. 100.0)->Float.toInt : 0
-            <div key=reason className="flex flex-col gap-1">
-              <div className={`flex justify-between ${body.sm.medium} text-nd_gray-600`}>
-                <span>
-                  {reason->reasonLabel->React.string}
-                  <span className="text-nd_gray-400">
-                    {(reason->isHardReason ? " · hard" : " · soft")->React.string}
-                  </span>
-                </span>
-                <span className="text-nd_gray-500">
-                  {`${share->Int.toString}%`->React.string}
-                </span>
-              </div>
-              <input
-                type_="range"
-                min="0"
-                max="10"
-                step=1.0
-                value={weight->Int.toString}
-                className="w-full accent-primary cursor-pointer"
-                onChange={event => {
-                  let value: string = ReactEvent.Form.target(event)["value"]
-                  setWeight(reason, value->Int.fromString->Option.getOr(0))
-                }}
-              />
+          ->Array.mapWithIndex((reason, index) => {
+            let share = shares->Array.get(index)->Option.getOr(0)
+            <div
+              key=reason
+              className={`${reason->reasonColor} h-full flex items-center justify-center text-white ${share >
+                mixStep
+                  ? body.sm.semibold
+                  : body.xs.semibold}`}
+              style={width: `${share->Int.toString}%`}>
+              <RenderIf condition={share >= mixStep}>
+                {`${share->Int.toString}%`->React.string}
+              </RenderIf>
             </div>
           })
           ->React.array}
         </div>
-      </SimulatorStoryHelper.FormField>
-      <SimulatorStoryHelper.FormField label="Card mix">
-        <div className="flex flex-col gap-1">
-          <p className={`${body.md.medium} text-nd_gray-700`}> {"Visa 100%"->React.string} </p>
-          <p className={`${body.sm.medium} text-nd_gray-400`}>
-            {"Other networks come once the sandbox is shown to keep the reported network (PORTFOLIO.md, question 5)."->React.string}
-          </p>
+        // The handles, one per boundary; at 0% and 100% they sit on the bar's edge
+        {boundaries
+        ->Array.mapWithIndex((boundary, index) =>
+          <div
+            key={index->Int.toString}
+            className="absolute -top-1 -bottom-1 w-1.5 -ml-[3px] rounded-full bg-white border border-nd_gray-300 shadow pointer-events-none"
+            style={left: `${boundary->Int.toString}%`}
+          />
+        )
+        ->React.array}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {reasons
+        ->Array.mapWithIndex((reason, index) => {
+          let share = shares->Array.get(index)->Option.getOr(0)
+          <div key=reason className={`flex items-center gap-2 ${body.sm.medium} text-nd_gray-600`}>
+            <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${reason->reasonColor}`} />
+            <span>
+              {reason->reasonLabel->React.string}
+              <RenderIf condition={reason->isHardReason}>
+                <span className="text-nd_gray-400"> {" · hard"->React.string} </span>
+              </RenderIf>
+            </span>
+            <span className="ml-auto text-nd_gray-500">
+              {`${share->Int.toString}%`->React.string}
+            </span>
+          </div>
+        })
+        ->React.array}
+      </div>
+    </div>
+  }
+}
+
+// Left panel: the dials, as tiles and one number field (UX-PASS-2 C, same pieces as the story form)
+module DialsForm = {
+  @react.component
+  let make = (~dials: portfolioDials, ~setDials, ~isBusy, ~isRunning, ~onRun, ~onStop) => {
+    let isLocked = isBusy || isRunning
+    let total = dials.mix->mixTotal
+
+    <div className={`${cardStyle} p-6 flex flex-col gap-5`}>
+      <SimulatorStoryHelper.FormField label="Invoices">
+        <div className="grid grid-cols-2 gap-3">
+          {invoiceCounts
+          ->Array.map(count => {
+            let isAboveLimit = count > maxInvoicesNow
+            <SimulatorFormTiles.Tile
+              key={count->Int.toString}
+              title={`${count->Int.toString} invoices`}
+              isSelected={dials.invoiceCount == count}
+              isDisabled={isLocked || isAboveLimit}
+              tag={isAboveLimit ? "Soon" : ""}
+              hint={isAboveLimit ? "The proxy allows 10 invoices for now." : ""}
+              onClick={() => setDials(prev => {...prev, invoiceCount: count})}
+            />
+          })
+          ->React.array}
         </div>
+      </SimulatorStoryHelper.FormField>
+      <SimulatorStoryHelper.FormField label="Stop after">
+        <div className="grid grid-cols-3 gap-3">
+          {stopAfterMinutes
+          ->Array.map(minutes =>
+            <SimulatorFormTiles.Tile
+              key={minutes->Int.toString}
+              title={`${minutes->Int.toString} min`}
+              isSelected={dials.maxMinutes == minutes}
+              isDisabled=isLocked
+              onClick={() => setDials(prev => {...prev, maxMinutes: minutes})}
+            />
+          )
+          ->React.array}
+        </div>
+      </SimulatorStoryHelper.FormField>
+      <SimulatorStoryHelper.FormField label="Amount per invoice">
+        <SimulatorFormTiles.AmountField
+          amount=dials.amount
+          setAmount={amount => setDials(prev => {...prev, amount})}
+          currency="USD"
+          isDisabled=isLocked
+        />
+      </SimulatorStoryHelper.FormField>
+      <SimulatorStoryHelper.FormField label="Decline mix">
+        <MixBar
+          mix=dials.mix setMix={mix => setDials(prev => {...prev, mix})} isDisabled=isLocked
+        />
       </SimulatorStoryHelper.FormField>
       <Button
         text="Run"
@@ -164,14 +254,72 @@ module DialsForm = {
           onClick={_ => onStop()}
         />
       </RenderIf>
+      <p className={`${body.sm.medium} text-nd_gray-400`}> {"Visa cards only."->React.string} </p>
     </div>
   }
 }
 
-module Progress = {
+// A small "?" that shows the why on hover
+module WhyButton = {
+  @react.component
+  let make = (~why) =>
+    <ToolTip
+      description=why
+      toolTipPosition=ToolTip.Top
+      toolTipFor={<span
+        className={`flex items-center justify-center w-5 h-5 rounded-full border border-nd_gray-300 bg-white text-nd_gray-500 cursor-help ${body.xs.semibold}`}>
+        {"?"->React.string}
+      </span>}
+    />
+}
+
+// While the proxy creates the invoices: a big ring with the count
+module SetupRing = {
   @react.component
   let make = (~run: portfolioRun) => {
-    // During setup the cards count only the copies created so far; the dials give the plan
+    let total = Math.Int.max(1, run.plannedInvoices * 2)
+    let created = Math.Int.min(total, run.staticCard.invoices + run.smartCard.invoices)
+    let radius = 70.0
+    let circumference = 2.0 *. Math.Constants.pi *. radius
+    let offset = circumference *. (1.0 -. created->Int.toFloat /. total->Int.toFloat)
+    <div className={`${cardStyle} px-6 py-10 flex flex-col items-center gap-5`}>
+      <div className="relative w-44 h-44">
+        <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+          <circle
+            cx="80" cy="80" r="70" fill="none" strokeWidth="12" className="stroke-nd_gray-150"
+          />
+          <circle
+            cx="80"
+            cy="80"
+            r="70"
+            fill="none"
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={circumference->Float.toString}
+            strokeDashoffset={offset->Float.toString}
+            className="stroke-nd_primary_blue-450 transition-all duration-700"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className={`${heading.xl.semibold} text-nd_gray-800`}>
+            {created->Int.toString->React.string}
+          </span>
+          <span className={`${body.md.medium} text-nd_gray-500`}>
+            {`of ${total->Int.toString}`->React.string}
+          </span>
+        </div>
+      </div>
+      <p className={`${heading.sm.semibold} text-nd_gray-700`}>
+        {`Creating ${run.plannedInvoices->Int.toString} invoices twice…`->React.string}
+      </p>
+    </div>
+  }
+}
+
+// After setup: one line and a slim bar for how many copies are final
+module RunStatus = {
+  @react.component
+  let make = (~run: portfolioRun) => {
     let total = Math.Int.max(
       run.plannedInvoices * 2,
       run.staticCard.invoices + run.smartCard.invoices,
@@ -179,64 +327,100 @@ module Progress = {
     let finished = run.staticCard->finishedCopies + run.smartCard->finishedCopies
     let percent = total > 0 ? finished * 100 / total : 0
     let caption = switch run.status {
-    | SettingUp => "Setting up: creating each invoice on both profiles, with real Stripe test charges."
-    | Running => "Running: Rev Rec retries on the sandbox; the bank flips on its scripted clock."
-    | Done => `Done: ${run.endReason}.`
-    | RunError => `The run stopped: ${run.error}`
+    | SettingUp | Running => "Running"
+    | Done => `Done · ${run.endReason}`
+    | RunError => `Stopped · ${run.error}`
     }
-    <SectionCard
-      title="Progress"
-      subTitle="Time is compressed: the sandbox retries every few minutes where production waits hours.">
-      <div className="flex flex-col gap-2">
-        <div className="w-full h-2 rounded-full bg-nd_gray-100 overflow-hidden">
-          <div
-            className="h-2 rounded-full bg-nd_primary_blue-450"
-            style={width: `${percent->Int.toString}%`}
-          />
-        </div>
-        <div className={`flex justify-between ${body.md.medium} text-nd_gray-600`}>
-          <span> {caption->React.string} </span>
-          <span className="whitespace-nowrap">
-            {`${finished->Int.toString} of ${total->Int.toString} copies final`->React.string}
-          </span>
-        </div>
+    <div className="flex flex-col gap-2">
+      <div className={`flex justify-between gap-3 ${body.md.semibold} text-nd_gray-600`}>
+        <span> {caption->React.string} </span>
+        <span className="whitespace-nowrap text-nd_gray-500">
+          {`${finished->Int.toString} of ${total->Int.toString} final`->React.string}
+        </span>
       </div>
-    </SectionCard>
+      <div className="w-full h-2 rounded-full bg-nd_gray-150 overflow-hidden">
+        <div
+          className="h-2 rounded-full bg-nd_primary_blue-450 transition-all duration-500"
+          style={width: `${percent->Int.toString}%`}
+        />
+      </div>
+    </div>
   }
 }
 
-// A banner in the column of each side that booked no retries, so a 0 is not read as a result
+// One amber line in the column of a side that booked no retries, so a 0 is not read as a result
 module NoRetriesBanners = {
   @react.component
   let make = (~run: portfolioRun) => {
-    let banner = (~card, ~mode, ~sideName) =>
-      if run->bookedNoRetries(card) {
-        <AlertV2Binding
-          alertType=Warning
-          slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
-          heading={`${sideName}: no retries booked`}
-          description={noRetriesText(~mode)}
-        />
+    let showStatic = run->bookedNoRetries(~card=run.staticCard, ~other=run.smartCard)
+    let showSmart = run->bookedNoRetries(~card=run.smartCard, ~other=run.staticCard)
+    let banner = (~isShown, ~mode) =>
+      if isShown {
+        <div
+          className="flex items-center gap-2 rounded-lg border border-nd_yellow-300 bg-nd_yellow-50 px-3 py-2">
+          <Icon name="nd-toast-warning" size=16 className="text-nd_yellow-500 shrink-0" />
+          <span className={`${body.md.semibold} text-nd_yellow-700`}>
+            {"No retries booked on this side."->React.string}
+          </span>
+          <WhyButton why={noRetriesWhy(~mode)} />
+        </div>
       } else {
         <div />
       }
 
-    <RenderIf
-      condition={run->bookedNoRetries(run.staticCard) || run->bookedNoRetries(run.smartCard)}>
-      // Same two columns as the result cards: static on the left, Rev Rec on the right
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {banner(~card=run.staticCard, ~mode=run.staticMode, ~sideName="Static retries")}
-        {banner(~card=run.smartCard, ~mode=run.smartMode, ~sideName="Rev Rec")}
+    <RenderIf condition={showStatic || showSmart}>
+      // Same two columns as the values in the result cards: static left, Rev Rec right
+      <div className="grid grid-cols-2 gap-6 px-4">
+        {banner(~isShown=showStatic, ~mode=run.staticMode)}
+        {banner(~isShown=showSmart, ~mode=run.smartMode)}
       </div>
     </RenderIf>
   }
 }
 
-// Static retries vs Rev Rec, one Intelligent Routing simulator card per metric
+// The proxy's notes about a run (sleep pauses, late bank flips): one amber line that opens the list
+module RunNotes = {
+  @react.component
+  let make = (~notes: array<string>) => {
+    let (isOpen, setIsOpen) = React.useState(_ => false)
+    let count = notes->Array.length
+    <RenderIf condition={count > 0}>
+      <div
+        className="flex flex-col gap-2 rounded-lg border border-nd_yellow-300 bg-nd_yellow-50 px-3 py-2">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={_ => setIsOpen(prev => !prev)}>
+          <Icon name="nd-toast-warning" size=16 className="text-nd_yellow-500 shrink-0" />
+          <span className={`flex-1 ${body.md.semibold} text-nd_yellow-700`}>
+            {`${count->Int.toString} ${count == 1 ? "note" : "notes"} on this run`->React.string}
+          </span>
+          <Icon
+            name={isOpen ? "nd-angle-up" : "nd-angle-down"} size=14 className="text-nd_yellow-700"
+          />
+        </div>
+        <RenderIf condition=isOpen>
+          <ul
+            className={`flex flex-col gap-1.5 pl-6 list-disc ${body.sm.medium} text-nd_yellow-700`}>
+            {notes
+            ->Array.mapWithIndex((note, index) =>
+              <li key={index->Int.toString}> {note->React.string} </li>
+            )
+            ->React.array}
+          </ul>
+        </RenderIf>
+      </div>
+    </RenderIf>
+  }
+}
+
+// Static retries vs Rev Rec, one Intelligent Routing simulator card per metric. One column, so
+// each card's two values line up with the banners above.
 module ResultCards = {
   @react.component
   let make = (~run: portfolioRun) => {
     let accessory = <SourceChip kind=Recomputed isFixture=run.isFixture />
+    // Before the first copy is final every value is 0, so the cards wait
+    let isReady = run.isFixture || run.status->isRunOver || hasFinishedCopy(run)
     let metricCard = (
       ~title,
       ~staticValue,
@@ -246,7 +430,7 @@ module ResultCards = {
       ~lowerIsBetter=false,
     ) =>
       switch (staticValue, smartValue) {
-      | (Some(staticValue), Some(smartValue)) =>
+      | (Some(staticValue), Some(smartValue)) if isReady =>
         <IntelligentRoutingAnalytics.Card
           title
           actualValue=staticValue
@@ -260,23 +444,40 @@ module ResultCards = {
           colorByDirection=true
           titleAccessory=accessory
         />
+      // One side has no value yet (no recoveries): the same card look, with "–" on that side
       | _ =>
-        <div className="flex flex-col gap-3 border rounded-xl border-nd_gray-150 p-4">
-          <div className="flex items-center justify-between">
+        let sideValue = (~label, ~value, ~valueClass) =>
+          <div className="w-full flex flex-col gap-2 items-start justify-between">
+            <p className="text-nd_gray-400 text-sm leading-4 font-medium">
+              {label->React.string}
+            </p>
+            <p className={`font-semibold leading-8 text-lg text-nowrap ${valueClass}`}>
+              {(
+                isReady
+                  ? value->Option.mapOr("–", value =>
+                      value->CurrencyFormatUtils.valueFormatter(statType, ~currency)
+                    )
+                  : "–"
+              )->React.string}
+            </p>
+          </div>
+        <div className="flex flex-col gap-6 items-start border rounded-xl border-nd_gray-150 p-4">
+          <div className="w-full flex items-center justify-between">
             <p className="text-nd_gray-500 text-md leading-4 font-medium">
               {title->React.string}
             </p>
             accessory
           </div>
-          <p className={`${body.md.medium} text-nd_gray-400`}>
-            {"Not enough recoveries yet."->React.string}
-          </p>
+          <div className="w-full flex gap-6">
+            {sideValue(~label="Static retries", ~value=staticValue, ~valueClass="text-nd_gray-500")}
+            {sideValue(~label="Rev Rec", ~value=smartValue, ~valueClass="text-nd_gray-700")}
+          </div>
         </div>
       }
     let percent = rate => rate->Option.map(value => value *. 100.0)
     let major = minor => Some(minor->Int.toFloat /. 100.0)
 
-    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+    <div className="flex flex-col gap-4">
       {metricCard(
         ~title="Recovery rate",
         ~staticValue=run.staticCard.recoveryRate->percent,
@@ -284,21 +485,21 @@ module ResultCards = {
         ~statType=Rate,
       )}
       {metricCard(
-        ~title="Recovered amount",
+        ~title="Recovered",
         ~staticValue=run.staticCard.recoveredAmount->major,
         ~smartValue=run.smartCard.recoveredAmount->major,
         ~statType=AmountWithSuffix,
         ~currency="$",
       )}
       {metricCard(
-        ~title="Rev Rec attempts per recovery",
+        ~title="Attempts per recovery",
         ~staticValue=run.staticCard.attemptsPerRecovery,
         ~smartValue=run.smartCard.attemptsPerRecovery,
         ~statType=Default,
         ~lowerIsBetter=true,
       )}
       {metricCard(
-        ~title="Minutes to recovery (median)",
+        ~title="Minutes to recover",
         ~staticValue=run.staticCard.medianMinutes,
         ~smartValue=run.smartCard.medianMinutes,
         ~statType=Default,
@@ -338,7 +539,6 @@ module Charts = {
       </SectionCard>
       <SectionCard
         title="Recovered over the run"
-        subTitle="Invoices recovered so far, by minute since the run started."
         accessory={<SourceChip kind=Recomputed isFixture=run.isFixture />}>
         <LineGraph options={run.trend->trendChartPayload->LineGraphUtils.getLineGraphOptions} />
       </SectionCard>
@@ -384,9 +584,7 @@ module InvoiceTable = {
 
     <SectionCard
       title="Invoices"
-      subTitle={run.isFixture
-        ? "Fixture rows. In a real run, a status opens that copy in the invoice story."
-        : "Click a status to open that copy in the invoice story."}
+      subTitle={run.isFixture ? "Fixture rows." : "Click a status to open its story."}
       accessory={<SourceChip kind=FromSandbox isFixture=run.isFixture />}>
       <div className="overflow-x-auto border border-nd_gray-150 rounded-lg">
         <table className="w-full">
@@ -527,8 +725,7 @@ let make = (~runIdFromUrl: option<string>) => {
     />
     <div className="flex items-start justify-between gap-4">
       <PageUtils.PageHeading
-        title="Portfolio run"
-        subTitle="The same batch of failed invoices, once with static retries and once with Rev Rec. Real sandbox runs; only the bank is scripted."
+        title="Portfolio run" subTitle="Same invoices, two strategies, real sandbox."
       />
       <SimulatorGlossary.OpenButton />
     </div>
@@ -562,27 +759,24 @@ let make = (~runIdFromUrl: option<string>) => {
                   slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
                 }}
                 heading="Fixture data, not a sandbox run"
-                description="A built-in example in the real result shape, for tests and layout checks. The numbers are made up."
+                description="Made-up numbers in the real result shape."
               />
             </RenderIf>
-            {[pollError]
-            ->Array.concat(run.warnings)
-            ->Array.filter(isNonEmptyString)
-            ->Array.mapWithIndex((warning, index) =>
+            <RenderIf condition={pollError->isNonEmptyString}>
               <AlertV2Binding
-                key={index->Int.toString}
                 alertType=Warning
                 slot={{
                   slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
                 }}
-                description=warning
+                description=pollError
               />
-            )
-            ->React.array}
-            <Progress run />
-            // Results wait for the first copy to finish; before that every value is 0
-            {if run.isFixture || run.status->isRunOver || hasFinishedCopy(run) {
+            </RenderIf>
+            <RunNotes notes={run.warnings->Array.filter(isNonEmptyString)} />
+            {switch run.status {
+            | SettingUp => <SetupRing run />
+            | _ =>
               <>
+                <RunStatus run />
                 // The proxy's comparison label, next to the numbers: the noise note when both
                 // sides share a strategy, otherwise which strategies are compared
                 <RenderIf condition={run.comparisonLabel->isNonEmptyString}>
@@ -599,23 +793,20 @@ let make = (~runIdFromUrl: option<string>) => {
                 <div
                   className={`flex flex-wrap gap-x-6 gap-y-2 ${body.md.medium} text-nd_gray-500`}>
                   <span className="flex items-center gap-2">
-                    {`Static profile mode: ${run.staticMode->SimulatorTourUtils.retryModeText}`->React.string}
+                    {`Static side: ${run.staticMode->SimulatorTourUtils.retryModeText}`->React.string}
                     <SourceChip kind=FromSandbox isFixture=run.isFixture />
                   </span>
                   <span className="flex items-center gap-2">
-                    {`Rev Rec profile mode: ${run.smartMode->SimulatorTourUtils.retryModeText}`->React.string}
+                    {`Rev Rec side: ${run.smartMode->SimulatorTourUtils.retryModeText}`->React.string}
                     <SourceChip kind=FromSandbox isFixture=run.isFixture />
                   </span>
                 </div>
-                <Charts run />
+                <RenderIf
+                  condition={run.isFixture || run.status->isRunOver || hasFinishedCopy(run)}>
+                  <Charts run />
+                </RenderIf>
                 <InvoiceTable run />
               </>
-            } else {
-              <div className={`${cardStyle} px-6 py-8`}>
-                <p className={`${body.md.medium} text-nd_gray-500 text-center`}>
-                  {"Results appear here as soon as the first copies reach an end state."->React.string}
-                </p>
-              </div>
             }}
           </>
         | None =>
@@ -624,7 +815,7 @@ let make = (~runIdFromUrl: option<string>) => {
               {(
                 runIdFromUrl->Option.isSome
                   ? "Loading the run."
-                  : "Set the dials and press Run. Progress shows here, then the results side by side."
+                  : "Press Run to compare the two strategies."
               )->React.string}
             </p>
           </div>
