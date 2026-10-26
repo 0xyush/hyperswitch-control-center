@@ -151,6 +151,9 @@ export class HttpError extends Error {
   }
 }
 
+// Minutes in Monitoring, with the start rule met and no retry task, before the story says so.
+const WAITING_NOTE_MIN = 3;
+
 // Safety cap on the billing system's own failed charges at start (start rule + 1).
 const MAX_START_FAILURES = 4;
 
@@ -1298,6 +1301,37 @@ export async function storyView(storyId: string) {
   const external = attempts.filter((a) => a.by === "billing");
   const internal = attempts.filter((a) => a.by === "revrec");
 
+  // Sandbox incident of 26 Oct: invoices stayed in Monitoring with no retry task although the
+  // start rule was met (on 24 Oct the same profile booked a retry in 30 s). After 3 min of that,
+  // the story says so instead of showing a plain "waiting".
+  const lastReport = [...story.requests]
+    .reverse()
+    .find(
+      (r) =>
+        r.system === "sandbox" &&
+        r.request.method === "POST" &&
+        r.response.status === 200,
+    );
+  const waitingMin = lastReport
+    ? (Date.now() - Date.parse(lastReport.at)) / 60_000
+    : 0;
+  const failuresKept = external.filter((a) => a.status !== "charged").length;
+  const startRuleMet = failuresKept > (story.startRule ?? rrc.startRule ?? 0);
+  const waiting =
+    story.started &&
+    sandboxStatus === "monitoring" &&
+    story.seenSchedules.length === 0 &&
+    startRuleMet &&
+    waitingMin >= WAITING_NOTE_MIN
+      ? {
+          minutes: Math.floor(waitingMin),
+          text: "Rev Rec has not booked a retry yet (sandbox scheduler)",
+          why: `The start rule is met (${failuresKept} failure${failuresKept === 1 ? "" : "s"} recorded), but Rev Rec has made no retry task for ${Math.floor(waitingMin)} min. On 24 Oct the same profile booked one in about 30 s.`,
+          source: "recomputed" as Source,
+        }
+      : null;
+  if (waiting) warnings.push(`${waiting.text}: ${waiting.why}`);
+
   // A new retry time booked by Rev Rec becomes a step, once, with the process-tracker read as its raw call.
   const at = nowIso();
   if (nextRetryAt && !story.seenSchedules.includes(nextRetryAt)) {
@@ -1711,7 +1745,9 @@ export async function storyView(storyId: string) {
     status,
     sandboxStatus,
     stage,
-    stageCaption: caption,
+    stageCaption: waiting ? waiting.text : caption,
+    // Set after 3 min in Monitoring with the start rule met and no retry task (sandbox incident).
+    waiting,
     stageHistory,
     recoveredBy,
     done,
