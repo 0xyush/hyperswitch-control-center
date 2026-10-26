@@ -382,3 +382,5 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **D:** tiny source chips; UI sentences of 15 words or fewer in my files. Text sent by the proxy (explain lines, `waiting.why`) can still be longer.
   - **Checks on c2faadb4d:** re:clean + re:build (0 warnings), re:format:check, lint:hooks, refresh 16/16. Prettier `format:check` flags 17 non-code files under simulator/ only (Markdown docs, git-ignored proxy data, the untracked GUIDE-SIMPLE.html).
   - **Replay UI** is parked on the local branch `replay-ui-wip` (48f61a174). It needs a rebase onto this story screen. A's replay slice builds its pending row as revrec→revrec; live rows go revrec→processor (passed to A).
+
+- 26 Oct (orchestrator) **revision revrec-sim-00002-5lw** live: image revrec-sim:c2faadb4d (UX pass 2: story form tiles, phase-strip header, short steps, one action, compact card; Learn Rev Rec; portfolio tiles). Same URL and password.
