@@ -1,0 +1,45 @@
+# Rev Rec Simulator in one image: the proxy serves the dashboard build on the same origin, behind
+# the shared password (PASSWORD-GATE.md). Build context: the repo root.
+#   gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml \
+#     --substitutions _IMAGE=$IMAGE,_GIT_COMMIT=$(git rev-parse HEAD)
+
+# ---- Stage 1: the dashboard build (the same recipe as dashboard.Dockerfile) ----
+FROM node:24-bookworm-slim AS dashboard
+WORKDIR /build
+ENV NODE_OPTIONS=--max-old-space-size=8192
+# A stand-in for git: webpack.server.js asks it for the commit hash, and Cloud Build sends no .git.
+ARG GIT_COMMIT_HASH=unknown
+RUN printf '#!/bin/sh\necho "%s"\n' "$GIT_COMMIT_HASH" > /usr/local/bin/git \
+ && chmod +x /usr/local/bin/git
+# Install without the postinstall (it sets git hooks), then apply the repo's patches as it would.
+COPY package.json package-lock.json ./
+COPY patches ./patches
+RUN npm ci --ignore-scripts && npx patch-package
+COPY . .
+RUN npm run build:prod
+
+# ---- Stage 2: the proxy, with the dashboard build next to it ----
+FROM node:24-bookworm-slim
+WORKDIR /app
+# Secrets (SIM_PASSWORD, HS_API_KEY, STRIPE_TEST_KEY, HS_DASHBOARD_JWT) come from Secret Manager.
+# The served dashboard config calls the API on the same origin: api_url /api, sim_url empty.
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8080 \
+    TRUST_PROXY=1 \
+    DASHBOARD_DIST=/app/dashboard \
+    DASHBOARD_SERVER_DIR=/app/dashboard/handlers \
+    default__endpoints__api_url=/api \
+    default__simulator__sim_url=
+COPY simulator/proxy/package.json simulator/proxy/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+COPY simulator/proxy/src ./src
+COPY --from=dashboard /build/dist/hyperswitch ./dashboard/hyperswitch
+COPY --from=dashboard /build/dist/server/config ./dashboard/server/config
+# The dashboard's own /config/* handlers, used as they are, and their one dependency.
+COPY --from=dashboard /build/src/server/config.mjs /build/src/server/theme.mjs ./dashboard/handlers/
+COPY --from=dashboard /build/node_modules/@iarna/toml ./node_modules/@iarna/toml
+RUN mkdir -p /app/data && chown node:node /app/data
+USER node
+EXPOSE 8080
+CMD ["node", "src/server.ts"]

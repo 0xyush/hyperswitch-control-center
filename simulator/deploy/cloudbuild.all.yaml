@@ -1,0 +1,20 @@
+# One image for the password-gated simulator (Dockerfile.all). From the repo root:
+#   gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml \
+#     --substitutions _IMAGE=$IMAGE,_GIT_COMMIT=$(git rev-parse HEAD)
+steps:
+  - name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      - build
+      - -f
+      - simulator/deploy/Dockerfile.all
+      - --build-arg
+      - GIT_COMMIT_HASH=${_GIT_COMMIT}
+      - -t
+      - ${_IMAGE}
+      - .
+images: ["${_IMAGE}"]
+options:
+  # 32 vCPUs and 32 GB: the webpack production build needs more than 6 GB.
+  machineType: E2_HIGHCPU_32
+timeout: 2400s

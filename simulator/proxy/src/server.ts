@@ -5,6 +5,8 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { authStatus, refreshDashboardToken } from "./auth.ts";
 import { config, configStatus, portfolioConfig } from "./config.ts";
 import { lastContract, scheduleContractTest } from "./contract.ts";
+import { dashboardOn, logoSvg, serveDashboard } from "./dashboard.ts";
+import { gateOn, handleGate, hasPass, refuse } from "./gate.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
 import { listRecordings, markRecording, replayView } from "./recordings.ts";
 import {
@@ -103,6 +105,9 @@ function visitor(req: IncomingMessage) {
     typeof header === "string" && SESSION.test(header) ? header : null;
   return { ip, owner: ownerOf(session ? `session:${session}` : `ip:${ip}`) };
 }
+
+// The Hyperswitch logo for the password page, read once.
+const LOGO = gateOn() ? logoSvg() : "";
 
 // Operator calls: with SIM_OPERATOR_KEY set, the x-sim-operator header must match it. Without
 // it, only a direct local call counts (no X-Forwarded-For, so not through Cloud Run's front end).
@@ -213,10 +218,14 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(204);
     return res.end();
   }
-  if (p === "/api" || p.startsWith("/api/")) return passThrough(req, res, url);
-
+  // /healthz stays open behind the password gate (uptime checks need it).
   if (method === "GET" && p === "/healthz")
     return send(res, 200, await healthz());
+  if (gateOn()) {
+    if (await handleGate(req, res, url, visitor(req).ip, LOGO)) return;
+    if (!hasPass(req)) return refuse(res, url, LOGO);
+  }
+  if (p === "/api" || p.startsWith("/api/")) return passThrough(req, res, url);
   // Presets, card options and currencies for the billing-system form.
   if (method === "GET" && (p === "/sim/presets" || p === "/sim/scenarios"))
     return send(res, 200, publicPresets());
@@ -324,6 +333,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return send(res, 200, await storyView(id));
     }
   }
+  // Everything that is not the proxy's own: the dashboard build, when it is served from here.
+  if (
+    dashboardOn() &&
+    !p.startsWith("/sim/") &&
+    (await serveDashboard(req, res, url))
+  )
+    return;
   return send(res, 404, {
     error: { code: "not_found", message: `no route ${method} ${p}` },
   });
@@ -384,5 +400,8 @@ if (import.meta.main) {
         `  ${st.step} via /${st.path}: ${st.status}${st.error ? ` (${st.error})` : ""}`,
       );
     console.log(`  CORS origins: ${config.allowedOrigins.join(", ")}`);
+    console.log(
+      `  password gate: ${gateOn() ? "on" : "off"} · dashboard build: ${dashboardOn() ? config.dashboardDist : "not served"}`,
+    );
   });
 }

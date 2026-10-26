@@ -94,3 +94,31 @@ gcloud run deploy revrec-sim-dashboard --image $DASH_IMAGE --region $REGION \
   - Its image is Node 18.
   - `dashboard.Dockerfile` fixes all three without touching upstream files: Node 24, `npm ci --ignore-scripts` then `patch-package`, and a git stand-in that prints the commit passed as `GIT_COMMIT_HASH`. Its own ignore file keeps `node_modules`, `.git` and every `.env` out of the build context.
 - **Tested locally on 23 Oct, partly:** `npm ci` without the git hook, `patch-package`, the ReScript build (4,367 files) and the webpack config load (with the git stand-in) all passed. The webpack production build was then killed for lack of memory in the 6 GB local Docker VM, so the last step is not verified. `cloudbuild.dashboard.yaml` uses a 32 GB machine.
+
+## 5. One service with the shared password (26 Oct, `PASSWORD-GATE.md`); this replaces sections 3 and 4
+
+One Cloud Run service, `revrec-sim`. The proxy serves the dashboard build and its `/config/*` on the same origin, so one cookie covers both, and there is no CORS for the public link.
+
+```sh
+# The password: Aayush types it once; it is never echoed.
+read -rs SIM_PW && printf %s "$SIM_PW" | gcloud secrets create revrec-sim-password --replication-policy=automatic --data-file=- && unset SIM_PW
+gcloud secrets add-iam-policy-binding revrec-sim-password --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor
+
+export IMAGE=$REGION-docker.pkg.dev/$PROJECT/$REPO/revrec-sim:$(git rev-parse --short HEAD)
+gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml \
+  --substitutions _IMAGE=$IMAGE,_GIT_COMMIT=$(git rev-parse HEAD)      # 32-vCPU machine, about 10 min
+gcloud run deploy revrec-sim --image $IMAGE --region $REGION \
+  --service-account $SA --allow-unauthenticated \
+  --min-instances 1 --max-instances 1 --no-cpu-throttling \
+  --concurrency 80 --timeout 60 --port 8080 --memory 1Gi \
+  --env-vars-file simulator/deploy/proxy.env.yaml \
+  --set-secrets SIM_PASSWORD=revrec-sim-password:latest,HS_API_KEY=revrec-sim-hs-api-key:latest,STRIPE_TEST_KEY=revrec-sim-stripe-test-key:latest,HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest
+```
+
+- The image already sets `DASHBOARD_DIST`, `DASHBOARD_SERVER_DIR`, `default__endpoints__api_url=/api`, `default__simulator__sim_url=` (empty = same origin), `TRUST_PROXY=1`, `HOST` and `PORT`.
+- The gate:
+  - Every path except `/healthz` needs the cookie `sim_gate` (7 days; HttpOnly, Secure, SameSite=Lax), set by `POST /gate` with the right password (10 tries per minute per IP).
+  - Without it, `/api/*` and `/sim/*` answer 401 JSON; every other path shows the password page with 401.
+- Add `HS_STATIC_*` and `HS_SMART_*` (the portfolio pair) and `SIM_PORTFOLIO=1` to `proxy.env.yaml` if the portfolio run should be on.
+- To change the password: add a secret version, then make a new revision (`gcloud run services update revrec-sim --region $REGION --update-secrets SIM_PASSWORD=revrec-sim-password:latest`). Old cookies stop working.
+- Optional: set `SIM_OPERATOR_KEY` (a fourth secret) to allow `POST /sim/recordings/:id` with the header `x-sim-operator`. Without it, that call works only from inside the container.

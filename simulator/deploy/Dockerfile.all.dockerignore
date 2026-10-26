@@ -1,0 +1,13 @@
+# Build context for Dockerfile.all (Docker BuildKit reads this file for that Dockerfile).
+**/node_modules
+.git
+dist
+lib
+**/.env
+**/.env.*
+simulator/proxy/data
+screenshots
+simulator/screenshots
+coverage
+playwright-report
+test-results

@@ -78,6 +78,13 @@ export const config = {
   // X-Forwarded-For instead. Only set this behind a proxy you trust.
   trustProxy: read("TRUST_PROXY") === "1",
   contractTest: read("SIM_CONTRACT_TEST") !== "0",
+  // One shared password for the public link (src/gate.ts). Empty = no gate (local dev).
+  password: read("SIM_PASSWORD"),
+  // The dashboard build to serve on the same origin (src/dashboard.ts). Empty = API only.
+  dashboardDist: read("DASHBOARD_DIST"),
+  dashboardServerDir:
+    read("DASHBOARD_SERVER_DIR") ||
+    path.join(PROXY_ROOT, "..", "..", "src", "server"),
   // Looser cap per IP, because a browser chooses its own x-sim-session id and could change it.
   startsPerIpHour: Number(
     read("RATE_LIMIT_STARTS_PER_IP_HOUR") ||
@@ -121,6 +128,8 @@ export const SECRET_VALUES: string[] = [
   config.hsApiKey,
   config.stripeKey,
   config.hsDashboardJwt,
+  config.password,
+  // 8+ characters: a short password such as "test" would blank that word in every text.
 ].filter((v) => v.length >= 8);
 
 export function missingKeys(): string[] {
