@@ -401,7 +401,7 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - `seed.sh` signs a JWT with the router's secret instead (HS256, role `merchant_admin`, the seeded merchant, profile and org, tenant `public`, 30 days).
     - v2 JWT auth checks the signature, expiry, blacklist, role (built-in roles need no DB row) and that merchant and profile exist. It does not read a users row.
     - The token is already scoped to the merchant and profile, so the proxy needs no switch. The proxy already answers the dashboard's user calls itself.
-  - **GSM rows** (`v2/gsm`, admin key): `check_hard_decline` (workflows/revenue*recovery.rs) matches connector + flow `revenue_recovery` + sub_flow `sub_flow` + code + message exactly. For Stripe, the message it uses is the error \_reason*: `message - <message>, decline_code - <code>` (connectors/stripe.rs).
+  - **GSM rows** (`v2/gsm`, admin key): `check_hard_decline` (`workflows/revenue_recovery.rs`) matches connector + flow `revenue_recovery` + sub_flow `sub_flow` + code + message exactly. For Stripe, the message it uses is the error **reason**: `message - <message>, decline_code - <code>` (`connectors/stripe.rs`).
     - Rows: `card_declined` / `message - Your card was declined., decline_code - stolen_card`; `expired_card` / `message - Your card has expired., decline_code - expired_card`; and `expired_card` / `Your card has expired.`.
     - The last row is for the retry scheduler, which matches on the plain message (core/revenue_recovery/types.rs). Stolen card has no plain-message row: Stripe's plain message is the generic "Your card was declined.".
     - All rows have `error_category` `hard_decline`.
