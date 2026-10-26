@@ -6,6 +6,7 @@ import { authStatus, refreshDashboardToken } from "./auth.ts";
 import { config, configStatus, portfolioConfig } from "./config.ts";
 import { lastContract, scheduleContractTest } from "./contract.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
+import { listRecordings, markRecording, replayView } from "./recordings.ts";
 import {
   listPortfolios,
   parsePortfolio,
@@ -101,6 +102,18 @@ function visitor(req: IncomingMessage) {
   const session =
     typeof header === "string" && SESSION.test(header) ? header : null;
   return { ip, owner: ownerOf(session ? `session:${session}` : `ip:${ip}`) };
+}
+
+// Operator calls: with SIM_OPERATOR_KEY set, the x-sim-operator header must match it. Without
+// it, only a direct local call counts (no X-Forwarded-For, so not through Cloud Run's front end).
+function isOperator(req: IncomingMessage) {
+  const key = process.env.SIM_OPERATOR_KEY;
+  if (key) return req.headers["x-sim-operator"] === key;
+  const ip = req.socket.remoteAddress ?? "";
+  return (
+    !req.headers["x-forwarded-for"] &&
+    (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1")
+  );
 }
 
 // Story starts make real Stripe charges, so they are limited per visitor, with a looser cap
@@ -239,6 +252,30 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
     const { story: s } = startStory(opts, owner);
     return send(res, 200, await storyView(s.storyId));
+  }
+
+  // Replay mode (simulator/REPLAY.md): recorded stories, walked without the sandbox.
+  if (method === "GET" && p === "/sim/recordings")
+    return send(res, 200, { recordings: listRecordings() });
+  const rec = p.match(/^\/sim\/recordings\/(st_[a-f0-9]{12})$/);
+  if (method === "POST" && rec) {
+    if (!isOperator(req))
+      throw new HttpError(403, "marking a recording is for operators");
+    const body = await readJson(req);
+    return send(
+      res,
+      200,
+      await markRecording(rec[1], String(body.title ?? "").trim()),
+    );
+  }
+  const rp = p.match(/^\/sim\/replay\/(st_[a-f0-9]{12})$/);
+  if (method === "GET" && rp) {
+    const upTo = url.searchParams.get("upTo");
+    return send(
+      res,
+      200,
+      replayView(rp[1], upTo === null ? undefined : Number(upTo)),
+    );
   }
 
   // The portfolio run (M2), off unless SIM_PORTFOLIO=1.

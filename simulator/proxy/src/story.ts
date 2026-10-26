@@ -189,6 +189,221 @@ function save() {
   fs.renameSync(tmp, STORE_FILE);
 }
 
+// ---------- import of stories saved before 24 Oct (data/stories.json) ----------
+
+// What a story of the first store looked like (commit 42aecb877 to f94d43aca).
+type V1Story = {
+  storyId: string;
+  scenarioId: number;
+  invoiceId: string;
+  recoveryId: string | null;
+  startedAt: string;
+  amount: number;
+  currency: string;
+  stripeCustomerId: string;
+  tokenPm: string;
+  tokenCard: { last4: string };
+  lastFailureBody: unknown;
+  reportsSent: number;
+  startRule: number | null;
+  paidInAppAt: string | null;
+  error: string | null;
+  requests: Omit<RequestLog, "stepId">[];
+};
+
+// Facts the first store did not keep, taken from the run log of the day (cited where used).
+export type V1Observations = {
+  stageSeen: Record<string, string>;
+  bookings: { at: string; processTracker: Record<string, unknown> }[];
+};
+
+// Turns a first-store story into a current one: each recorded request becomes a step with the
+// same label a live story gets today. Used once, to make recordings of the 23 Oct stories.
+export function importV1Story(v1: V1Story, seen: V1Observations): Story {
+  if (stories.has(v1.storyId)) return stories.get(v1.storyId)!;
+  const preset = presetById(v1.scenarioId);
+  const card = v1.tokenCard.last4 as SavedCardId;
+  const story: Story = {
+    presetId: v1.scenarioId,
+    amount: v1.amount,
+    currency: v1.currency,
+    savedCard: card,
+    firstCharge: card === "0341" ? "0341" : "0002",
+    customer: "new",
+    sendDuplicateOnStart: Boolean(preset?.sendDuplicateOnStart),
+    reportAgainMode: preset?.reportAgainMode ?? "new",
+    storyId: v1.storyId,
+    owner: "imported",
+    invoiceId: v1.invoiceId,
+    recoveryId: v1.recoveryId,
+    startedAt: v1.startedAt,
+    stripeCustomerId: v1.stripeCustomerId,
+    savedPm: v1.tokenPm,
+    started: true,
+    lastFailureBody: v1.lastFailureBody,
+    reportsSent: v1.reportsSent,
+    startRule: v1.startRule,
+    paidInAppAt: v1.paidInAppAt,
+    error: v1.error,
+    stepSeq: 0,
+    events: [],
+    requests: [],
+    seenSchedules: seen.bookings.map((b) =>
+      String(b.processTracker.schedule_time_for_payment),
+    ),
+    stageSeen: seen.stageSeen,
+    finalNoted: false,
+    profile: "story",
+    profileRef: PROFILES.story,
+  };
+  const amount = money(story.amount, story.currency);
+  for (const r of v1.requests) {
+    const stepId = newStepId(story);
+    story.requests.push({ ...r, stepId });
+    const body: any = r.response.body;
+    const ok = r.response.status === 200;
+    const of = r.step.match(/\((\d+) of (\d+)\)/);
+    const base = { stepId, at: r.at, why: [] as Why[] };
+    if (r.step === "Create the test customer")
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "billing",
+        label: `new invoice ${amount}`,
+        text: `Invoice ${story.invoiceId} for ${amount} is due for a new test customer.`,
+        status: "info",
+        source: "simulator",
+      });
+    else if (r.step.startsWith("Save card"))
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "processor",
+        label: `save card ••${card}`,
+        text: `Card ending ${card} is saved for the customer at Stripe. Rev Rec retries the saved card.`,
+        status: "ok",
+        source: "simulator",
+        why: [{ source: "rule", text: CARDS[card].behaviour }],
+      });
+    else if (r.step.startsWith("Billing system"))
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "processor",
+        label: `charge ${amount}${of && of[1] !== "1" ? ` again (${of[1]} of ${of[2]})` : ""} on ••${card} → declined (${body?.error?.decline_code ?? "generic_decline"})`,
+        text: `The billing system charged the card. Stripe declined it: "${body?.error?.message ?? "declined"}".`,
+        status: "declined",
+        source: "sandbox",
+        txnId: body?.error?.payment_intent?.id,
+      });
+    else if (r.step.startsWith("Report the failed payment"))
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "revrec",
+        label: `report failure${of ? ` (${of[1]} of ${of[2]})` : ""} → ${r.response.status}${ok ? " recorded" : ""}`,
+        text: ok
+          ? `The billing system reported the failed charge. Rev Rec recorded it on invoice ${body?.id}.`
+          : "The sandbox refused the report.",
+        status: ok ? "ok" : "refused",
+        source: "sandbox",
+      });
+    else if (r.step.startsWith("Report the same failure again"))
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "revrec",
+        label: `report same failure again → ${r.response.status}${ok ? "" : " already recorded"}`,
+        text: ok
+          ? "The billing system sent the same failure report again. Rev Rec kept one attempt."
+          : `The billing system sent the same failure report again. Rev Rec refused the copy: ${body?.error?.message ?? ""}`,
+        status: ok ? "ok" : "refused",
+        source: "sandbox",
+        why: [
+          {
+            source: "rule",
+            text: "Rev Rec records each transaction once. A copy with the same transaction id does not count again.",
+          },
+        ],
+      });
+    else if (r.step.startsWith("Customer adds a new card"))
+      story.events.push({
+        ...base,
+        from: "customer",
+        to: "processor",
+        label: "add card ••4242 in the app",
+        text: "The customer adds a new card ending 4242 in the merchant's app.",
+        status: "ok",
+        source: "simulator",
+      });
+    else if (r.step === "Customer pays in the app")
+      story.events.push({
+        ...base,
+        from: "customer",
+        to: "processor",
+        label: `pay ${amount} in the app → approved`,
+        text: `The customer paid ${amount} in the merchant's app. Stripe approved it (${body?.id}).`,
+        status: "ok",
+        source: "sandbox",
+        txnId: body?.id,
+      });
+    else if (r.step.startsWith("Tell Rev Rec the invoice was paid"))
+      story.events.push({
+        ...base,
+        from: "billing",
+        to: "revrec",
+        label: `report paid outside Rev Rec → ${r.response.status}`,
+        text: "The billing system told Rev Rec the invoice is paid.",
+        status: ok ? "ok" : "refused",
+        source: "sandbox",
+        why: [
+          {
+            source: "rule",
+            text: "A report with transaction_status charged tells Rev Rec the invoice was paid elsewhere, so Rev Rec stops retrying.",
+          },
+        ],
+      });
+  }
+  // Retry bookings the first store did not keep, with the process-tracker answer seen at the time.
+  for (const b of seen.bookings) {
+    const stepId = newStepId(story);
+    const bookedFor = String(b.processTracker.schedule_time_for_payment);
+    story.requests.push({
+      stepId,
+      step: "Rev Rec books a retry (read from the process tracker; reconstructed from the run log)",
+      at: b.at,
+      system: "sandbox",
+      request: {
+        method: "GET",
+        url: `${config.hsBaseUrl}/v2/process-trackers/revenue-recovery-workflow/${story.recoveryId}`,
+        headers: shownHsHeaders("jwt", PROFILES.story.profileId),
+      },
+      response: { status: 200, body: b.processTracker },
+      ms: null,
+    });
+    story.events.push({
+      stepId,
+      at: b.at,
+      from: "revrec",
+      to: "revrec",
+      label: `pick retry time → ${hms(bookedFor)}`,
+      text: `Rev Rec booked a retry of the saved card for ${hms(bookedFor)} UTC.`,
+      status: "ok",
+      source: "sandbox",
+      why: [
+        {
+          source: "sandbox",
+          text: `Booked time from the process tracker: ${bookedFor}. This early story did not save the read; the values come from the run log of that day.`,
+        },
+      ],
+    });
+  }
+  story.events.sort((x, y) => x.at.localeCompare(y.at));
+  stories.set(story.storyId, story);
+  save();
+  return story;
+}
+
 export function getStory(storyId: string): Story {
   const s = stories.get(storyId);
   if (!s) throw new HttpError(404, `story ${storyId} not found`);
@@ -1026,6 +1241,25 @@ const STATUS_ALIASES: Record<string, string> = {
   no_picked: "monitoring",
   partially_captured_and_processing: "processing",
 };
+// The story status and the plain caption for a stage name (used by replay, recordings.ts).
+export function stageInfo(stage: string, recoveredBy: string | null) {
+  if (stage === "Recovered")
+    return {
+      status: "recovered",
+      caption:
+        recoveredBy === "revrec"
+          ? "Paid: Rev Rec's retry worked"
+          : "Paid outside Rev Rec",
+    };
+  const entry = Object.entries(STAGES).find(([, v]) => v.stage === stage);
+  return entry
+    ? {
+        status: STATUS_ALIASES[entry[0]] ?? entry[0],
+        caption: entry[1].caption,
+      }
+    : { status: "starting", caption: "The billing system is at work" };
+}
+
 export const normalizeStatus = (sandboxStatus: string | null | undefined) =>
   sandboxStatus ? (STATUS_ALIASES[sandboxStatus] ?? sandboxStatus) : null;
 export const isFinalStatus = (status: string | null) =>
