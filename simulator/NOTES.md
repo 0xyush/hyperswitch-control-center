@@ -357,3 +357,22 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
 - URL: https://revrec-sim-205511702680.us-central1.run.app (password gate, 7-day cookie). GCP project hs-selfhost-0928-x825 (owner account yushsthajuspay@gmail.com), region us-central1, service `revrec-sim`, image tag = commit 71d2efdfa.
 - Secrets in Secret Manager: revrec-sim-password, revrec-sim-hs-api-key, revrec-sim-stripe-test-key, revrec-sim-hs-dashboard-jwt (dashboard token expires 28 Oct 18:02Z: add a new version + `gcloud run services update revrec-sim --region us-central1 --update-secrets HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest`).
 - Redeploy: `gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml --substitutions _IMAGE=<tag>,_GIT_COMMIT=<sha>` then `gcloud run deploy revrec-sim --image <tag> ...` (full command in deploy/README.md section 5, plus `--memory 1Gi`).
+- 2026-10-26 13:11 [C] **UX-PASS-2 sections B and C done.** Commits e8b63fea8 (Learn Rev Rec), f60365d99 (portfolio). Not pushed.
+  - **Learn Rev Rec** (route `/simulator/tour` unchanged; renamed in the sidebar, Explore drawer and check-refresh):
+    - 8 levels on a vertical path (stepper look) plus a 9th "More features" level with 6 one-liners.
+    - A level opens a modal with 3 panes: idea, real value (big type + source chip + the old Live / Read-only tag), one check question.
+    - A right answer turns the circle green. Progress lives in localStorage `simulator_learned_levels` (this browser only).
+    - "Try it in the story" uses `?preset=N`: levels 1, 3–8 → presets 2, 4, 7, 5, 8, 1, 2. Level 2 (static vs smart) opens the portfolio run.
+    - Live reads in pane 2: start rule, max retries, grace period, retry mode, partial auth. Written in the UI: the questions, "0 retries after a hard decline", Visa 20 / Mastercard 10 a day, "1 invoice per customer", "0 webhooks so far".
+  - **Portfolio:**
+    - Form: tiles for invoices (25 greyed, tag "Soon") and stop-after. B's `AmountField` (USD, no toggle). Decline mix is a stacked bar; drag a boundary in 10% steps.
+    - The mix weights now add up to 100 (40/30/20/10/0), not 10. The proxy accepts any weights; the split is the same.
+    - When two boundaries touch (a 0% segment), the first drag direction picks which one moves.
+    - Right: a progress ring while `setting_up`, then a status bar and four cards in one column ("Recovery rate", "Recovered", "Attempts per recovery", "Minutes to recover").
+    - A side with invoices and 0 Rev Rec attempts gets one amber line with a "?" tooltip. It shows at the end, or while running if the other side has attempts.
+    - A card with one side missing shows "–" on that side. The proxy's warnings fold into "N notes on this run" (click to open).
+  - **Checks:** re:build 0 warnings, format, lint:hooks, refresh 14/14, no page errors in headless Chrome.
+    - The drag was tested with real mouse moves: 40/30/20/10/0 → 40/30/0/20/10.
+    - Results shown on the real run `pf_4744661b` (smart 0 attempts → one banner). No new run was started.
+    - The ring screenshot uses a mocked `setting_up` reply in the test browser only.
+  - **Screenshots** (local): `simulator/screenshots/learn-path.png`, `learn-pane-1-idea.png`, `learn-pane-2-value.png`, `learn-pane-3-wrong.png`, `learn-pane-3-right.png`, `learn-progress.png`, `portfolio-form.png`, `portfolio-form-dragged.png`, `portfolio-mix-bar.png`, `portfolio-setup-ring.png`, `portfolio-results.png`, `portfolio-banner-why.png`, `portfolio-notes-open.png`.
