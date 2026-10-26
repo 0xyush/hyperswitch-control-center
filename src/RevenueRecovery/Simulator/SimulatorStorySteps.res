@@ -123,7 +123,6 @@ let buildStoryItems = (story: story) => {
   let chargeIndex = ref(-1)
   let chargeCount = ref(0)
   let reportIndex = ref(-1)
-  let reportCount = ref(0)
   let outcomeDetails = []
   let outcomeRow = ref(None)
   // The card of the billing system's own charge; the proxy's label leaves it out
@@ -165,25 +164,20 @@ let buildStoryItems = (story: story) => {
         | card => card
         }
         let cardText = card->LogicUtils.isNonEmptyString ? ` on ••${card}` : ""
-        let tries =
+        // The saved card is in the step that uses it, so only the number of tries is added
+        let detail =
           chargeCount.contents > 1
-            ? `${chargeCount.contents->Int.toString} tries, the last one ${row.status == StepOk
+            ? `${chargeCount.contents->Int.toString} tries, last one ${row.status == StepOk
                   ? "approved"
                   : "declined"}`
             : ""
-        let onFile =
-          savedCard.contents->LogicUtils.isNonEmptyString
-            ? `saved card ••${savedCard.contents} on file`
-            : ""
-        let detail =
-          [onFile, tries]->Array.filter(LogicUtils.isNonEmptyString)->Array.joinWith(" · ")
         let item = {
           ...step(
             ~row,
             ~index,
             ~phase=1,
             ~actor=Billing,
-            ~title=`Billing system charged ${label->amountOf}${cardText}`,
+            ~title=`Charged ${label->amountOf}${cardText}`,
             ~chip=row->chargeChip,
             ~tone=row.status->toneOf,
           ),
@@ -200,27 +194,20 @@ let buildStoryItems = (story: story) => {
         }
       }
     | (Billing, RevRec) if startsWith("report failure") => {
-        reportCount := reportCount.contents + 1
         let code = label->httpStatusOf
         let recorded = code == "200"
-        let item = {
-          ...step(
-            ~row,
-            ~index,
-            ~phase=2,
-            ~actor=Billing,
-            ~title=recorded
-              ? "Billing system reported the failure. Rev Rec recorded it."
-              : `Billing system reported the failure. Rev Rec answered ${code}.`,
-            ~chip=code->LogicUtils.isNonEmptyString
-              ? Some((code, recorded ? ToneOk : ToneDeclined))
-              : None,
-            ~tone=recorded ? ToneOk : ToneDeclined,
-          ),
-          detail: reportCount.contents > 1
-            ? `reported after each of the ${reportCount.contents->Int.toString} tries`
-            : "",
-        }
+        let item = step(
+          ~row,
+          ~index,
+          ~phase=2,
+          ~actor=Billing,
+          ~title="Reported the failure to Rev Rec",
+          // A check when Rev Rec recorded it; the HTTP code when it did not
+          ~chip=code->LogicUtils.isNonEmptyString
+            ? Some((recorded ? "✓" : code, recorded ? ToneOk : ToneDeclined))
+            : None,
+          ~tone=recorded ? ToneOk : ToneDeclined,
+        )
         switch reportIndex.contents {
         | -1 => {
             reportIndex := items->Array.length
@@ -237,23 +224,21 @@ let buildStoryItems = (story: story) => {
             ~index,
             ~phase=2,
             ~actor=Billing,
-            ~title=refused
-              ? "Billing system reported the same failure again. Rev Rec refused the copy."
-              : "Billing system reported the same failure again.",
-            ~chip=Some((label->httpStatusOf, refused ? ToneInfo : ToneOk)),
+            ~title="Reported the same failure again",
+            ~chip=Some(refused ? ("Refused", ToneInfo) : ("✓", ToneOk)),
             ~tone=ToneInfo,
           ),
         )
       }
     | (Billing, RevRec) if startsWith("report paid outside") => {
         outcomeDetails
-        ->Array.push(`the billing system reported the payment to Rev Rec (${label->httpStatusOf})`)
+        ->Array.push(`Reported to Rev Rec (${label->httpStatusOf})`)
         ->ignore
         outcomeRow := Some(row)
       }
     | (Billing, RevRec) if startsWith("cancel invoice") => {
         outcomeDetails
-        ->Array.push(`the merchant cancelled it (${label->httpStatusOf})`)
+        ->Array.push(`Merchant cancelled it (${label->httpStatusOf})`)
         ->ignore
         outcomeRow := Some(row)
       }
@@ -266,7 +251,7 @@ let buildStoryItems = (story: story) => {
             ~index,
             ~phase=5,
             ~actor=Customer,
-            ~title=`Customer paid ${label->amountOf} in the app${card}`,
+            ~title=`Paid ${label->amountOf} in the app${card}`,
             ~chip=row->chargeChip,
             ~tone=row.status->toneOf,
           ),
@@ -279,7 +264,7 @@ let buildStoryItems = (story: story) => {
           ~index,
           ~phase=3,
           ~actor=RevRec,
-          ~title=`Rev Rec picked a retry time: ${row->bookedTimeOf}`,
+          ~title=`Picked a retry time: ${row->bookedTimeOf}`,
           ~chip=None,
           ~tone=ToneRevRec,
         ),
@@ -294,7 +279,7 @@ let buildStoryItems = (story: story) => {
             ~index,
             ~phase=3,
             ~actor=RevRec,
-            ~title=`Rev Rec booked a retry for ${row.at->toClockTime}`,
+            ~title=`Booked a retry for ${row.at->toClockTime}`,
             ~chip=None,
             ~tone=TonePending,
           ),
@@ -312,8 +297,8 @@ let buildStoryItems = (story: story) => {
             ~phase=4,
             ~actor=RevRec,
             ~title=card->LogicUtils.isNonEmptyString
-              ? `Rev Rec charged the saved card ••${card}`
-              : "Rev Rec charged the saved card",
+              ? `Charged the saved card ••${card}`
+              : "Charged the saved card",
             ~chip=row->chargeChip,
             ~tone=row.status->toneOf,
           ),
@@ -323,7 +308,7 @@ let buildStoryItems = (story: story) => {
     // already says how it ended, so only the billing system's follow-up is added
     | (RevRec, Billing) => {
         if label->String.includes("mark paid") {
-          outcomeDetails->Array.push("the billing system marked the invoice paid")->ignore
+          outcomeDetails->Array.push("Billing system marked it paid")->ignore
         }
         outcomeRow := Some(row)
       }
@@ -383,9 +368,7 @@ let moneyText = (form: billingForm) =>
 let creatingItem = (~form: option<billingForm>): storyItem => {
   phase: 1,
   actor: Some(Billing),
-  title: form->Option.mapOr("Billing system creates the invoice", form =>
-    `Billing system creates invoice ${form->moneyText}`
-  ),
+  title: form->Option.mapOr("Creates the invoice", form => `Creates invoice ${form->moneyText}`),
   chip: None,
   detail: "",
   tone: TonePending,
@@ -488,20 +471,6 @@ module Chip = {
   }
 }
 
-module WhyLink = {
-  @react.component
-  let make = (~onOpen) => {
-    <span
-      className={`shrink-0 cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
-      onClick={event => {
-        event->ReactEvent.Mouse.stopPropagation
-        onOpen()
-      }}>
-      {"Why"->React.string}
-    </span>
-  }
-}
-
 // A phase heading on the rail, with a larger dot
 module PhaseHeading = {
   @react.component
@@ -522,7 +491,8 @@ module PhaseHeading = {
   }
 }
 
-// A flat step on the rail: dot, actor chip, sentence, status chip, "Why", time; one muted detail line
+// A flat step on the rail: dot, actor chip, sentence, status chip, "?", time; a muted detail line
+// only when it adds something
 module StepRow = {
   @react.component
   let make = (
@@ -577,7 +547,7 @@ module StepRow = {
             }}
           </div>
           <RenderIf condition=canOpen>
-            <WhyLink onOpen />
+            <HelpButton onClick=onOpen />
           </RenderIf>
           <span
             className={`shrink-0 w-24 flex justify-end ${body.sm.regular} text-nd_gray-400`}
@@ -633,7 +603,7 @@ module OutcomeCard = {
           </RenderIf>
         </div>
         <RenderIf condition=canOpen>
-          <WhyLink onOpen />
+          <HelpButton onClick=onOpen />
         </RenderIf>
       </div>
     </div>
@@ -663,7 +633,7 @@ module PhaseStrip = {
         let nextReached = phases->Array.get(index + 1)->Option.mapOr(false, reached)
         <React.Fragment key={phase->Int.toString}>
           <div
-            className={`flex flex-col items-center gap-2 w-24 shrink-0 ${isReached
+            className={`flex flex-col items-center gap-2 w-20 shrink-0 ${isReached
                 ? "cursor-pointer"
                 : ""}`}
             onClick={_ => isReached ? onPhaseClick(phase) : ()}>

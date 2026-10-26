@@ -467,7 +467,25 @@ let badgeClass = status =>
   | StepInfo => "bg-nd_gray-50 text-nd_gray-600 border border-nd_gray-200"
   }
 
-// One step card: number, title, who to whom, time, a "Why" link. Status sets the badge colour.
+// The "?" button that opens why something happened (it replaces the "Why" text links)
+module HelpButton = {
+  @react.component
+  let make = (~onClick, ~label="Why") => {
+    <button
+      type_="button"
+      ariaLabel=label
+      title=label
+      className={`shrink-0 w-5 h-5 rounded-full border border-nd_gray-300 text-nd_gray-500 hover:border-nd_primary_blue-450 hover:text-nd_primary_blue-450 flex items-center justify-center ${body.xs.semibold}`}
+      onClick={event => {
+        event->ReactEvent.Mouse.stopPropagation
+        onClick()
+      }}>
+      {"?"->React.string}
+    </button>
+  }
+}
+
+// One step card: number, title, who to whom, time, a "?" button. Status sets the badge colour.
 module StepCard = {
   @react.component
   let make = (
@@ -509,8 +527,7 @@ module StepCard = {
         </div>
         <div className={`flex items-center gap-2 ${body.sm.medium} text-nd_gray-500`}>
           <span> {who->React.string} </span>
-          <span className="text-nd_gray-300"> {"•"->React.string} </span>
-          <span className="text-blue-500 hover:text-blue-700"> {"Why"->React.string} </span>
+          <HelpButton onClick=onOpen />
         </div>
         children
       </div>
@@ -519,7 +536,7 @@ module StepCard = {
 }
 
 // The proxy's note when Rev Rec has not booked a retry long after it should have (sandbox
-// scheduler). It replaces the countdown; "Why" opens the drawer.
+// scheduler). It replaces the countdown; "?" opens the drawer.
 module WaitingNoteLine = {
   @react.component
   let make = (~waiting: waitingNote, ~onWhy) => {
@@ -530,14 +547,7 @@ module WaitingNoteLine = {
       <span className={`${body.md.medium} opacity-80`}>
         {`· ${waiting.minutes->Int.toString} min`->React.string}
       </span>
-      <span
-        className={`cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
-        onClick={event => {
-          event->ReactEvent.Mouse.stopPropagation
-          onWhy()
-        }}>
-        {"Why"->React.string}
-      </span>
+      <HelpButton onClick=onWhy />
     </div>
   }
 }
