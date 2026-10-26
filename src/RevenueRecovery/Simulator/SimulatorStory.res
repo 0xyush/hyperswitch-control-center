@@ -268,7 +268,7 @@ let make = (~storyIdFromUrl: option<string>) => {
     />
     <PageUtils.PageHeading
       title="Invoice story"
-      subTitle="Play the merchant's billing system on the left. Rev Rec on the sandbox handles the failed invoice on the right, live."
+      subTitle="Charge a customer on the left. Watch Rev Rec handle the failed invoice on the right."
     />
     <PageLoaderWrapper
       screenState

@@ -14,7 +14,7 @@ let steps: array<stepDetails> = [
     title: "What Rev Rec is",
     description: <div className="flex flex-col gap-4">
       {stepText(
-        "When a subscription payment fails, the billing system tells Revenue Recovery (Rev Rec). Rev Rec picks a time, charges the saved card again, and stops when the invoice is paid or a retry can no longer help.",
+        "When a subscription payment fails, the billing system tells Revenue Recovery (Rev Rec). Rev Rec picks a time and charges the saved card again. It stops when the invoice is paid or a retry cannot help.",
       )}
       {stepText(
         "A soft decline (for example, no funds) is worth a retry. A hard decline (for example, a stolen card) is not.",
@@ -31,7 +31,7 @@ let steps: array<stepDetails> = [
     title: "Watch one invoice",
     description: <div className="flex flex-col gap-4">
       {stepText(
-        "Pick a scenario and press Play. A real failed invoice moves from Monitoring to Queued, Scheduled and Processing, then to Recovered or Terminated.",
+        "Pick a scenario and charge the customer. A real failed invoice moves through Monitoring, Scheduled and Processing. It ends Recovered or Terminated.",
       )}
       {stepText(
         "Each step says who acted (billing system, Rev Rec, processor or customer) and why.",
@@ -85,7 +85,7 @@ let steps: array<stepDetails> = [
     title: "Read the maths",
     description: <div className="flex flex-col gap-4">
       {stepText(
-        "For any attempt, see the inputs Rev Rec used, the rule or model answer, the time it chose and the limits that applied.",
+        "For any attempt, see what Rev Rec used and the time it chose. You also see the limits that applied.",
       )}
       {stepText("Every line says where it comes from: the sandbox, re-computed, or a rule.")}
     </div>,

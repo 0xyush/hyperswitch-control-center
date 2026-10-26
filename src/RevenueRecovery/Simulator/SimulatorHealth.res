@@ -242,7 +242,7 @@ let make = () => {
         </Section>
         <Section
           title="Dashboard tokens"
-          subTitle="The token pasted into the proxy, and the one it switched to the Rev Rec merchant.">
+          subTitle="The token pasted into the proxy, and the one for the Rev Rec merchant.">
           <SimulatorTable
             headers=["Token", "Merchant", "Profile", "Role", "Expires"] rows={dashboard->tokenRows}
           />

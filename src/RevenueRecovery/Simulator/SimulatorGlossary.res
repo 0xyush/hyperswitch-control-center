@@ -66,7 +66,7 @@ let entries: array<entry> = [
   {
     term: "Webhook",
     aliases: ["webhook", "webhooks"],
-    definition: "A message one system sends to another when something changes, for example when an invoice is paid.",
+    definition: "A message one system sends to another when something changes. For example, when an invoice is paid.",
   },
   {
     term: "Error catalogue (GSM)",
@@ -76,7 +76,7 @@ let entries: array<entry> = [
   {
     term: "Billing simulator",
     aliases: ["billing simulator"],
-    definition: "The part of the proxy that plays the merchant's billing system, and in the portfolio run, the customer's bank.",
+    definition: "The part of the proxy that plays the merchant's billing system. In the portfolio run, it also plays the customer's bank.",
   },
   {
     term: "Proxy",

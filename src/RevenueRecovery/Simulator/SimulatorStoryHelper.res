@@ -654,22 +654,33 @@ module InvoiceCard = {
   }
 }
 
+// A tiny chip for where a fact comes from: "From the sandbox", "Re-computed", "Rule-based"
+let tinyChipStyle = "inline-block rounded border px-1 text-[10px] leading-4 font-semibold whitespace-nowrap align-middle"
+
+module SourceChip = {
+  @react.component
+  let make = (~source: source) => {
+    let (label, labelClass) = source->sourceLabel
+    <span className={`${tinyChipStyle} ${labelClass}`}> {label->React.string} </span>
+  }
+}
+
+// Each line starts with its tiny source chip
 module ExplainLines = {
   @react.component
   let make = (~lines: array<explainLine>) => {
     <div className="flex flex-col gap-3">
       {lines
-      ->Array.mapWithIndex((line, index) => {
-        let (label, labelClass) = line.source->sourceLabel
-        <div key={index->Int.toString} className="flex flex-col gap-1">
-          <span className={`w-fit rounded px-1.5 py-0.5 border ${body.xs.semibold} ${labelClass}`}>
-            {label->React.string}
-          </span>
-          <p className={`${body.md.medium} text-nd_gray-600`} style={overflowWrap: "anywhere"}>
-            {line.text->SimulatorGlossary.linkTerms}
-          </p>
-        </div>
-      })
+      ->Array.mapWithIndex((line, index) =>
+        <p
+          key={index->Int.toString}
+          className={`${body.md.medium} text-nd_gray-600`}
+          style={overflowWrap: "anywhere"}>
+          <SourceChip source=line.source />
+          {" "->React.string}
+          {line.text->SimulatorGlossary.linkTerms}
+        </p>
+      )
       ->React.array}
     </div>
   }
@@ -807,7 +818,7 @@ module ExplainDrawer = {
         <div className="h-full relative">
           <div className="absolute inset-0 overflow-y-auto px-4 pb-20 flex flex-col gap-4">
             <p className={`${body.md.medium} text-nd_gray-500`}>
-              {"When the invoice was first seen in each state. Sandbox times are exact; times seen by the proxy can be up to one poll late."->React.string}
+              {"When the invoice was first seen in each state. Sandbox times are exact. Proxy times can be one poll late."->React.string}
             </p>
             <SimulatorTable
               headers=["State", "First seen", "Source"]
@@ -816,8 +827,7 @@ module ExplainDrawer = {
                 [
                   visit.stage->stageName->React.string,
                   visit.firstSeenAt->toClockTime->React.string,
-                  <span
-                    className={`w-fit rounded px-1.5 py-0.5 border whitespace-nowrap ${body.xs.semibold} ${sourceClass}`}>
+                  <span className={`${tinyChipStyle} ${sourceClass}`}>
                     {sourceText->React.string}
                   </span>,
                 ]

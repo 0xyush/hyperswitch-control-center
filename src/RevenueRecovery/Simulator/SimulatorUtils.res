@@ -14,7 +14,7 @@ let getConfig = () => Window.env.simulatorConfig->Option.getOr(Dict.make()->getS
 let getSimUrl = path => `${getConfig().simUrl}${path}`
 
 // Why a smart-mode profile books no retries on the sandbox today (PRD ask 2)
-let smartDeciderNote = "Smart mode needs a decider service, which the sandbox does not have for this merchant (ask 2 to Kirthi)."
+let smartDeciderNote = "Smart mode needs a decider service. The sandbox lacks it for this merchant (ask 2)."
 
 // PRD section 7: poll the story every 4 s
 let pollIntervalMs = 4000

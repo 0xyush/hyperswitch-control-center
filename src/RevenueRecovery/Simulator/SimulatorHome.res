@@ -21,7 +21,7 @@ let make = () => {
           <img alt="simulator" src="/assets/RevenueRecoveryHomePreview.svg" />
           <CardHeader
             heading="Try the simulator"
-            subHeading="Pick a failed invoice scenario, press Play and see who does what, and why, at each step"
+            subHeading="Charge a customer, then watch Rev Rec recover the failed payment, step by step."
           />
         </div>
         <Button
@@ -41,13 +41,13 @@ let make = () => {
       <div className="flex flex-col gap-2 mb-6">
         <p className={heading.md.semibold}> {"Explore Workflows"->React.string} </p>
         <p className={`${body.lg.medium} text-nd_gray-400`}>
-          {"Learn the product one part at a time, with a guide that stays open while you click around."->React.string}
+          {"Learn the product one part at a time. The guide stays open while you click around."->React.string}
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ExploreWorkflowsSection.InternalWorkflowDisplayCard
           title="Explore Revenue Recovery"
-          description="What Rev Rec is, one invoice end to end, a portfolio run, the features and the maths behind each retry."
+          description="What Rev Rec is, one invoice end to end, and the maths behind each retry."
           buttonText="Explore Revenue Recovery"
           onButtonClick={() => {
             mixpanelEvent(~eventName="explore_revenue_recovery_button_click")
