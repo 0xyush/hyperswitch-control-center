@@ -128,7 +128,7 @@ let buildStoryItems = (story: story) => {
   let outcomeRow = ref(None)
   // The card of the billing system's own charge; the proxy's label leaves it out
   let firstChargeCard = switch story.firstChargeCard {
-  | "" => story.form->Option.mapOr("", form => form.card)
+  | "" => story.form->Option.mapOr("", form => form.firstCharge)
   | card => card
   }
 

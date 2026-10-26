@@ -40,7 +40,8 @@ let presetMapper = (dict): preset => {
       preset: id,
       amount: fields->getInt("amount", 6540)->toMajorText,
       currency: fields->getString("currency", "USD"),
-      card: fields->getString("card", "0341"),
+      savedCard: fields->getString("savedCard", fields->getString("card", "0341")),
+      firstCharge: fields->getString("firstCharge", fields->getString("card", "0341")),
       customer: fields->getString("customer", "new"),
     },
   }
@@ -262,7 +263,8 @@ let formFromStory = (dict, ~preset): option<billingForm> =>
       preset,
       amount: dict->getInt("amount", 6540)->toMajorText,
       currency: dict->getString("currency", "USD"),
-      card: savedCard == "4242" || firstCharge == savedCard ? savedCard : firstCharge,
+      savedCard,
+      firstCharge,
       customer: dict->getString("customer", "new"),
     })
   }
@@ -465,16 +467,14 @@ let presetOptions = (presets: array<preset>): array<SelectBox.dropdownOption> =>
     option
   })
 
-let customerOptions: array<SelectBox.dropdownOption> = [
-  {label: "New customer", value: "new"},
-  {label: "Same as last story", value: "same"},
-]
+let customerOptions = [("new", "New customer"), ("same", "Same customer")]
 
 let defaultForm: billingForm = {
   preset: 1,
   amount: "65.40",
   currency: "USD",
-  card: "0341",
+  savedCard: "0341",
+  firstCharge: "0341",
   customer: "new",
 }
 
@@ -485,7 +485,8 @@ let startBody = (form: billingForm) =>
     form.preset > 0 ? Some(("preset", form.preset->JSON.Encode.int)) : None,
     Some(("amount", form.amount->toMinor->JSON.Encode.int)),
     Some(("currency", form.currency->JSON.Encode.string)),
-    Some(("card", form.card->JSON.Encode.string)),
+    Some(("savedCard", form.savedCard->JSON.Encode.string)),
+    Some(("firstCharge", form.firstCharge->JSON.Encode.string)),
     Some(("customer", form.customer->JSON.Encode.string)),
   ]
   ->Array.filterMap(field => field)

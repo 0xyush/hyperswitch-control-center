@@ -47,7 +47,14 @@ let make = (~storyIdFromUrl: option<string>) => {
       let json = await simFetch(~path="/sim/presets", ~method_=Get)
       let formOptions = json->getFormOptions
       setOptions(_ => formOptions)
-      // A link like ?preset=7 (from the feature tour) picks that preset; otherwise the first one
+      // A link like ?preset=7 (from the feature tour) picks that preset; otherwise the first
+      // scenario tile
+      let firstTile =
+        scenarioTiles
+        ->Array.get(0)
+        ->Option.flatMap(((id, _, _, _)) =>
+          formOptions.presets->Array.find(preset => preset.id == id)
+        )
       let presetFromUrl =
         url.search
         ->getDictFromUrlSearchParams
@@ -56,6 +63,7 @@ let make = (~storyIdFromUrl: option<string>) => {
           formOptions.presets->Array.find(preset => preset.id->Int.toString == id)
         )
       presetFromUrl
+      ->Option.orElse(firstTile)
       ->Option.orElse(formOptions.presets->Array.get(0))
       ->Option.forEach(preset => setForm(_ => preset.fields))
       setScreenState(_ => PageLoaderWrapper.Success)
@@ -288,8 +296,6 @@ let make = (~storyIdFromUrl: option<string>) => {
             isLocked={isBusy || isStarting}
             story
             onCharge={() => onCharge()->ignore}
-            onPaidInApp
-            onReportAgain
             onCancel={() =>
               runAction(~action="cancel", ~eventName="recovery_simulator_cancel")->ignore}
             onStartOver

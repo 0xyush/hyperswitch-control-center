@@ -3,7 +3,10 @@ type billingForm = {
   preset: int,
   amount: string,
   currency: string,
-  card: string,
+  // The card on file, which Rev Rec retries (4242 or 0341)
+  savedCard: string,
+  // The card of the billing system's own first charge; the scenario picks it
+  firstCharge: string,
   customer: string,
 }
 

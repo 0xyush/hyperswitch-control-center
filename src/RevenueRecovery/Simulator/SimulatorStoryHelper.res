@@ -93,6 +93,27 @@ module BillingMenu = {
   }
 }
 
+// The scenario tiles (UX-PASS-2 A1): preset id, a three-word title, an icon, one sentence on hover
+let scenarioTiles = [
+  (
+    2,
+    "Temporary error",
+    "nd-hour-glass-outline",
+    "The first charge fails. One Rev Rec retry collects the money.",
+  ),
+  (1, "Pays in app", "nd-wallet", "Rev Rec starts retrying. Then the customer pays in the app."),
+  (
+    6,
+    "Insufficient funds",
+    "nd-piggy-bank",
+    "No money now. A later failure brings a card that works.",
+  ),
+  (7, "Stolen card", "nd-shield", "Declined as stolen. Rev Rec should stop at once."),
+]
+
+// The two cards a customer can have on file: last four digits, name, works or not
+let savedCardTiles = [("4242", "Good card", true), ("0341", "Declining card", false)]
+
 // Left panel: the form plays the merchant's billing system, like the checkout form plays the checkout
 module BillingSystemForm = {
   @react.component
@@ -105,18 +126,17 @@ module BillingSystemForm = {
     ~isLocked,
     ~story: option<story>,
     ~onCharge,
-    ~onPaidInApp,
-    ~onReportAgain,
     ~onCancel,
     ~onStartOver,
   ) => {
-    let selectedPreset = options.presets->Array.find(preset => preset.id == form.preset)
-    let hasInvoice = story->Option.mapOr(false, s => s.recoveryId->LogicUtils.isNonEmptyString)
+    let (showAdvanced, setShowAdvanced) = React.useState(_ => false)
+    let presetById = id => options.presets->Array.find(preset => preset.id == id)
+    // A scenario without a tile (from a tour link, or a portfolio copy) shows under Advanced
+    let isTileScenario = scenarioTiles->Array.some(((id, _, _, _)) => id == form.preset)
     let actions =
       story->Option.mapOr({paidInApp: false, reportAgain: false, cancel: false}, s => s.actions)
     let menuOptions =
       [
-        actions.reportAgain ? Some(("Report another failure", onReportAgain)) : None,
         actions.cancel ? Some(("Cancel invoice", onCancel)) : None,
         story->Option.isSome ? Some(("Start over", onStartOver)) : None,
       ]->Array.filterMap(option => option)
@@ -128,73 +148,103 @@ module BillingSystemForm = {
             {"Billing system"->React.string}
           </p>
           <p className={`${body.sm.medium} text-nd_gray-500`}>
-            {"Simulated by the proxy. It charges the customer's saved card and reports failures to Rev Rec."->React.string}
+            {"You are the merchant's billing system."->React.string}
           </p>
         </div>
         <RenderIf condition={menuOptions->Array.length > 0}>
           <BillingMenu options=menuOptions />
         </RenderIf>
       </div>
-      <div className="flex flex-col gap-1">
-        <SelectField
-          label="Preset"
-          name="preset"
-          isDisabled=isLocked
-          options={form.preset == 0
-            ? [noPresetOption]->Array.concat(options.presets->presetOptions)
-            : options.presets->presetOptions}
-          value={form.preset->Int.toString}
-          onChange={value =>
-            options.presets
-            ->Array.find(preset => preset.id->Int.toString == value)
-            ->Option.forEach(preset => setForm(_ => preset.fields))}
-        />
-        {switch selectedPreset {
-        | Some(preset) =>
-          <p className={`${body.sm.medium} text-nd_gray-500`}> {preset.summary->React.string} </p>
-        | None => React.null
-        }}
-      </div>
-      <FormField label="Amount">
-        // A text input keeps "65.40" as typed; the number input would show 65.4
-        {InputFields.textInput(
-          ~customStyle="w-full border-nd_gray-200 rounded-lg",
-          ~isDisabled=isLocked,
-        )(
-          ~input=makeInput(
-            ~name="amount",
-            ~value=form.amount,
-            ~onChange=text =>
-              setForm(prev => {...prev, amount: text->String.replaceRegExp(%re("/[^\d.]/g"), "")}),
-            ~onBlur=() => setForm(prev => {...prev, amount: prev.amount->toAmountText}),
-          ),
-          ~placeholder="Enter amount",
-        )}
+      <FormField label="Scenario">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-2 gap-2">
+          {scenarioTiles
+          ->Array.map(((id, title, icon, hint)) => {
+            let preset = presetById(id)
+            let isRunnable = preset->Option.mapOr(false, preset => preset.verified)
+            let isSelected = form.preset == id
+            <SimulatorFormTiles.Tile
+              key={id->Int.toString}
+              title
+              icon
+              hint
+              isSelected
+              tag={isRunnable ? "" : "Not ready"}
+              isDisabled={isLocked || preset->Option.isNone || (!isRunnable && !isSelected)}
+              onClick={() => preset->Option.forEach(preset => setForm(_ => preset.fields))}
+            />
+          })
+          ->React.array}
+        </div>
       </FormField>
-      <SelectField
-        label="Currency"
-        name="currency"
-        isDisabled=isLocked
-        options=options.currencies
-        value=form.currency
-        onChange={currency => setForm(prev => {...prev, currency})}
-      />
-      <SelectField
-        label="Saved card"
-        name="card"
-        isDisabled=isLocked
-        options=options.cards
-        value=form.card
-        onChange={card => setForm(prev => {...prev, card})}
-      />
-      <SelectField
-        label="Customer"
-        name="customer"
-        isDisabled=isLocked
-        options=customerOptions
-        value=form.customer
-        onChange={customer => setForm(prev => {...prev, customer})}
-      />
+      <FormField label="Amount">
+        <SimulatorFormTiles.AmountField
+          amount=form.amount
+          setAmount={amount => setForm(prev => {...prev, amount})}
+          currency=form.currency
+          setCurrency={currency => setForm(prev => {...prev, currency})}
+          currencies={options.currencies->Array.map(option => option.value)}
+          isDisabled=isLocked
+        />
+      </FormField>
+      <FormField label="Saved card">
+        <div className="grid grid-cols-2 gap-2">
+          {savedCardTiles
+          ->Array.map(((last4, name, isGood)) =>
+            <SimulatorFormTiles.CardTile
+              key=last4
+              last4
+              name
+              isGood
+              isSelected={form.savedCard == last4}
+              isDisabled=isLocked
+              onClick={() => setForm(prev => {...prev, savedCard: last4})}
+            />
+          )
+          ->React.array}
+        </div>
+      </FormField>
+      <FormField label="Customer">
+        <div>
+          <SimulatorFormTiles.ToggleChip
+            options=customerOptions
+            value=form.customer
+            onChange={customer => setForm(prev => {...prev, customer})}
+            isDisabled=isLocked
+          />
+        </div>
+      </FormField>
+      <div className="flex flex-col gap-4">
+        <span
+          className={`w-fit flex items-center gap-1 cursor-pointer text-nd_gray-500 hover:text-nd_gray-700 ${body.sm.semibold}`}
+          onClick={_ => setShowAdvanced(prev => !prev)}>
+          {"Advanced"->React.string}
+          <Icon name={showAdvanced || !isTileScenario ? "nd-angle-up" : "nd-angle-down"} size=12 />
+        </span>
+        <RenderIf condition={showAdvanced || !isTileScenario}>
+          <SelectField
+            label="Other scenarios"
+            name="preset"
+            isDisabled=isLocked
+            options={form.preset == 0
+              ? [noPresetOption]->Array.concat(options.presets->presetOptions)
+              : options.presets->presetOptions}
+            value={form.preset->Int.toString}
+            onChange={value =>
+              options.presets
+              ->Array.find(preset => preset.id->Int.toString == value)
+              ->Option.forEach(preset => setForm(_ => preset.fields))}
+          />
+          <SelectField
+            label="First charge"
+            name="firstCharge"
+            isDisabled=isLocked
+            // The first charge is the billing system's own; 4242 would never fail
+            options={options.cards->Array.filter(card => card.value != "4242")}
+            value=form.firstCharge
+            onChange={firstCharge => setForm(prev => {...prev, firstCharge})}
+          />
+        </RenderIf>
+      </div>
       <Button
         text="Charge customer"
         loadingText="Charging…"
@@ -204,16 +254,6 @@ module BillingSystemForm = {
         buttonState={isBusy || isLocked ? Loading : Normal}
         onClick={_ => onCharge()}
       />
-      <RenderIf condition=hasInvoice>
-        <Button
-          text="Customer pays in app"
-          buttonType=Secondary
-          buttonSize=Small
-          customButtonStyle="!w-full"
-          buttonState={actions.paidInApp && !isBusy ? Normal : Disabled}
-          onClick={_ => onPaidInApp()}
-        />
-      </RenderIf>
     </div>
   }
 }
