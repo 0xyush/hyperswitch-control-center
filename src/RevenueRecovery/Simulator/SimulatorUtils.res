@@ -311,6 +311,14 @@ let storyMapper = (json): story => {
     attemptBy: dict
     ->getArrayFromDict("attemptSummary", [])
     ->Array.map(item => item->getDictFromJsonObject->getString("by", "")),
+    attemptTxn: dict
+    ->getArrayFromDict("attemptSummary", [])
+    ->Array.map(item => {
+      let attempt = item->getDictFromJsonObject
+      (attempt->getString("id", ""), attempt->getString("connectorTxnId", ""))
+    })
+    ->Array.filter(((_, txnId)) => txnId->isNonEmptyString)
+    ->Dict.fromArray,
     processTracker: dict->getDictfromDict("processTracker"),
     explain: dict->getArrayFromDict("explain", [])->Array.map(explainLineMapper),
     timeline: dict

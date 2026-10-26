@@ -115,6 +115,8 @@ type story = {
   attempts: JSON.t,
   // Who made each sandbox attempt, from the proxy's attemptSummary: "billing" or "revrec"
   attemptBy: array<string>,
+  // Stripe's charge id (pi_…) of each sandbox attempt, by attempt id
+  attemptTxn: Dict.t<string>,
   processTracker: Dict.t<JSON.t>,
   explain: array<explainLine>,
   timeline: array<diagramRow>,

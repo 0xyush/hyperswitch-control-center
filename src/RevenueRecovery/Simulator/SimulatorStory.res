@@ -334,6 +334,8 @@ let make = (~storyIdFromUrl: option<string>) => {
         </div>
       </div>
     </PageLoaderWrapper>
-    <ExplainDrawer content=drawerContent story onClose={() => setDrawerContent(_ => None)} />
+    <SimulatorStoryDrawer.ExplainDrawer
+      content=drawerContent story onClose={() => setDrawerContent(_ => None)}
+    />
   </div>
 }
