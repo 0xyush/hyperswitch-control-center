@@ -48,12 +48,13 @@ module FormField = {
 
 module SelectField = {
   @react.component
-  let make = (~label, ~name, ~options, ~value, ~onChange) => {
+  let make = (~label, ~name, ~options, ~value, ~onChange, ~isDisabled=false) => {
     <FormField label>
       {InputFields.selectInput(
         ~options,
         ~buttonText=`Select ${label->String.toLowerCase}`,
         ~deselectDisable=true,
+        ~disableSelect=isDisabled,
         ~fullLength=true,
         ~textStyle="!font-normal",
       )(~input=makeInput(~name, ~value, ~onChange), ~placeholder="")}
@@ -100,6 +101,8 @@ module BillingSystemForm = {
     ~form: billingForm,
     ~setForm,
     ~isBusy,
+    // True from the moment Charge customer is pressed until the story leaves "starting"
+    ~isLocked,
     ~story: option<story>,
     ~onCharge,
     ~onPaidInApp,
@@ -136,6 +139,7 @@ module BillingSystemForm = {
         <SelectField
           label="Preset"
           name="preset"
+          isDisabled=isLocked
           options={form.preset == 0
             ? [noPresetOption]->Array.concat(options.presets->presetOptions)
             : options.presets->presetOptions}
@@ -153,7 +157,10 @@ module BillingSystemForm = {
       </div>
       <FormField label="Amount">
         // A text input keeps "65.40" as typed; the number input would show 65.4
-        {InputFields.textInput(~customStyle="w-full border-nd_gray-200 rounded-lg")(
+        {InputFields.textInput(
+          ~customStyle="w-full border-nd_gray-200 rounded-lg",
+          ~isDisabled=isLocked,
+        )(
           ~input=makeInput(
             ~name="amount",
             ~value=form.amount,
@@ -167,6 +174,7 @@ module BillingSystemForm = {
       <SelectField
         label="Currency"
         name="currency"
+        isDisabled=isLocked
         options=options.currencies
         value=form.currency
         onChange={currency => setForm(prev => {...prev, currency})}
@@ -174,6 +182,7 @@ module BillingSystemForm = {
       <SelectField
         label="Saved card"
         name="card"
+        isDisabled=isLocked
         options=options.cards
         value=form.card
         onChange={card => setForm(prev => {...prev, card})}
@@ -181,16 +190,18 @@ module BillingSystemForm = {
       <SelectField
         label="Customer"
         name="customer"
+        isDisabled=isLocked
         options=customerOptions
         value=form.customer
         onChange={customer => setForm(prev => {...prev, customer})}
       />
       <Button
         text="Charge customer"
+        loadingText="Charging…"
         buttonType=Primary
         buttonSize=Medium
         customButtonStyle="!w-full"
-        buttonState={isBusy ? Loading : Normal}
+        buttonState={isBusy || isLocked ? Loading : Normal}
         onClick={_ => onCharge()}
       />
       <RenderIf condition=hasInvoice>
@@ -248,7 +259,6 @@ module DiagramRow = {
 
     <div
       className="flex items-stretch rounded-md hover:bg-nd_gray-25 cursor-pointer"
-      title=row.label
       onClick={_ => onClick()}>
       <div className="relative flex-1 h-12">
         {lifelines
@@ -307,33 +317,24 @@ module DiagramRow = {
   }
 }
 
-// UML-style sequence diagram. Rows are appended as real events arrive; nothing moves.
-module SequenceDiagram = {
+// Seconds or minutes since a step, ticking
+module Elapsed = {
   @react.component
-  let make = (~story: option<story>, ~onRowClick, ~onStatesClick) => {
-    // The proxy sends the booked retry as the last row, with status pending
-    let rows = story->Option.mapOr([], s => s.timeline)
-    let hasHistory = story->Option.mapOr(false, s => s.stageHistory->Array.length > 0)
+  let make = (~since) => {
+    let (nowMs, setNowMs) = React.useState(_ => Date.now())
+    React.useEffect(() => {
+      let intervalId = setInterval(() => setNowMs(_ => Date.now()), 1000)
+      Some(() => clearInterval(intervalId))
+    }, [])
+    elapsedText(~since, ~nowMs)->React.string
+  }
+}
 
-    <div className={`${cardStyle} px-6 py-5 flex flex-col gap-3`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className={`${heading.md.semibold} text-nd_gray-900`}>
-            {"What happened"->React.string}
-          </p>
-          <p className={`${body.md.medium} text-nd_gray-500`}>
-            {"Each real event is one row. Click a row to see why it happened."->React.string}
-          </p>
-        </div>
-        <RenderIf condition=hasHistory>
-          <Button
-            text="Invoice states"
-            buttonType=Secondary
-            buttonSize=Small
-            onClick={_ => onStatesClick()}
-          />
-        </RenderIf>
-      </div>
+// The lifeline view, behind "Show sequence diagram": the same visible steps, drawn as arrows
+module LifelineDiagram = {
+  @react.component
+  let make = (~rows: array<diagramRow>, ~onRowClick) => {
+    <div className="flex flex-col gap-3 border-t border-nd_gray-150 pt-4">
       <div className="flex border-b border-nd_gray-200 pb-3 pt-2">
         <div className="relative flex-1 h-10">
           {lifelines
@@ -358,27 +359,177 @@ module SequenceDiagram = {
           {"Time"->React.string}
         </div>
       </div>
-      {if rows->Array.length == 0 {
-        <p className={`${body.md.medium} text-nd_gray-500 py-6 text-center`}>
-          {"Press Charge customer. The billing system's charge and its report to Rev Rec appear here first."->React.string}
-        </p>
-      } else {
-        <div className="flex flex-col">
-          {rows
-          ->Array.mapWithIndex((row, index) =>
-            <DiagramRow
-              key={`${row.stepId}-${index->Int.toString}`}
-              row
-              time={row.status == StepPending
-                ? <Countdown nextRetryAt=row.at />
-                : row.at->toClockTime->React.string}
-              onClick={() => onRowClick(row)}
-            />
-          )
-          ->React.array}
-        </div>
-      }}
+      <div className="flex flex-col">
+        {rows
+        ->Array.mapWithIndex((row, index) =>
+          <DiagramRow
+            key={index->Int.toString}
+            row
+            time={row.status == StepPending
+              ? <Countdown nextRetryAt=row.at />
+              : row.at->toClockTime->React.string}
+            onClick={() => onRowClick(row)}
+          />
+        )
+        ->React.array}
+      </div>
     </div>
+  }
+}
+
+// Fade + slide in, 250 ms, with the dashboard's ease-in-out curve. Delays only stagger steps
+// that arrived together; a step never moves after it has landed.
+let revealCss = "@keyframes simStepIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } } .sim-step-reveal { animation: simStepIn 250ms cubic-bezier(0.4, 0, 0.2, 1) both; } @media (prefers-reduced-motion: reduce) { .sim-step-reveal { animation: none; } }"
+
+let revealStaggerMs = 400
+
+// Which cards fade in, and after what delay. When a story is opened (or refreshed), the cards
+// known at that moment show at once; only cards added later animate.
+let useRevealDelays = (~storyKey: string, ~itemCount: int, ~initialCount: int) => {
+  let tracked = React.useRef((storyKey, initialCount, Dict.make()))
+  let (trackedKey, _, _) = tracked.current
+  if trackedKey != storyKey {
+    tracked.current = (storyKey, initialCount, Dict.make())
+  }
+  let (key, shown, delays) = tracked.current
+  if itemCount > shown {
+    for index in shown to itemCount - 1 {
+      delays->Dict.set(index->Int.toString, (index - shown) * revealStaggerMs)
+    }
+    tracked.current = (key, itemCount, delays)
+  }
+  delays
+}
+
+let stepDomId = index => `sim-step-${index->Int.toString}`
+let doneDomId = "sim-step-done"
+
+@val @scope("document")
+external getElementById: string => Nullable.t<Dom.element> = "getElementById"
+
+let scrollToElement = id =>
+  getElementById(id)
+  ->Nullable.toOption
+  ->Option.forEach(element =>
+    element->Webapi.Dom.Element.scrollIntoViewWithOptions({"behavior": "smooth", "block": "center"})
+  )
+
+let revealProps = (delay: option<int>) => (
+  delay->Option.isSome ? "sim-step-reveal" : "",
+  delay->Option.map(ms => `${ms->Int.toString}ms`),
+)
+
+let badgeClass = status =>
+  switch status {
+  | StepOk => "bg-nd_green-50 text-nd_green-600 border border-nd_green-200"
+  | StepDeclined | StepFailed => "bg-nd_red-50 text-nd_red-600 border border-nd_red-200"
+  | StepPending => "bg-white text-nd_primary_blue-450 border border-dashed border-nd_primary_blue-450"
+  | StepInfo => "bg-nd_gray-50 text-nd_gray-600 border border-nd_gray-200"
+  }
+
+// One step card: number, title, who to whom, time, a "Why" link. Status sets the badge colour.
+module StepCard = {
+  @react.component
+  let make = (
+    ~row: diagramRow,
+    ~stepNumber: int,
+    ~domId=?,
+    ~time: React.element,
+    ~isNewest: bool,
+    ~revealDelay: option<int>,
+    ~onOpen,
+    ~children=React.null,
+  ) => {
+    let isPending = row.status == StepPending
+    let (fromName, _) = row.from->actorLabel
+    let (toName, _) = row.to->actorLabel
+    let who = row.from == row.to ? fromName : `${fromName} → ${toName}`
+    let (revealClass, animationDelay) = revealDelay->revealProps
+    <div
+      id={domId->Option.getOr(stepDomId(stepNumber - 1))}
+      className={`relative overflow-hidden rounded-lg border bg-white px-4 py-3 flex gap-3 cursor-pointer hover:bg-nd_gray-25 ${isPending
+          ? "border-dashed border-nd_primary_blue-450"
+          : "border-nd_gray-150"} ${revealClass}`}
+      style={animationDelay: ?animationDelay}
+      onClick={_ => onOpen()}>
+      // The newest step carries a primary-blue edge until the next one lands
+      <RenderIf condition=isNewest>
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-nd_primary_blue-450" />
+      </RenderIf>
+      <div
+        className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${body.sm.semibold} ${row.status->badgeClass}`}>
+        {stepNumber->Int.toString->React.string}
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <div className="flex items-start justify-between gap-3">
+          <p className={`${body.md.semibold} text-nd_gray-800`} style={overflowWrap: "anywhere"}>
+            {row.label->React.string}
+          </p>
+          <span className={`${body.sm.regular} text-nd_gray-500 whitespace-nowrap`}> time </span>
+        </div>
+        <div className={`flex items-center gap-2 ${body.sm.medium} text-nd_gray-500`}>
+          <span> {who->React.string} </span>
+          <span className="text-nd_gray-300"> {"•"->React.string} </span>
+          <span className="text-blue-500 hover:text-blue-700"> {"Why"->React.string} </span>
+        </div>
+        children
+      </div>
+    </div>
+  }
+}
+
+// The pause control on the last step: "Next" reveals one more step; when that step has not
+// arrived yet it waits, with the countdown to the booked retry, and shows it when it lands
+module NextControls = {
+  @react.component
+  let make = (
+    ~showNext,
+    ~nextLabel,
+    ~isWaiting,
+    ~nextRetryAt: option<string>,
+    ~onNext,
+    ~inlineActions: array<(string, unit => unit)>,
+    ~isBusy,
+  ) => {
+    <RenderIf condition={showNext || inlineActions->Array.length > 0}>
+      // Clicks here must not open the step's drawer
+      <div
+        className="flex flex-wrap items-center gap-3 pt-3"
+        onClick={event => event->ReactEvent.Mouse.stopPropagation}>
+        <RenderIf condition=showNext>
+          {if isWaiting {
+            <div
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-nd_primary_blue-50 text-nd_primary_blue-450 ${body.md.semibold}`}>
+              <Loadericon size=14 iconColor="text-nd_primary_blue-450" />
+              <span> {"Waiting for Rev Rec…"->React.string} </span>
+              {switch nextRetryAt {
+              | Some(time) =>
+                <span>
+                  {"("->React.string}
+                  <Countdown nextRetryAt=time />
+                  {")"->React.string}
+                </span>
+              | None => React.null
+              }}
+            </div>
+          } else {
+            <Button text=nextLabel buttonType=Primary buttonSize=Medium onClick={_ => onNext()} />
+          }}
+        </RenderIf>
+        {inlineActions
+        ->Array.map(((text, onClick)) =>
+          <Button
+            key=text
+            text
+            buttonType=Secondary
+            buttonSize=Small
+            buttonState={isBusy ? Disabled : Normal}
+            onClick={_ => onClick()}
+          />
+        )
+        ->React.array}
+      </div>
+    </RenderIf>
   }
 }
 

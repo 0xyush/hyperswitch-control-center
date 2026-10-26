@@ -200,6 +200,17 @@ let inferStepStatus = label => {
   }
 }
 
+// A row's phase, from who sends it to whom (the proxy may send "phase" itself)
+let derivePhase = (~from, ~to, ~status) =>
+  switch (from, to, status) {
+  | (_, _, StepPending) => 3
+  | (Billing, RevRec, _) => 2
+  | (RevRec, RevRec, _) => 3
+  | (RevRec, Processor, _) => 4
+  | (Billing, _, _) => 1
+  | _ => 5
+  }
+
 let diagramRowMapper = (index, json): diagramRow => {
   let dict = json->getDictFromJsonObject
   let label = switch dict->getString("label", "") {
@@ -207,16 +218,20 @@ let diagramRowMapper = (index, json): diagramRow => {
   | label => label
   }
   let statusText = dict->getString("status", "")
+  let from = dict->getString("from", "")->actorMapper
+  let to = dict->getString("to", "")->actorMapper
+  let status = statusText->isNonEmptyString ? statusText->stepStatusMapper : label->inferStepStatus
   {
     stepId: dict->getString("stepId", `row-${index->Int.toString}`),
     at: dict->getString("at", ""),
-    from: dict->getString("from", "")->actorMapper,
-    to: dict->getString("to", "")->actorMapper,
+    from,
+    to,
     label,
     text: dict->getString("text", ""),
-    status: statusText->isNonEmptyString ? statusText->stepStatusMapper : label->inferStepStatus,
+    status,
     why: dict->getArrayFromDict("why", [])->Array.map(explainLineMapper),
     attemptId: dict->getOptionString("attemptId"),
+    phase: dict->getOptionInt("phase")->Option.getOr(derivePhase(~from, ~to, ~status)),
   }
 }
 
@@ -266,6 +281,7 @@ let storyMapper = (json): story => {
     recoveryId: dict->getString("recoveryId", ""),
     startedAt: dict->getString("startedAt", ""),
     stage: (stageText->isNonEmptyString ? stageText : dict->getString("status", ""))->stageMapper,
+    recoveredBy: dict->getString("recoveredBy", ""),
     done: dict->getBool("done", false),
     stageHistory: dict
     ->getArrayFromDict("stageHistory", [])
@@ -295,6 +311,7 @@ let storyMapper = (json): story => {
     },
     warnings: dict->getStrArrayFromDict("warnings", []),
     startError: dict->getString("startError", ""),
+    firstChargeCard: dict->getDictfromDict("form")->getString("firstCharge", ""),
     form: dict
     ->getDictfromDict("form")
     // Portfolio copies have no preset: 0 shows as "None" in the form
@@ -361,6 +378,29 @@ let stageVisitSource = (visit: stageVisit) =>
     ? sourceLabel(Sandbox)
     : ("Seen by the proxy", "bg-nd_gray-50 text-nd_gray-600 border-nd_gray-200")
 
+// "Working…" line under the header: what happens next, from the latest step's sender and receiver
+let workingText = (latest: option<diagramRow>) =>
+  switch latest {
+  | None => "Working… the billing system is creating the invoice"
+  | Some({status: StepPending}) => "Waiting for the retry Rev Rec booked"
+  | Some({
+      from: Billing,
+      to: Processor,
+      status: StepDeclined | StepFailed,
+    }) => "Working… the billing system is reporting to Rev Rec"
+  | Some({from: Billing, to: RevRec}) => "Working… Rev Rec is picking a retry time"
+  | Some({from: Billing}) => "Working… the billing system is charging the card"
+  | Some({from: RevRec, to: RevRec}) => "Working… Rev Rec is booking the retry"
+  | Some({from: RevRec, to: Processor}) => "Working… waiting for the invoice to update"
+  | Some(_) => "Working… the billing system is recording the result"
+  }
+
+// "2 min so far" since a step, for the "Working…" line during long sandbox waits
+let elapsedText = (~since, ~nowMs) => {
+  let seconds = ((nowMs -. since->toMillis) /. 1000.0)->Float.toInt
+  seconds < 60 ? `${seconds->Int.toString} s so far` : `${(seconds / 60)->Int.toString} min so far`
+}
+
 // Raw calls behind a diagram row. Older proxies send no step ids, so match by time (within 3 s).
 let requestsForRow = (requests: array<requestLog>, row: diagramRow) =>
   if requests->Array.some(request => request.stepId->isNonEmptyString) {
@@ -390,6 +430,7 @@ let attemptRow = (attempt: RevenueRecoveryOrderTypes.attempts): diagramRow => {
     status: charged ? StepOk : StepDeclined,
     why: [],
     attemptId: Some(attempt.id),
+    phase: isInternal ? 4 : 1,
   }
 }
 

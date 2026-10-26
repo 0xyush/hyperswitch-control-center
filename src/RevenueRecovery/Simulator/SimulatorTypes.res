@@ -62,6 +62,8 @@ type diagramRow = {
   status: stepStatus,
   why: array<explainLine>,
   attemptId: option<string>,
+  // Phase 1..5 of the story: billing charge, report, pick a time, Rev Rec retries, outcome
+  phase: int,
 }
 
 type requestLog = {
@@ -94,6 +96,8 @@ type story = {
   recoveryId: string,
   startedAt: string,
   stage: stage,
+  // "revrec" when Rev Rec's own retry was paid, "billing" when paid outside Rev Rec
+  recoveredBy: string,
   // The proxy says the story has made its point, so polling can stop
   done: bool,
   stageHistory: array<stageVisit>,
@@ -109,6 +113,8 @@ type story = {
   startError: string,
   // The billing system form values this story was started with
   form: option<billingForm>,
+  // Last four digits of the card the billing system's own charge used (it can differ from the saved card)
+  firstChargeCard: string,
 }
 
 // Feature tour (PRD section 9)

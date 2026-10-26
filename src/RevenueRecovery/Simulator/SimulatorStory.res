@@ -1,9 +1,12 @@
-// Invoice story (simulator/REDESIGN-story.md): the left form plays the merchant's billing system,
-// like the checkout form on Orchestrator's "Try It Out" page. The right side is the product itself:
-// a sequence diagram of the real events, then the real invoice detail page, both updated live.
+// Invoice story (simulator/REDESIGN-story.md and STORY-STEPS.md): the left form plays the
+// merchant's billing system, like the checkout form on Orchestrator's "Try It Out" page. The right
+// side is the product itself: the story as steps grouped by phase, then the real invoice page.
 open SimulatorTypes
 open SimulatorUtils
 open SimulatorStoryHelper
+
+// Faster polling while the billing system is still creating the invoice
+let startingPollMs = 1000
 
 @react.component
 let make = (~storyIdFromUrl: option<string>) => {
@@ -20,11 +23,21 @@ let make = (~storyIdFromUrl: option<string>) => {
   let (isBusy, setIsBusy) = React.useState(_ => false)
   let (pollError, setPollError) = React.useState(_ => "")
   let (drawerContent, setDrawerContent) = React.useState(_ => None)
+  // The form values of a charge that is on its way, shown as step 1 before the proxy answers
+  let (optimistic, setOptimistic) = React.useState(_ => None)
+  // How many steps the viewer has allowed so far (the billing steps always show)
+  let (revealLimit, setRevealLimit) = React.useState(_ => 0)
+  let (autoPlay, setAutoPlay) = React.useState(_ => false)
+  let (showDiagram, setShowDiagram) = React.useState(_ => false)
   // The story whose values the form shows, so a reopened story fills the form once
   let formStoryId = React.useRef("")
+  // The story started in this tab: its steps animate from step 1; a reopened story's do not
+  let startedHereId = React.useRef("")
 
   // Scenario 3 can stay in Monitoring, so the proxy's done flag is the main end signal
   let isDone = story->Option.mapOr(false, (s: story) => s.done || s.stage->isFinalStage)
+  let isStarting =
+    story->Option.mapOr(optimistic->Option.isSome, (s: story) => s.stage == Starting && !s.done)
   let storyPath = id =>
     GlobalVars.appendDashboardPath(~url=`${RevenueRecoverySidebarValues.simulatorStoryPath}/${id}`)
 
@@ -56,7 +69,7 @@ let make = (~storyIdFromUrl: option<string>) => {
     None
   }, [])
 
-  // Poll the story every 4 s until the proxy says it is done
+  // Poll the story until the proxy says it is done: every second while it is starting, then 4 s
   React.useEffect(() => {
     switch storyIdFromUrl {
     | Some(id) if !isDone => {
@@ -72,6 +85,13 @@ let make = (~storyIdFromUrl: option<string>) => {
                 if formStoryId.current != id {
                   formStoryId.current = id
                   polledStory.form->Option.forEach(storyForm => setForm(_ => storyForm))
+
+                  // A reopened story shows every step it already has
+                  if startedHereId.current != id {
+                    setRevealLimit(_ =>
+                      polledStory->SimulatorStorySteps.buildStoryItems->snd->Array.length
+                    )
+                  }
                 }
                 setStory(_ => Some(polledStory))
                 setPollError(_ => "")
@@ -88,7 +108,10 @@ let make = (~storyIdFromUrl: option<string>) => {
           }
         }
         poll()->ignore
-        let intervalId = setInterval(() => poll()->ignore, pollIntervalMs)
+        let intervalId = setInterval(
+          () => poll()->ignore,
+          isStarting ? startingPollMs : pollIntervalMs,
+        )
         Some(
           () => {
             cancelled := true
@@ -98,30 +121,42 @@ let make = (~storyIdFromUrl: option<string>) => {
       }
     | _ => None
     }
-  }, (storyIdFromUrl, isDone))
+  }, (storyIdFromUrl, isDone, isStarting))
 
-  // Charge customer: the billing system's own charge starts a new story
+  // Charge customer: step 1 shows at once; the proxy then answers with status "starting"
   let onCharge = async () => {
+    // Leave the old story first, so its polling stops and its steps clear
+    RescriptReactRouter.replace(
+      GlobalVars.appendDashboardPath(~url=RevenueRecoverySidebarValues.simulatorStoryPath),
+    )
+    setStory(_ => None)
+    setDrawerContent(_ => None)
+    setRevealLimit(_ => 0)
+    setOptimistic(_ => Some(form))
     setIsBusy(_ => true)
     mixpanelEvent(~eventName="recovery_simulator_charge_customer")
     try {
       let json = await simFetch(~path="/sim/story/start", ~method_=Post, ~body=form->startBody)
       let newStory = json->storyMapper
+      startedHereId.current = newStory.storyId
       formStoryId.current = newStory.storyId
       setStory(_ => Some(newStory))
       setPollError(_ => "")
       RescriptReactRouter.replace(storyPath(newStory.storyId))
     } catch {
-    | exn =>
-      showToast(
-        ~message=exn->getSimErrorMessage(~default="The billing system could not charge."),
-        ~toastType=ToastError,
-      )
+    | exn => {
+        setOptimistic(_ => None)
+        showToast(
+          ~message=exn->getSimErrorMessage(~default="The billing system could not charge."),
+          ~toastType=ToastError,
+        )
+      }
     }
     setIsBusy(_ => false)
   }
 
-  // Paid in app, Report another failure and Cancel invoice: the proxy answers with the updated story
+  // Paid in app, Report another failure and Cancel invoice: the proxy answers with the updated
+  // story, and the steps the viewer caused show at once
   let runAction = async (~action, ~eventName) => {
     switch storyIdFromUrl {
     | Some(id) =>
@@ -133,7 +168,9 @@ let make = (~storyIdFromUrl: option<string>) => {
           ~method_=Post,
           ~body=Dict.make()->JSON.Encode.object,
         )
-        setStory(_ => Some(json->storyMapper))
+        let updated = json->storyMapper
+        setRevealLimit(_ => updated->SimulatorStorySteps.buildStoryItems->snd->Array.length)
+        setStory(_ => Some(updated))
       } catch {
       | exn =>
         showToast(
@@ -145,10 +182,16 @@ let make = (~storyIdFromUrl: option<string>) => {
     | None => ()
     }
   }
+  let onPaidInApp = () =>
+    runAction(~action="paid-in-app", ~eventName="recovery_simulator_paid_in_app")->ignore
+  let onReportAgain = () =>
+    runAction(~action="report-again", ~eventName="recovery_simulator_report_again")->ignore
 
   let onStartOver = () => {
     mixpanelEvent(~eventName="recovery_simulator_start_over")
     setStory(_ => None)
+    setOptimistic(_ => None)
+    setRevealLimit(_ => 0)
     setDrawerContent(_ => None)
     setPollError(_ => "")
     RescriptReactRouter.replace(
@@ -156,7 +199,7 @@ let make = (~storyIdFromUrl: option<string>) => {
     )
   }
 
-  // An attempt row opens the diagram row of the same charge, or one built from the attempt
+  // An attempt row opens the step of the same charge, or one built from the attempt
   let onAttemptClick = (attempt: RevenueRecoveryOrderTypes.attempts) => {
     let row =
       story
@@ -164,6 +207,46 @@ let make = (~storyIdFromUrl: option<string>) => {
       ->Option.getOr(attempt->attemptRow)
     setDrawerContent(_ => Some(StepDetails(row)))
   }
+
+  // Pacing (STORY-STEPS.md section 6), over the grouped steps of STORY-DESIGN.md
+  let (header, items) = React.useMemo1(
+    () => story->Option.mapOr(("", []), SimulatorStorySteps.buildStoryItems),
+    [story],
+  )
+  let itemTotal = items->Array.length
+  let visibleCount = SimulatorStorySteps.visibleItemCount(~items, ~revealLimit, ~autoPlay)
+  let allShown = visibleCount == itemTotal
+  // The outcome card is the last item once the story is done
+  let isFinished = isDone && itemTotal > 0 && allShown
+  // The pause starts once the billing system has told Rev Rec
+  let hasReport = items->Array.some(item => item.phase >= 2)
+  let showNext = !autoPlay && hasReport && !isFinished
+  let isWaitingForNext = showNext && revealLimit > visibleCount && allShown
+  let onNext = () => {
+    mixpanelEvent(~eventName="recovery_simulator_next_step")
+    setRevealLimit(_ => visibleCount + 1)
+  }
+
+  // Which steps fade in: those added in this tab, not those known when the story was opened
+  let itemCount = Math.Int.max(visibleCount, 1)
+  let storyKey = switch story {
+  | Some(s) => s.storyId
+  | None => optimistic->Option.isSome ? "pending" : "none"
+  }
+  let initialCount = switch storyKey {
+  | "pending" | "none" => 0
+  | key if key == startedHereId.current => 1 // the optimistic step 1 already showed
+  | _ => itemCount
+  }
+  let revealDelays = useRevealDelays(~storyKey, ~itemCount, ~initialCount)
+
+  let actions =
+    story->Option.mapOr({paidInApp: false, reportAgain: false, cancel: false}, s => s.actions)
+  let inlineActions =
+    [
+      actions.paidInApp ? Some(("Customer pays in app", onPaidInApp)) : None,
+      actions.reportAgain ? Some(("Report another failure", onReportAgain)) : None,
+    ]->Array.filterMap(action => action)
 
   let warnings = switch story {
   | Some(s) =>
@@ -196,15 +279,11 @@ let make = (~storyIdFromUrl: option<string>) => {
             form
             setForm
             isBusy
+            isLocked={isBusy || isStarting}
             story
             onCharge={() => onCharge()->ignore}
-            onPaidInApp={() =>
-              runAction(~action="paid-in-app", ~eventName="recovery_simulator_paid_in_app")->ignore}
-            onReportAgain={() =>
-              runAction(
-                ~action="report-again",
-                ~eventName="recovery_simulator_report_again",
-              )->ignore}
+            onPaidInApp
+            onReportAgain
             onCancel={() =>
               runAction(~action="cancel", ~eventName="recovery_simulator_cancel")->ignore}
             onStartOver
@@ -227,8 +306,27 @@ let make = (~storyIdFromUrl: option<string>) => {
             />
           )
           ->React.array}
-          <SequenceDiagram
+          <SimulatorStorySteps.StoryView
             story
+            optimistic
+            header
+            items
+            visibleCount
+            isFinished
+            showNext
+            isWaitingForNext
+            revealDelays
+            autoPlay
+            setAutoPlay={value => {
+              // Turning auto-play off keeps the steps already on screen
+              setRevealLimit(_ => visibleCount)
+              setAutoPlay(_ => value)
+            }}
+            showDiagram
+            setShowDiagram
+            inlineActions
+            isBusy
+            onNext
             onRowClick={row => setDrawerContent(_ => Some(StepDetails(row)))}
             onStatesClick={() => setDrawerContent(_ => Some(StateHistory))}
           />
