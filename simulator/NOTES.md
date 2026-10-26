@@ -414,3 +414,5 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - Upstream 2026.10.26.0 has no `/v2/payments/recovery-aggregate` (only `/aggregate`), so the dashboard's invoice status counts fail on this instance.
     - Smart mode needs the decider. The portfolio pair is not seeded.
   - **Side note:** a local test sent one `GET /health` and one `POST v2/organizations` (dummy key, answered 404) to port 18081. That port belongs to a local Rancher container. Nothing was created.
+
+- 26 Oct (orchestrator) **revision revrec-sim-00003-vhp** live: image revrec-sim:35afe7627 (cookie fix: same-origin fetches send the gate cookie; config paths answer JSON). Verified in headless Chrome: gate -> Home renders, no toasts, sidebar complete.
