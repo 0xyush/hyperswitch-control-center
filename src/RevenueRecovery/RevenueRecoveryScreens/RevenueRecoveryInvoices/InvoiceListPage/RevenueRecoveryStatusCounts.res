@@ -1,3 +1,7 @@
+// recovery-list answers at most 100 invoices a page; the fallback counts up to 10 pages
+let listPageSize = 100
+let listMaxInvoices = 1000
+
 @react.component
 let make = () => {
   open APIUtils
@@ -5,6 +9,8 @@ let make = () => {
   open Typography
   let getURL = useGetURL()
   let fetchDetails = useGetMethod()
+  // The aggregate may be missing (404 on upstream Hyperswitch main), so it fails quietly
+  let fetchQuietly = useGetMethod(~showErrorToast=false)
   let showToast = ToastAdapter.useShowToast()
   let {transactionEntity} = React.useContext(UserInfoProvider.defaultContext).getResolvedUserInfo()
   let {updateExistingKeys, removeKeys, filterValueJson, filterValue, filterKeys, setfilterKeys} =
@@ -22,17 +28,51 @@ let make = () => {
     )
   }, filterValue)
 
+  // Without recovery-aggregate, count each invoice's status from recovery-list, page by page
+  let countFromList = async () => {
+    let counts = Dict.make()
+    let offset = ref(0)
+    let total = ref(0)
+    let hasMore = ref(true)
+    while hasMore.contents {
+      let url = getURL(
+        ~entityName=V2(V2_RECOVERY_INVOICES_LIST),
+        ~methodType=Get,
+        ~queryParameters=Some(
+          `created.gte=${startTime}&created.lte=${endTime}&limit=${listPageSize->Int.toString}&offset=${offset.contents->Int.toString}`,
+        ),
+      )
+      let responseDict = (await fetchDetails(url, ~version=V2))->getDictFromJsonObject
+      let page = responseDict->getArrayFromDict("data", [])
+      page->Array.forEach(invoice => {
+        let status = invoice->getDictFromJsonObject->getString("status", "")
+        counts->Dict.set(status, (counts->getInt(status, 0) + 1)->JSON.Encode.int)
+      })
+      offset := offset.contents + page->Array.length
+      total := responseDict->getInt("total_count", offset.contents)
+      hasMore :=
+        page->Array.length == listPageSize &&
+        offset.contents < total.contents &&
+        offset.contents < listMaxInvoices
+    }
+    (counts, total.contents)
+  }
+
   let loadCounts = async () => {
     try {
-      let url = getURL(
-        ~entityName=V2(RECOVERY_AGGREGATE),
-        ~methodType=Get,
-        ~queryParameters=Some(`start_time=${startTime}&end_time=${endTime}`),
-      )
-      let response = await fetchDetails(url, ~version=V2)
-      let responseDict = response->getDictFromJsonObject
-      setStatusWithCount(_ => responseDict->getDictfromDict("status_with_count"))
-      setTotal(_ => responseDict->getInt("total_count", 0))
+      let (counts, totalCount) = try {
+        let url = getURL(
+          ~entityName=V2(RECOVERY_AGGREGATE),
+          ~methodType=Get,
+          ~queryParameters=Some(`start_time=${startTime}&end_time=${endTime}`),
+        )
+        let responseDict = (await fetchQuietly(url, ~version=V2))->getDictFromJsonObject
+        (responseDict->getDictfromDict("status_with_count"), responseDict->getInt("total_count", 0))
+      } catch {
+      | _ => await countFromList()
+      }
+      setStatusWithCount(_ => counts)
+      setTotal(_ => totalCount)
     } catch {
     | _ =>
       showToast(~toastType=ToastError, ~message="Failed to fetch status counts", ~autoClose=true)
