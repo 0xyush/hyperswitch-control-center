@@ -289,3 +289,17 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Needs a hands-on run (shared-config write; my permission check refuses relayed approvals):** `cd simulator/proxy && node scripts/set-retry-mode.ts --apply`. The 10-invoice portfolio on the new pair waits for that; run now, it would compare cascading with cascading again.
   - Stories now keep their profile (`profileRef`) and portfolio runs keep their pair, so the new .env lines did not move the story or old runs.
 - 2026-10-24 (orchestrator) `set-retry-mode.ts --apply` run with Aayush's approval: sim-static saved `cascading`, sim-smart saved `smart`. A: go for the 10-invoice portfolio on the new pair.
+- 2026-10-26 07:39 [A] **Run `pf_4744661b` on the new pair, smart stall, late runs explained.** Commits 8c73d4530, 0393e8b3a, ea41ac02c.
+  - **Result:** static (`sim-static`, cascading) 8/10 recovered, 55 Rev Rec attempts, median 6.1 min. Smart (`sim-smart`, smart) 0/10, **0 retries booked**.
+  - **Smart stalls for lack of a decider (expected, ask 2).**
+    - Evidence: all 10 smart copies stayed `queued` for the whole run. Zero internal attempts. The process tracker (it returns the EXECUTE task) answered 404 because no EXECUTE task was ever created. The static copies were `scheduled` within about 30 s.
+    - Upstream `workflows/revenue_recovery.rs` (about lines 415–450): when the recovery decider client is not configured, or its gRPC call fails, the smart path returns no retry time, so CALCULATE never books an EXECUTE task.
+    - The bank flips (swap reports) did reach the smart copies; there was simply no Rev Rec retry to use them.
+    - We cannot see the sandbox's logs: Kirthi to confirm. The smart copies were cancelled at the end; copy 5 was refused once ("retry in progress"), and I cancelled it by hand on 26 Oct.
+  - **Missed 20-min cap: laptop idle sleep, not code and not a build.**
+    - The macOS power log (`pmset -g log`) for 24 Oct: Idle Sleep at 17:24:47Z, wake at 17:32:51Z; Idle Sleep at 17:36:57Z, DarkWake at 18:08:49Z. The run ended at 18:09:00Z, on the cap check of that wake's tick. The proxy log has silent gaps of exactly 491 s and 1914 s at those times.
+    - Invoice 10's swap timed out at 17:32:54Z, 3 s after the wake (network not back yet), so it never flipped.
+  - **Correction of my 23 Oct note:** run `pf_5f2dcd18`'s late flips were also sleep. The power log shows Idle Sleep at 02:09:42Z, DarkWake at 02:27:37Z (when the late flips ran) and wake at 02:50:34Z (the run ended at 02:50:37Z). The Docker build was not the cause; it slept too.
+  - **Fixes:** `npm run start:awake` (`caffeinate -i`; :8787 now runs this way). Runs record pauses of more than 90 s (`pauses` + warnings); older runs get theirs from the trend gaps. `pf_4744661b` now shows 9-min and 33-min pauses, and `pf_5f2dcd18` a 41-min pause.
+  - **Max retries is enforced:** with 15, the static stolen-card copy and invoice 10 (never flipped) stopped after exactly 15 Rev Rec retries; with 8 they stopped after about 7.
+  - **Dashboard token lost on my 26 Oct restart.** The old process held a switched token valid until 17:16Z, but the pasted token had expired on 25 Oct, so the new process could not switch again. **Aayush: re-grab now** (`bash simulator/scripts/grab-jwt.sh`), then restart (`npm run start:awake`). The proxy now keeps the switched token in `data/.dashboard-token` (git-ignored, mode 600), so this cannot happen again while that token is valid.
