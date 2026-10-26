@@ -152,7 +152,7 @@ export class HttpError extends Error {
 }
 
 // Minutes in Monitoring, with the start rule met and no retry task, before the story says so.
-const WAITING_NOTE_MIN = 3;
+const WAITING_NOTE_MIN = 1;
 
 // Safety cap on the billing system's own failed charges at start (start rule + 1).
 const MAX_START_FAILURES = 4;
@@ -1536,7 +1536,7 @@ export async function storyView(storyId: string) {
   const internal = attempts.filter((a) => a.by === "revrec");
 
   // Sandbox incident of 26 Oct: invoices stayed in Monitoring with no retry task although the
-  // start rule was met (on 24 Oct the same profile booked a retry in 30 s). After 3 min of that,
+  // start rule was met (on 24 Oct the same profile booked a retry in 30 s). After 1 min of that,
   // the story says so instead of showing a plain "waiting".
   const lastReport = [...story.requests]
     .reverse()
@@ -1980,7 +1980,7 @@ export async function storyView(storyId: string) {
     sandboxStatus,
     stage,
     stageCaption: waiting ? waiting.text : caption,
-    // Set after 3 min in Monitoring with the start rule met and no retry task (sandbox incident).
+    // Set after 1 min in Monitoring with the start rule met and no retry task (sandbox incident).
     waiting,
     stageHistory,
     recoveredBy,
