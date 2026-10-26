@@ -279,8 +279,9 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
 - **Dates and times** use the browser's locale (`toLocaleTimeString`, the dashboard's `DateCell`), so they follow the visitor.
 
 ## Orchestrator (2026-10-24) — sandbox writes done by Aayush's approval
+
 - Demo billing connector `mca_8sEBJcnLL79XDoOsQiWg`: start rule 2 → 0, max retries 8 → 15, grace 30 (saved, 200).
-- New profiles on the demo merchant: `sim-static` = profile `pro_Ly7W7OsLc7b8qVu5IHbu` (billing `mca_9vRZH9M4aRhZwA8ojJkM`, payment `mca_Y9Uslvqz4Szd24qZIJxi`); `sim-smart` = profile `pro_rOhNuMSwBsrRZupGSxyL` (billing `mca_qIvaIGoa8EApxOtNYptF`, payment `mca_zX8hYhwxe7HHrY80ihO6`). Both 0 / 15 / 30. HS_STATIC_* and HS_SMART_* are in simulator/proxy/.env.
+- New profiles on the demo merchant: `sim-static` = profile `pro_Ly7W7OsLc7b8qVu5IHbu` (billing `mca_9vRZH9M4aRhZwA8ojJkM`, payment `mca_Y9Uslvqz4Szd24qZIJxi`); `sim-smart` = profile `pro_rOhNuMSwBsrRZupGSxyL` (billing `mca_qIvaIGoa8EApxOtNYptF`, payment `mca_zX8hYhwxe7HHrY80ihO6`). Both 0 / 15 / 30. HS*STATIC*_ and HS*SMART*_ are in simulator/proxy/.env.
 - A: restart the proxy, run the start-rule-0 story test, then the 10-invoice portfolio on the new pair.
 - 2026-10-24 10:16 [A] **After the orchestrator's setup run** (start rule 0 / max retries 15; sim-static, sim-smart; .env lines). Commits adbea2364, 26900714e, 61e0063b0, 79e1d7495.
   - **Start rule 0 works on the story profile.** Story `st_a0bc837f351d` (preset 2): **one** billing failure (card 0002), no extra charges. Rev Rec booked a retry 30 s later (17:15:17Z) and charged 4242 at 17:15:30Z: Recovered by Rev Rec, about 1 min in total.
@@ -315,3 +316,27 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - **Sandbox stalled again:** that story and `st_d660faa239fd` stayed in Monitoring (12 min and 30+ min) after "report failure → 200", with no process-tracker task. On 24 Oct the same profile (start rule 0) booked a retry in 30 s. Customer-pays stories still finish (`st_2881ab59b48f`). A or orchestrator: please check the sandbox scheduler.
     - So the Next → waiting → countdown → retry → outcome walk was checked on a replay of the real story `st_7bf8bc687160` (its JSON fed row by row): all states showed, the outcome was green, and no Next was left.
   - **Screenshots** (local, git-ignored): `simulator/screenshots/story-steps-mid.png` (live, paused at Next), `story-steps-end.png` (recorded story `st_7bf8bc687160`, reopened, Rev Rec recovered), `story-steps-stalled.png` (live story after 12 min).
+
+## Sandbox incident · 26 Oct 2026 · Rev Rec takes over no invoice (for Kirthi)
+
+- **Symptom:** since at least **26 Oct 18:04 UTC**, every new invoice on the story profile `pro_2qWOGZLPJQRRY0O75DXg` stays in **Monitoring**. `POST /v2/recovery` answers 200 and the failure is recorded (`total_retry_count` 1), but Rev Rec creates **no retry task**: the process tracker answers 404 and no attempt by Rev Rec appears. No invoice created since 25 Oct has been taken over.
+- **Settings unchanged (read via the API at 18:50Z):** profile retry mode `cascading`; billing connector `mca_8sEBJcnLL79XDoOsQiWg` start rule 0, max retries 15, grace 30. With start rule 0, Rev Rec must take over after the first failure.
+- **Last known good:** 24 Oct. Story `st_a0bc837f351d` was reported at 17:14:31Z and its retry was booked by 17:15:01Z (for 17:15:17Z); Recovered at 17:15:30Z. The portfolio copies on `sim-static` were booked within about 1 min of setup (17:17:41Z to 17:18:42Z).
+- **Timed test on 26 Oct:** story `st_e13ff219e552`, payment `0a_pay_01a1798d26a37eb2932c626a62b0954a`. Reported 18:50:56Z (200); still Monitoring with no task at 19:02:56Z (12 min); checked again at 19:03:53Z.
+- **A sign of a new sandbox deploy:** `get-revenue-recovery-intent` now returns `status: "monitoring"` for these invoices. Upstream `main`'s `IntentStatus` has no such value; on 24 Oct the field held a payment status (`failed`, `succeeded`). So the sandbox likely got a new build between 24 Oct 17:15Z and 26 Oct 18:04Z, with a changed recovery flow or a stopped scheduler.
+- **Stuck invoices** (profile `pro_2qWO…`, all `monitoring` at 19:03:53Z):
+
+| created (UTC)       | invoice (merchant_reference_id) | payment id                              |
+| ------------------- | ------------------------------- | --------------------------------------- |
+| 2026-10-26 18:04:02 | SIM-1-mvpkfo41-5e2c             | 0a_pay_01a1796239b17351821a4f888724f337 |
+| 2026-10-26 18:04:06 | SIM-1-mvpkfr8s-4304             | 0a_pay_01a1796247f77740a184828b0a6581a9 |
+| 2026-10-26 18:04:26 | SIM-1-mvpkg65f-4bb9             | 0a_pay_01a1796294877e6280c74af9a5142f79 |
+| 2026-10-26 18:09:28 | SIM-3-mvpkmmuk-1e3d             | 0a_pay_01a1796730067541a4f7034c2d944dc1 |
+| 2026-10-26 18:15:50 | SIM-2-mvpkutms-992e             | 0a_pay_01a1796d05f37bd083c93b846f334471 |
+| 2026-10-26 18:36:01 | SIM-2-mvplksy1-6057             | 0a_pay_01a1797f80a474118a2b69c76117134b |
+| 2026-10-26 18:50:56 | SIM-2-mvpm3z2v-e828             | 0a_pay_01a1798d26a37eb2932c626a62b0954a |
+
+- **Questions for Kirthi's team:** Was the sandbox redeployed after 24 Oct 17:15Z? Is the revenue-recovery scheduler (producer/consumer) running? Is there a new monitoring step or setting that keeps invoices in Monitoring (the new intent status suggests one)?
+- **Not checked:** whether `sim-static` is affected too. No new invoices were started there, to keep the sandbox quiet.
+- **What the simulator does now** (commit 8428d6344): after 3 min in Monitoring with the start rule met and no task, the story view sets `waiting` `{minutes, text, why, source}`, the stage caption "Rev Rec has not booked a retry yet (sandbox scheduler)", and a warning. **B:** please show `stageCaption` (or `waiting.text`, plus `waiting.why` in the drawer) in the story's waiting state.
+- The stuck invoices are left as they are, as evidence. If the scheduler comes back, Rev Rec may start retrying them: the SIM-2 ones would recover on 4242 and the SIM-1 / SIM-3 ones would retry 0341. Cancel them once Kirthi's team has looked.

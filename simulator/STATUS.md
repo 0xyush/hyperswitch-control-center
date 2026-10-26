@@ -2,6 +2,17 @@
 
 For Aayush and reviewers. Everything below runs locally against the real Hyperswitch sandbox and Stripe test mode. Nothing is deployed and nothing is pushed. Details and ids are in `NOTES.md`.
 
+## Open sandbox incident (26 Oct): Rev Rec takes over no invoice
+
+- **Since at least 26 Oct 18:04 UTC, every new invoice stays in Monitoring.** Rev Rec never books a retry, although the failure report is accepted (200) and the start rule (0) is met.
+  - 7 invoices are stuck on the story profile, among them a timed test at 18:50:56 UTC that was still waiting 12 min later.
+  - On 24 Oct the same profile booked a retry in about 30 s.
+- **Settings are unchanged:** the profile is cascading; start rule 0, max retries 15, grace 30.
+- **The sandbox looks redeployed:** the invoice status field now says "monitoring", a value that upstream Hyperswitch does not have.
+- **Aayush to raise with Kirthi.** Ids and questions are in `NOTES.md` ("Sandbox incident · 26 Oct 2026").
+- Meanwhile the story screen says "Rev Rec has not booked a retry yet (sandbox scheduler)" after 3 min, instead of a plain "waiting".
+- Everything below was true before the incident. Until it is fixed, stories that need Rev Rec's own retry (presets 2, 6) and the portfolio run cannot finish. "Paid in the app" (preset 1) and the duplicate refusal (preset 3) still work.
+
 ## What works on the sandbox today
 
 - **Invoice story** (form + sequence diagram + the real invoice page). Every arrow is a real call, and a click shows its raw request and response.
