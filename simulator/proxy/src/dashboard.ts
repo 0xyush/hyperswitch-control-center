@@ -13,6 +13,9 @@ import { config } from "./config.ts";
 
 export const dashboardOn = () => Boolean(config.dashboardDist);
 
+// The dashboard's config paths, with or without a prefix (it asks for /dashboard/config/feature).
+export const CONFIG_PATH = /\/config\/(feature|merchant|theme)(?:\/|$)/;
+
 const publicDir = () => path.join(config.dashboardDist, "hyperswitch");
 const configToml = () =>
   path.join(config.dashboardDist, "server", "config", "config.toml");
@@ -133,6 +136,26 @@ export async function serveDashboard(
   }
   if (p.includes("/config/theme") && method === "GET") {
     await (await loadHandlers()).theme(req, res, true, themeJson());
+    return true;
+  }
+  // A config path with another method (for example GET /config/merchant) answers JSON, not
+  // index.html, so it never looks like a config file. The dashboard's server falls through here.
+  const cfg = CONFIG_PATH.exec(p);
+  if (cfg) {
+    const allow = cfg[1] === "merchant" ? "POST" : "GET";
+    res.writeHead(405, {
+      "Content-Type": "application/json",
+      Allow: allow,
+      "Cache-Control": "no-store",
+    });
+    res.end(
+      JSON.stringify({
+        error: {
+          code: "method_not_allowed",
+          message: `${p} takes ${allow} only`,
+        },
+      }),
+    );
     return true;
   }
   if (method !== "GET" && method !== "HEAD") return false;

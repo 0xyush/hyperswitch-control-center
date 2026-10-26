@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { config } from "./config.ts";
+import { CONFIG_PATH } from "./dashboard.ts";
 
 const COOKIE = "sim_gate";
 const DAYS = 7;
@@ -171,10 +172,16 @@ export async function handleGate(
   return true;
 }
 
-// Without the cookie: 401 JSON for the APIs, the password page for everything else.
+// Without the cookie: 401 JSON for the APIs and the dashboard's config fetches, the password page
+// for everything else.
 export function refuse(res: ServerResponse, url: URL, logoSvg: string) {
   const p = url.pathname;
-  if (p === "/api" || p.startsWith("/api/") || p.startsWith("/sim/")) {
+  if (
+    p === "/api" ||
+    p.startsWith("/api/") ||
+    p.startsWith("/sim/") ||
+    CONFIG_PATH.test(p)
+  ) {
     res.writeHead(401, {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",

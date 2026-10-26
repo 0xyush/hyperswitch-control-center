@@ -32,7 +32,8 @@ fs.writeFileSync(
 );
 fs.writeFileSync(
   path.join(dist, "server", "config", "config.toml"),
-  '[default.endpoints]\napi_url="http://localhost:8787/api"\n[default.simulator]\nsim_url="http://localhost:8787"\n',
+  '[default.endpoints]\napi_url="http://localhost:8787/api"\n[default.simulator]\nsim_url="http://localhost:8787"\n' +
+    "[default.merchant_config.denylist.new_analytics]\norg_ids=[]\nmerchant_ids=[]\nprofile_ids=[]\n",
 );
 fs.writeFileSync(path.join(dist, "server", "config", "theme.json"), "{}");
 
@@ -69,7 +70,12 @@ test("without the cookie: the password page, and 401 JSON for the APIs", async (
   const html = await page.text();
   assert.match(html, /type="password"/);
   assert.match(html, /<svg id='logo'>/);
-  for (const p of ["/api/v2/payments/recovery-list", "/sim/recordings"]) {
+  for (const p of [
+    "/api/v2/payments/recovery-list",
+    "/sim/recordings",
+    "/config/feature",
+    "/dashboard/config/feature?domain=",
+  ]) {
     const r = await fetch(base + p);
     assert.equal(r.status, 401, p);
     assert.equal((await r.json()).error.code, "password_required");
@@ -111,6 +117,41 @@ test("a wrong password is refused; the right one sets the cookie and goes to nex
     headers: { cookie: "sim_gate=2026-10-26.forged" },
   });
   assert.equal(forged.status, 401);
+});
+
+test("config with and without the /dashboard prefix: the real handlers; a wrong method is JSON", async () => {
+  const ok = await login("correct-horse-1");
+  const jar = {
+    cookie: (ok.headers.get("set-cookie") ?? "").split(";")[0],
+  };
+  for (const prefix of ["", "/dashboard"]) {
+    const feature = await fetch(`${base}${prefix}/config/feature?domain=`, {
+      headers: jar,
+    });
+    assert.equal(feature.status, 200, `${prefix}/config/feature`);
+    assert.equal((await feature.json()).endpoints.api_url, "/api");
+
+    const theme = await fetch(`${base}${prefix}/config/theme`, {
+      headers: jar,
+    });
+    assert.equal(theme.status, 200, `${prefix}/config/theme`);
+    assert.match(theme.headers.get("content-type") ?? "", /json/);
+
+    const merchant = await fetch(`${base}${prefix}/config/merchant`, {
+      method: "POST",
+      headers: { ...jar, "content-type": "application/json" },
+      body: JSON.stringify({ org_id: "o", merchant_id: "m", profile_id: "p" }),
+    });
+    assert.equal(merchant.status, 200, `POST ${prefix}/config/merchant`);
+    assert.ok("denylist" in (await merchant.json()));
+
+    const wrong = await fetch(`${base}${prefix}/config/merchant`, {
+      headers: jar,
+    });
+    assert.equal(wrong.status, 405, `GET ${prefix}/config/merchant`);
+    assert.equal(wrong.headers.get("allow"), "POST");
+    assert.equal((await wrong.json()).error.code, "method_not_allowed");
+  }
 });
 
 test("more than 10 tries a minute are refused", async () => {
