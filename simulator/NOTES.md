@@ -352,3 +352,8 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Two small choices:** the warning banner drops the warning that starts with `waiting.text`, so the line does not show three times. In auto-play, the note replaces the "Working…" line.
   - **Checks:** re:build, format and lint:hooks pass. Refresh check 16/16. Headless Chrome on `st_e13ff219e552` (18 min waiting): 1 note line before Next, 2 after, no countdown, no banner repeat, the drawer shows the why, no page errors. Finished story `st_7bf8bc687160` has `waiting` null and shows no note.
   - **Screenshots** (local, git-ignored): `simulator/screenshots/story-waiting-note.png`, `story-waiting-next.png`, `story-waiting-drawer.png`.
+
+## Deployed (orchestrator, 26 Oct) — revision revrec-sim-00001-bph
+- URL: https://revrec-sim-205511702680.us-central1.run.app (password gate, 7-day cookie). GCP project hs-selfhost-0928-x825 (owner account yushsthajuspay@gmail.com), region us-central1, service `revrec-sim`, image tag = commit 71d2efdfa.
+- Secrets in Secret Manager: revrec-sim-password, revrec-sim-hs-api-key, revrec-sim-stripe-test-key, revrec-sim-hs-dashboard-jwt (dashboard token expires 28 Oct 18:02Z: add a new version + `gcloud run services update revrec-sim --region us-central1 --update-secrets HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest`).
+- Redeploy: `gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml --substitutions _IMAGE=<tag>,_GIT_COMMIT=<sha>` then `gcloud run deploy revrec-sim --image <tag> ...` (full command in deploy/README.md section 5, plus `--memory 1Gi`).
