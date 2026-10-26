@@ -610,66 +610,39 @@ module OutcomeCard = {
   }
 }
 
-// The invoice state as one glyph in a 40 px disc, in the Invoices badge colours
-module StateDisc = {
+// The invoice state as one filled pill, the size and radius of the dashboard's medium button, in
+// the Invoices badge colours (Monitoring blue, as asked; Processing a darker blue)
+module StatePill = {
   @react.component
   let make = (~stage) => {
-    let (glyph, discClass) = switch stage {
-    | Monitoring => (<Icon name="nd-eye-on" size=20 />, "bg-nd_gray-150 text-nd_gray-600")
-    | Queued => (<Icon name="clock" size=18 />, "bg-nd_gray-150 text-nd_gray-600")
-    | Scheduled => (<Icon name="calendar" size=18 />, "bg-nd_orange-50 text-nd_orange-600")
-    | Processing => (
-        <Icon name="nd-loading" size=20 className="animate-spin" />,
-        "bg-nd_primary_blue-50 text-nd_primary_blue-450",
-      )
-    | Recovered | PartiallyRecovered => (
-        <Icon name="nd-check" size=20 />,
-        "bg-nd_green-50 text-nd_green-600",
-      )
-    | Terminated | StoryError => (<Icon name="nd-cross" size=16 />, "bg-nd_red-50 text-nd_red-600")
-    // No slash in the icon set: a thin bar drawn across the disc
-    | Cancelled => (
-        <span className="block w-5 h-0.5 rounded-full bg-current -rotate-45" />,
-        "bg-nd_gray-150 text-nd_gray-500",
-      )
-    | Starting => (
-        <Icon name="nd-loading" size=20 className="animate-spin" />,
-        "bg-nd_gray-150 text-nd_gray-500",
-      )
+    let fill = switch stage {
+    | Monitoring => "bg-nd_primary_blue-450 text-white"
+    | Queued => "bg-nd_gray-500 text-white"
+    | Scheduled => "bg-nd_orange-300 text-white"
+    | Processing => "bg-nd_primary_blue-600 text-white"
+    | Recovered | PartiallyRecovered => "bg-nd_green-400 text-white"
+    | Terminated | StoryError => "bg-nd_red-500 text-white"
+    | Cancelled => "bg-nd_gray-400 text-white"
+    | Starting => "bg-nd_gray-150 text-nd_gray-600"
     }
-    <div
-      title={stage->stageName}
-      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${discClass}`}>
-      glyph
-    </div>
-  }
-}
-
-// One tiny glyph-in-disc counter; hover says whose attempts they are
-module AttemptCounter = {
-  @react.component
-  let make = (~icon, ~count, ~who) => {
-    <span title={`${who}: ${count->Int.toString}`} className="flex items-center gap-1">
-      <span
-        className="w-5 h-5 rounded-full bg-nd_gray-150 text-nd_gray-600 flex items-center justify-center">
-        <Icon name=icon size=12 />
-      </span>
-      <span className={`${body.sm.semibold} text-nd_gray-700`}>
-        {count->Int.toString->React.string}
-      </span>
+    <span
+      className={`shrink-0 h-9 px-4 rounded-10-px flex items-center whitespace-nowrap ${body.md.semibold} ${fill}`}>
+      {stage->stageName->React.string}
     </span>
   }
 }
 
-// The top of the panel (STORY header, third pass): the state disc, the Invoices badge, the amount
-// recovered and who made how many attempts. The rail below shows the steps.
+// The panel's header row: the state pill, the amount recovered, and Rev Rec's retries against the
+// profile's maximum. The rail below shows the steps.
 module StatusRow = {
   @react.component
   let make = (~story: option<story>, ~form: option<billingForm>) => {
+    let getURL = APIUtils.useGetURL()
+    let fetchQuietly = APIUtils.useGetMethod(~showErrorToast=false)
+    let (maxRetries, setMaxRetries) = React.useState(_ => None)
     let stage = story->Option.mapOr(Starting, s => s.stage)
     let invoice = story->Option.mapOr(Dict.make(), s => s.invoice)
     let order = invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
-    let order = {...order, status: stage->toInvoiceStatus(~default=order.status)}
     let sign = form->Option.mapOr("USD", form => form.currency)->SimulatorFormTiles.currencySign
     // Until the sandbox records the invoice, the amount is the one the billing system charged
     let total =
@@ -677,26 +650,46 @@ module StatusRow = {
         ? form->Option.mapOr(0.0, form => form.amount->LogicUtils.getFloatFromString(0.0))
         : order.order_amount
     let money = amount => `${sign}${amount->Float.toFixedWithPrecision(~digits=2)}`
-    let count = by => story->Option.mapOr(0, s => s->attemptCount(~by))
+    let retries = story->Option.mapOr(0, s => s->attemptCount(~by="revrec"))
 
-    <div className={`flex-1 min-w-0 flex items-center gap-3 ${body.md.medium} text-nd_gray-600`}>
-      <StateDisc stage />
-      <RenderIf condition={order.status->LogicUtils.isNonEmptyString}>
-        <Table.TableCell cell={RevenueRecoveryEntity.getCell(order, Status)} />
-      </RenderIf>
+    // Max retries is a setting of the invoice's billing connector, read once per connector
+    React.useEffect(() => {
+      if order.billing_connector_id->LogicUtils.isNonEmptyString {
+        let load = async () =>
+          try {
+            let url = getURL(
+              ~entityName=V2(V2_CONNECTOR),
+              ~methodType=Get,
+              ~id=Some(order.billing_connector_id),
+            )
+            let json = await fetchQuietly(url, ~version=V2)
+            setMaxRetries(_ =>
+              json
+              ->LogicUtils.getDictFromJsonObject
+              ->LogicUtils.getDictfromDict("feature_metadata")
+              ->LogicUtils.getDictfromDict("revenue_recovery")
+              ->LogicUtils.getOptionInt("max_retry_count")
+            )
+          } catch {
+          | _ => ()
+          }
+        load()->ignore
+      }
+      None
+    }, [order.billing_connector_id])
+
+    <div className={`flex-1 min-w-0 flex items-center gap-4 ${body.md.medium} text-nd_gray-600`}>
+      <StatePill stage />
       <span className="min-w-0 truncate">
         <span className={`${body.md.semibold} text-nd_gray-800`}>
           {order.amount_captured->money->React.string}
         </span>
-        {` of ${total->money} recovered`->React.string}
+        {` / ${total->money} recovered`->React.string}
       </span>
-      <span
-        className="shrink-0 flex items-center gap-2 h-7 px-2 rounded-full border border-nd_gray-200">
-        <AttemptCounter icon="juspay-logo" count={count("revrec")} who="Rev Rec attempts" />
-        <span className="text-nd_gray-300"> {"·"->React.string} </span>
-        <AttemptCounter
-          icon="nd-merchant-retires" count={count("billing")} who="Billing system attempts"
-        />
+      <span className="ml-auto shrink-0 whitespace-nowrap">
+        {`Rev Rec retries ${retries->Int.toString}${maxRetries->Option.mapOr("", max =>
+            ` of ${max->Int.toString}`
+          )}`->React.string}
       </span>
     </div>
   }
@@ -770,8 +763,8 @@ module StoryView = {
 
     <div className={`${cardStyle} px-6 py-5 flex flex-col gap-5`}>
       <style> {revealCss->React.string} </style>
-      // One status row, at most 56 px: the state, the amount and the attempts, then the menu
-      <div className="flex items-center gap-3 min-h-10 max-h-14">
+      // The panel's header band, 56 px: state pill, amount, Rev Rec retries, then the menu
+      <div className="-mx-6 -mt-5 h-14 px-5 flex items-center gap-4 border-b border-nd_gray-150">
         {if hasStory {
           <StatusRow story form={optimistic->Option.orElse(story->Option.flatMap(s => s.form))} />
         } else {
