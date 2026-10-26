@@ -250,8 +250,14 @@ let make = (~storyIdFromUrl: option<string>) => {
 
   let warnings = switch story {
   | Some(s) =>
+    // The waiting note shows inside the story, so its warning would only repeat it
+    let waitingText = s.waiting->Option.mapOr("", waiting => waiting.text)
     [s.startError]
-    ->Array.concat(s.warnings)
+    ->Array.concat(
+      s.warnings->Array.filter(warning =>
+        waitingText->isEmptyString || !(warning->String.startsWith(waitingText))
+      ),
+    )
     ->Array.concat([pollError])
     ->Array.filter(isNonEmptyString)
   | None => [pollError]->Array.filter(isNonEmptyString)
@@ -329,6 +335,7 @@ let make = (~storyIdFromUrl: option<string>) => {
             onNext
             onRowClick={row => setDrawerContent(_ => Some(StepDetails(row)))}
             onStatesClick={() => setDrawerContent(_ => Some(StateHistory))}
+            onWaitingClick={() => setDrawerContent(_ => Some(WaitingDetails))}
           />
           {switch story {
           | Some(s) if !(s.invoice->isEmptyDict) => <InvoicePanel story=s onAttemptClick />

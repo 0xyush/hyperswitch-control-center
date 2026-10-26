@@ -83,8 +83,13 @@ type storyActions = {paidInApp: bool, reportAgain: bool, cancel: bool}
 // proxy noticed the change, up to one poll late.
 type stageVisit = {stage: stage, firstSeenAt: string, fromSandbox: bool}
 
-// What the side drawer shows: one diagram step, or the invoice's states over time
-type drawerContent = StepDetails(diagramRow) | StateHistory
+// What the side drawer shows: one diagram step, the invoice's states over time, or why Rev Rec
+// has not booked a retry yet
+type drawerContent = StepDetails(diagramRow) | StateHistory | WaitingDetails
+
+// Set by the proxy after 3 min in Monitoring with the start rule met and no retry booked
+// (sandbox incident of 26 Oct, simulator/NOTES.md)
+type waitingNote = {minutes: int, text: string, why: string, source: source}
 
 // GET /sim/story/:storyId (contract in simulator/NOTES.md). invoice, attempts and
 // processTracker are the raw sandbox JSON, so the invoice page components read them as they are.
@@ -102,6 +107,7 @@ type story = {
   done: bool,
   stageHistory: array<stageVisit>,
   nextRetryAt: option<string>,
+  waiting: option<waitingNote>,
   invoice: Dict.t<JSON.t>,
   attempts: JSON.t,
   processTracker: Dict.t<JSON.t>,

@@ -719,6 +719,7 @@ module StoryView = {
     ~onNext,
     ~onRowClick,
     ~onStatesClick,
+    ~onWaitingClick,
   ) => {
     let (showEvents, setShowEvents) = React.useState(_ => false)
     let rows = story->Option.mapOr([], s => s.timeline)
@@ -740,7 +741,9 @@ module StoryView = {
       visibleItems->Array.some(item => item.phase >= 3)
         ? "Next step →"
         : "Next: let Rev Rec retry →"
-    let showWorking = hasStory && !isFinished && !showNext
+    // Rev Rec is overdue to book a retry: the proxy's note replaces the "Working…" line
+    let waiting = isFinished ? None : story->Option.flatMap(s => s.waiting)
+    let showWorking = hasStory && !isFinished && !showNext && waiting->Option.isNone
     let firstAt =
       items
       ->Array.find(item => item.phase == 1 && item.at->LogicUtils.isNonEmptyString)
@@ -791,6 +794,10 @@ module StoryView = {
           <PhaseStrip
             items=shownItems isFinished onPhaseClick={phase => scrollToElement(phaseDomId(phase))}
           />
+          {switch waiting {
+          | Some(waiting) => <WaitingNoteLine waiting onWhy=onWaitingClick />
+          | None => React.null
+          }}
           <div className="max-w-[760px] w-full flex flex-col gap-4">
             <p className={`${body.lg.semibold} text-nd_gray-800`} style={overflowWrap: "anywhere"}>
               {headerText->React.string}
@@ -862,6 +869,8 @@ module StoryView = {
                           nextLabel
                           isWaiting=isWaitingForNext
                           nextRetryAt={story->Option.flatMap(s => s.nextRetryAt)}
+                          waiting
+                          onWaitingWhy=onWaitingClick
                           onNext
                           inlineActions={isFinished ? [] : inlineActions}
                           isBusy

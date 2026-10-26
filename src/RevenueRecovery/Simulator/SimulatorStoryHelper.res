@@ -478,6 +478,30 @@ module StepCard = {
   }
 }
 
+// The proxy's note when Rev Rec has not booked a retry long after it should have (sandbox
+// scheduler). It replaces the countdown; "Why" opens the drawer.
+module WaitingNoteLine = {
+  @react.component
+  let make = (~waiting: waitingNote, ~onWhy) => {
+    <div
+      className={`w-fit flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 rounded-lg border bg-nd_orange-50 border-nd_orange-200 text-nd_orange-600 ${body.md.semibold}`}>
+      <Icon name="nd-toast-warning" size=16 />
+      <span> {waiting.text->React.string} </span>
+      <span className={`${body.md.medium} opacity-80`}>
+        {`· ${waiting.minutes->Int.toString} min`->React.string}
+      </span>
+      <span
+        className={`cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
+        onClick={event => {
+          event->ReactEvent.Mouse.stopPropagation
+          onWhy()
+        }}>
+        {"Why"->React.string}
+      </span>
+    </div>
+  }
+}
+
 // The pause control on the last step: "Next" reveals one more step; when that step has not
 // arrived yet it waits, with the countdown to the booked retry, and shows it when it lands
 module NextControls = {
@@ -487,6 +511,8 @@ module NextControls = {
     ~nextLabel,
     ~isWaiting,
     ~nextRetryAt: option<string>,
+    ~waiting: option<waitingNote>,
+    ~onWaitingWhy,
     ~onNext,
     ~inlineActions: array<(string, unit => unit)>,
     ~isBusy,
@@ -497,7 +523,9 @@ module NextControls = {
         className="flex flex-wrap items-center gap-3 pt-3"
         onClick={event => event->ReactEvent.Mouse.stopPropagation}>
         <RenderIf condition=showNext>
-          {if isWaiting {
+          {switch (isWaiting, waiting) {
+          | (true, Some(waiting)) => <WaitingNoteLine waiting onWhy=onWaitingWhy />
+          | (true, None) =>
             <div
               className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-nd_primary_blue-50 text-nd_primary_blue-450 ${body.md.semibold}`}>
               <Loadericon size=14 iconColor="text-nd_primary_blue-450" />
@@ -512,7 +540,7 @@ module NextControls = {
               | None => React.null
               }}
             </div>
-          } else {
+          | (false, _) =>
             <Button text=nextLabel buttonType=Primary buttonSize=Medium onClick={_ => onNext()} />
           }}
         </RenderIf>
@@ -646,20 +674,20 @@ module ExplainDrawer = {
     let sectionTitle = text =>
       <p className={`${body.sm.semibold} text-nd_gray-400 uppercase`}> {text->React.string} </p>
     let history = story->Option.mapOr([], s => s.stageHistory)
-    let row = switch content {
-    | Some(StepDetails(row)) => Some(row)
-    | _ => None
-    }
 
     <Modal
       showModal={content->Option.isSome}
       setShowModal={_ => onClose()}
       closeOnOutsideClick=true
-      modalHeading={content == Some(StateHistory) ? "Invoice states" : "What happened"}
+      modalHeading={switch content {
+      | Some(StateHistory) => "Invoice states"
+      | Some(WaitingDetails) => "Why Rev Rec is waiting"
+      | _ => "What happened"
+      }}
       modalClass="flex flex-col justify-start h-screen w-full md:w-2/5 float-right overflow-hidden !bg-white"
       childClass="relative h-full">
-      {switch row {
-      | Some(row) =>
+      {switch content {
+      | Some(StepDetails(row)) =>
         let (fromName, _) = row.from->actorLabel
         let (toName, _) = row.to->actorLabel
         let requests = story->Option.mapOr([], s => s.requests->requestsForRow(row))
@@ -740,31 +768,57 @@ module ExplainDrawer = {
             </div>
           </div>
         </div>
-      | None =>
-        <RenderIf condition={content == Some(StateHistory)}>
-          <div className="h-full relative">
-            <div className="absolute inset-0 overflow-y-auto px-4 pb-20 flex flex-col gap-4">
-              <p className={`${body.md.medium} text-nd_gray-500`}>
-                {"When the invoice was first seen in each state. Sandbox times are exact; times seen by the proxy can be up to one poll late."->React.string}
+      | Some(WaitingDetails) =>
+        <div className="h-full relative">
+          <div className="absolute inset-0 overflow-y-auto px-4 pb-20 flex flex-col gap-7">
+            {switch story->Option.flatMap(s => s.waiting) {
+            | Some(waiting) =>
+              <>
+                <div className="flex flex-col gap-2">
+                  <p className={`${body.lg.semibold} text-nd_gray-800`}>
+                    {waiting.text->React.string}
+                  </p>
+                  <p className={`${body.md.medium} text-nd_gray-500`}>
+                    {`No retry booked for ${waiting.minutes->Int.toString} min. The invoice stays in Monitoring.`->React.string}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {sectionTitle("Why")}
+                  <ExplainLines lines=[{text: waiting.why, source: waiting.source}] />
+                </div>
+              </>
+            // The note goes away once Rev Rec books a retry
+            | None =>
+              <p className={`${body.md.medium} text-nd_gray-600`}>
+                {"Rev Rec is not waiting any more. The steps show what it did."->React.string}
               </p>
-              <SimulatorTable
-                headers=["State", "First seen", "Source"]
-                rows={history->Array.map(visit => {
-                  let (sourceText, sourceClass) = visit->stageVisitSource
-                  [
-                    visit.stage->stageName->React.string,
-                    visit.firstSeenAt->toClockTime->React.string,
-                    <span
-                      className={`w-fit rounded px-1.5 py-0.5 border whitespace-nowrap ${body.xs.semibold} ${sourceClass}`}>
-                      {sourceText->React.string}
-                    </span>,
-                  ]
-                })}
-                emptyText="The proxy has not reported any states yet."
-              />
-            </div>
+            }}
           </div>
-        </RenderIf>
+        </div>
+      | Some(StateHistory) =>
+        <div className="h-full relative">
+          <div className="absolute inset-0 overflow-y-auto px-4 pb-20 flex flex-col gap-4">
+            <p className={`${body.md.medium} text-nd_gray-500`}>
+              {"When the invoice was first seen in each state. Sandbox times are exact; times seen by the proxy can be up to one poll late."->React.string}
+            </p>
+            <SimulatorTable
+              headers=["State", "First seen", "Source"]
+              rows={history->Array.map(visit => {
+                let (sourceText, sourceClass) = visit->stageVisitSource
+                [
+                  visit.stage->stageName->React.string,
+                  visit.firstSeenAt->toClockTime->React.string,
+                  <span
+                    className={`w-fit rounded px-1.5 py-0.5 border whitespace-nowrap ${body.xs.semibold} ${sourceClass}`}>
+                    {sourceText->React.string}
+                  </span>,
+                ]
+              })}
+              emptyText="The proxy has not reported any states yet."
+            />
+          </div>
+        </div>
+      | None => React.null
       }}
     </Modal>
   }

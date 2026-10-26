@@ -294,6 +294,16 @@ let storyMapper = (json): story => {
       }
     }),
     nextRetryAt: dict->getOptionString("nextRetryAt"),
+    // null until the wait lasts 3 min
+    waiting: dict
+    ->Dict.get("waiting")
+    ->Option.flatMap(JSON.Decode.object)
+    ->Option.map(waiting => {
+      minutes: waiting->getInt("minutes", 0),
+      text: waiting->getString("text", dict->getString("stageCaption", "")),
+      why: waiting->getString("why", ""),
+      source: waiting->getString("source", "")->sourceMapper,
+    }),
     invoice: dict->getDictfromDict("invoice"),
     attempts: dict->getArrayFromDict("attempts", [])->JSON.Encode.array,
     processTracker: dict->getDictfromDict("processTracker"),
