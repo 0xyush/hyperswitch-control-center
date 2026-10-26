@@ -8,12 +8,53 @@ import { after, before, describe, test } from "node:test";
 
 process.env.SIM_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "sim-unit-"));
 
+// Three stored stories for the portfolio setup stages: card saved only, first charge failed, reported.
+const ev = (from: string, to: string, txnId?: string) => ({
+  stepId: "s1",
+  at: "2026-10-26T21:00:00Z",
+  from,
+  to,
+  label: "x",
+  text: "x",
+  status: "info",
+  source: "simulator",
+  why: [],
+  ...(txnId ? { txnId } : {}),
+});
+fs.writeFileSync(
+  path.join(process.env.SIM_DATA_DIR, "stories-v2.json"),
+  JSON.stringify([
+    {
+      storyId: "st_pending0000",
+      recoveryId: null,
+      started: false,
+      error: null,
+      events: [ev("billing", "billing"), ev("billing", "processor")],
+    },
+    {
+      storyId: "st_charged0000",
+      recoveryId: null,
+      started: false,
+      error: null,
+      events: [ev("billing", "processor", "pi_1")],
+    },
+    {
+      storyId: "st_reported000",
+      recoveryId: "0a_pay_1",
+      started: true,
+      error: null,
+      events: [ev("billing", "processor", "pi_2"), ev("billing", "revrec")],
+    },
+  ]),
+);
+
 const { matchRule } = await import("../src/passthrough.ts");
 const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
 const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
 const { parseStart } = await import("../src/story.ts");
-const { parsePortfolio } = await import("../src/portfolio.ts");
+const { parsePortfolio, setupStage } = await import("../src/portfolio.ts");
+const { parseStopAfter, portfolioConfig } = await import("../src/config.ts");
 const { createServer } = await import("../src/server.ts");
 
 describe("allow-list", () => {
@@ -191,6 +232,47 @@ describe("portfolio dials", () => {
         { status: 400 },
         JSON.stringify(body),
       );
+  });
+  test("setup stage per copy: pending, charged, reported", () => {
+    const copy = (storyId: string, recoveryId: string | null = null) => ({
+      storyId,
+      recoveryId,
+      status: null,
+      revrecAttempts: 0,
+      recoveredAt: null,
+      error: null,
+    });
+    assert.equal(setupStage(undefined), "pending");
+    assert.equal(setupStage(copy("st_pending0000")), "pending");
+    assert.equal(setupStage(copy("st_charged0000")), "charged");
+    assert.equal(setupStage(copy("st_reported000")), "reported");
+    assert.equal(setupStage(copy("st_gone0000000", "0a_pay_9")), "reported");
+    assert.equal(setupStage(copy("st_gone0000000")), "pending");
+  });
+  test("stop-after choices: default 10/20/45; the env list allows caps down to 0.5", () => {
+    assert.deepEqual(portfolioConfig.stopAfterMinutes, [10, 20, 45]);
+    assert.deepEqual(parseStopAfter(""), [10, 20, 45]);
+    assert.deepEqual(parseStopAfter("2, 0.5,1,1,x,0.25,60"), [0.5, 1, 2]);
+    assert.deepEqual(parseStopAfter("0.3,abc"), [10, 20, 45]);
+    // Default list: 5 to 45, half minutes.
+    assert.equal(parsePortfolio({ maxMinutes: 7.5 }).maxMinutes, 7.5);
+    for (const maxMinutes of [0.5, 4.5, 7.2])
+      assert.throws(() => parsePortfolio({ maxMinutes }), { status: 400 });
+    const saved = portfolioConfig.stopAfterMinutes;
+    portfolioConfig.stopAfterMinutes = [0.5, 1, 2];
+    try {
+      assert.equal(parsePortfolio({}).maxMinutes, 2);
+      assert.equal(parsePortfolio({ maxMinutes: 0.5 }).maxMinutes, 0.5);
+      assert.equal(parsePortfolio({ maxMinutes: "1" }).maxMinutes, 1);
+      for (const maxMinutes of [0, 0.25, 46, null])
+        assert.throws(
+          () => parsePortfolio({ maxMinutes }),
+          { status: 400 },
+          String(maxMinutes),
+        );
+    } finally {
+      portfolioConfig.stopAfterMinutes = saved;
+    }
   });
 });
 

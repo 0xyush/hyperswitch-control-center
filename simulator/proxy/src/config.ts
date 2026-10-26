@@ -115,11 +115,27 @@ export const PROFILES: Record<ProfileKey, ProfileRef> = {
   smart: profileRef("smart", "HS_SMART"),
 };
 
+// The portfolio form's "stop after" choices, in minutes. PORTFOLIO_STOP_AFTER_MINUTES is a comma
+// list, for example 0.5,1,2 on the self-hosted stack, where Rev Rec retries within seconds.
+// Values are half minutes from 0.5 to 45; others are dropped. None left = the default.
+export const DEFAULT_STOP_AFTER_MINUTES = [10, 20, 45];
+export function parseStopAfter(raw: string): number[] {
+  const ok = raw
+    .split(",")
+    .filter((s) => s.trim() !== "")
+    .map(Number)
+    .filter((n) => n >= 0.5 && n <= 45 && Number.isInteger(n * 2));
+  return ok.length
+    ? [...new Set(ok)].sort((a, b) => a - b)
+    : [...DEFAULT_STOP_AFTER_MINUTES];
+}
+
 // The portfolio run is off unless SIM_PORTFOLIO=1.
 export const portfolioConfig = {
   enabled: read("SIM_PORTFOLIO") === "1",
   maxInvoices: 10,
   runsPerHour: Number(read("RATE_LIMIT_PORTFOLIO_PER_HOUR") || 1),
+  stopAfterMinutes: parseStopAfter(read("PORTFOLIO_STOP_AFTER_MINUTES")),
 };
 
 // Every secret value we hold. Used to scrub any text before it leaves the proxy.

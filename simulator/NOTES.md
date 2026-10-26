@@ -401,7 +401,7 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - `seed.sh` signs a JWT with the router's secret instead (HS256, role `merchant_admin`, the seeded merchant, profile and org, tenant `public`, 30 days).
     - v2 JWT auth checks the signature, expiry, blacklist, role (built-in roles need no DB row) and that merchant and profile exist. It does not read a users row.
     - The token is already scoped to the merchant and profile, so the proxy needs no switch. The proxy already answers the dashboard's user calls itself.
-  - **GSM rows** (`v2/gsm`, admin key): `check_hard_decline` (workflows/revenue_recovery.rs) matches connector + flow `revenue_recovery` + sub_flow `sub_flow` + code + message exactly. For Stripe, the message it uses is the error _reason_: `message - <message>, decline_code - <code>` (connectors/stripe.rs).
+  - **GSM rows** (`v2/gsm`, admin key): `check_hard_decline` (workflows/revenue*recovery.rs) matches connector + flow `revenue_recovery` + sub_flow `sub_flow` + code + message exactly. For Stripe, the message it uses is the error \_reason*: `message - <message>, decline_code - <code>` (connectors/stripe.rs).
     - Rows: `card_declined` / `message - Your card was declined., decline_code - stolen_card`; `expired_card` / `message - Your card has expired., decline_code - expired_card`; and `expired_card` / `Your card has expired.`.
     - The last row is for the retry scheduler, which matches on the plain message (core/revenue_recovery/types.rs). Stolen card has no plain-message row: Stripe's plain message is the generic "Your card was declined.".
     - All rows have `error_category` `hard_decline`.
@@ -416,3 +416,10 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Side note:** a local test sent one `GET /health` and one `POST v2/organizations` (dummy key, answered 404) to port 18081. That port belongs to a local Rancher container. Nothing was created.
 
 - 26 Oct (orchestrator) **revision revrec-sim-00003-vhp** live: image revrec-sim:35afe7627 (cookie fix: same-origin fetches send the gate cookie; config paths answer JSON). Verified in headless Chrome: gate -> Home renders, no toasts, sidebar complete.
+
+- 2026-10-26 21:10 [A] **Portfolio: stop-after choices and setup stages** (for C's portfolio screen).
+  - `/healthz` `limits.portfolioStopAfterMinutes`: `[10, 20, 45]` by default. Env `PORTFOLIO_STOP_AFTER_MINUTES` sets it (a comma list of half minutes from 0.5 to 45; bad values are dropped). `proxy/.env.vm.example` sets `0.5,1,2` for the self-hosted stack.
+  - `POST /sim/portfolio/start` `maxMinutes`: half minutes from 5 to 45 as before, or down to the smallest choice when the list has one below 5. The default is the largest choice (45 by default).
+  - **Changed:** the time cap now counts from `setupDoneAt`, not `startedAt`, and it never ends a run during setup. Before, a cap shorter than setup would have cancelled copies while setup still made new ones. Sandbox runs now last setup + cap (a few minutes longer).
+  - A run with a cap under 3 min reads statuses more often: every `cap × 10 s`, from 5 s to 30 s (0.5 min → 5 s, 1 → 10 s, 2 → 20 s). Trend points come in steps of the tick. Sandbox runs keep the 30 s tick.
+  - `GET /sim/portfolio/:runId` `invoices[].static` / `.smart` are now always objects. `setupStage` is `pending` (not created, or the first charge has not failed yet), `charged` (the billing system's charge failed: a Stripe payment id on the story) or `reported` (Rev Rec recorded the failure). A copy not created yet has null ids and `revrecAttempts` 0.

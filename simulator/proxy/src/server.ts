@@ -195,6 +195,7 @@ async function healthz() {
       portfolioEnabled: portfolioConfig.enabled,
       portfolioRunsPerHour: portfolioConfig.runsPerHour,
       portfolioMaxInvoices: portfolioConfig.maxInvoices,
+      portfolioStopAfterMinutes: portfolioConfig.stopAfterMinutes,
       portfolioRunsAtOnce: 1,
     },
     contract: contract ?? {

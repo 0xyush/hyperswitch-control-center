@@ -23,6 +23,7 @@ import {
   readRevRecConfig,
   reportAgain,
   startStory,
+  type Story,
 } from "./story.ts";
 import { hsApiKey } from "./upstream.ts";
 
@@ -187,6 +188,14 @@ export function parsePortfolio(body: any): Dials {
   }
   if (!Object.keys(mix).length)
     throw bad("mix needs at least one weight above 0");
+  // Half minutes from 5 to 45, or down to the smallest stop-after choice when the env lists one
+  // below 5 (PORTFOLIO_STOP_AFTER_MINUTES). The default is the largest choice.
+  const choices = portfolioConfig.stopAfterMinutes;
+  const lo = Math.min(5, choices[0]);
+  const maxMinutes =
+    body.maxMinutes === undefined ? choices.at(-1)! : Number(body.maxMinutes);
+  if (!Number.isInteger(maxMinutes * 2) || maxMinutes < lo || maxMinutes > 45)
+    throw bad(`maxMinutes must be from ${lo} to 45, in steps of 0.5`);
   return {
     invoices: int(
       body.invoices,
@@ -197,7 +206,7 @@ export function parsePortfolio(body: any): Dials {
     ),
     amount: int(body.amount, 6540, 50, 1_000_000, "amount (minor units)"),
     mix,
-    maxMinutes: int(body.maxMinutes, 45, 5, 45, "maxMinutes"),
+    maxMinutes,
     seed: int(
       body.seed,
       Math.floor(Math.random() * 1_000_000),
@@ -344,13 +353,25 @@ async function setup(run: Run) {
   save();
 }
 
+// A short run reads more often: about 6 reads per minute of cap, from every 5 s to every 30 s.
+// Runs of 3 min or more (all sandbox runs) keep the 30 s tick.
+const tickMs = (run: Run) =>
+  Math.min(TICK_MS, Math.max(5_000, run.dials.maxMinutes * 10_000));
+
+// The time cap counts from the end of setup, so the last invoice gets about as long as the first
+// (setup alone can take longer than a 0.5 min cap). It never ends a run during setup.
+const capReached = (run: Run) =>
+  run.status === "running" &&
+  run.setupDoneAt !== null &&
+  (Date.now() - Date.parse(run.setupDoneAt)) / 60_000 >= run.dials.maxMinutes;
+
 const timers = new Map<string, NodeJS.Timeout>();
 const ticking = new Set<string>();
 function schedule(run: Run) {
   if (timers.has(run.runId)) return;
   timers.set(
     run.runId,
-    setInterval(() => void tick(run), TICK_MS),
+    setInterval(() => void tick(run), tickMs(run)),
   );
 }
 function stopTimer(run: Run) {
@@ -376,16 +397,20 @@ async function tick(run: Run) {
     }
     run.lastTickAt = now;
     // A late tick (a slow sandbox, a sleeping machine) still ends the run at the cap.
-    const elapsedMin = (Date.now() - Date.parse(run.startedAt)) / 60_000;
-    if (run.status === "running" && elapsedMin >= run.dials.maxMinutes) {
+    if (capReached(run)) {
       await poll(run);
       return await end(run, `time cap of ${run.dials.maxMinutes} min`);
     }
     await flipDue(run);
     await poll(run);
-    // Half-minute steps: one point per 30 s tick.
+    // One point per tick, in steps of the tick (half minutes for a 30 s tick).
+    const step = tickMs(run) / 60_000;
     const minute =
-      Math.round(((Date.now() - Date.parse(run.startedAt)) / 60_000) * 2) / 2;
+      Math.round(
+        Math.round((Date.now() - Date.parse(run.startedAt)) / 60_000 / step) *
+          step *
+          1000,
+      ) / 1000;
     const recovered = (side: Side) =>
       run.invoices.filter((inv) => inv.copies[side]?.status === "recovered")
         .length;
@@ -510,10 +535,9 @@ const openCopies = (run: Run) =>
 // The run ends when every copy is final, or at the time cap. Open copies are cancelled, so
 // nothing keeps retrying on the sandbox.
 async function maybeEnd(run: Run) {
-  const elapsedMin = (Date.now() - Date.parse(run.startedAt)) / 60_000;
   if (run.status === "running" && openCopies(run).length === 0)
     return end(run, "every invoice reached a final status");
-  if (elapsedMin >= run.dials.maxMinutes)
+  if (capReached(run))
     return end(run, `time cap of ${run.dials.maxMinutes} min`);
 }
 
@@ -587,6 +611,42 @@ const lateSec = (inv: PfInvoice) =>
         Math.round((Date.parse(inv.flippedAt) - Date.parse(inv.flipAt)) / 1000),
       )
     : null;
+
+// Where a copy is in setup, so the form's rows can fill while the run is setting up:
+// pending   not created yet, or its first charge has not failed yet
+// charged   the billing system's charge failed (a Stripe payment id on the story)
+// reported  Rev Rec recorded the failure (the copy has its invoice id)
+type SetupStage = "pending" | "charged" | "reported";
+export function setupStage(c: Copy | undefined): SetupStage {
+  if (!c) return "pending";
+  let story: Story | null = null;
+  try {
+    story = getStory(c.storyId);
+  } catch {
+    // A story the store no longer holds: go by the copy alone.
+  }
+  if (c.recoveryId || story?.recoveryId) return "reported";
+  if (
+    story?.events.some(
+      (e) => e.from === "billing" && e.to === "processor" && e.txnId,
+    )
+  )
+    return "charged";
+  return "pending";
+}
+
+const NO_COPY = {
+  storyId: null,
+  recoveryId: null,
+  status: null,
+  revrecAttempts: 0,
+  recoveredAt: null,
+  error: null,
+};
+const copyView = (c: Copy | undefined) => ({
+  ...(c ?? NO_COPY),
+  setupStage: setupStage(c),
+});
 
 function quantile(sorted: number[], q: number) {
   if (!sorted.length) return null;
@@ -695,8 +755,9 @@ export async function portfolioView(runId: string) {
         flippedAt: inv.flippedAt,
         lateSec: lateSec(inv),
       },
-      static: inv.copies.static ?? null,
-      smart: inv.copies.smart ?? null,
+      // Always an object, with setupStage; a copy not created yet has null ids.
+      static: copyView(inv.copies.static),
+      smart: copyView(inv.copies.smart),
     })),
     sources: {
       status: "sandbox",
