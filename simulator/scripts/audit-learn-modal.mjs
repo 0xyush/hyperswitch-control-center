@@ -2,7 +2,8 @@
 // reads getBoundingClientRect and computed styles of every element on the three panes, samples the
 // pane transition frame by frame, and writes the numbers and checks to
 // simulator/screenshots/learn-modal-audit.json under the given phase.
-// Usage: node simulator/scripts/audit-learn-modal.mjs --phase before|after [--base http://localhost:9000]
+// The lesson has five panes (Learn v2): idea, flow, number, check 1, check 2.
+// Usage: node simulator/scripts/audit-learn-modal.mjs --phase v2 [--base http://localhost:9000]
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -113,7 +114,40 @@ const measureInPage = () => {
       text: b.innerText.trim(),
       ...rect(b),
     })),
-    footerLink: rect(footer.firstElementChild),
+    footerLink: {
+      ...rect(footer.firstElementChild),
+      text: footer.firstElementChild.textContent.trim(),
+    },
+    flow: (() => {
+      const viewport = document.querySelector(".react-flow__viewport");
+      if (!viewport) return null;
+      const m = style(viewport).transform.match(/matrix\(([^)]+)\)/);
+      const edges = [...document.querySelectorAll(".react-flow__edge")];
+      return {
+        scale: m ? Math.round(parseFloat(m[1].split(",")[0]) * 1000) / 1000 : 1,
+        nodes: [...document.querySelectorAll(".react-flow__node")].map(rect),
+        // A caption that needs more than the node's two lines overflows the fixed node
+        overflowing: [...document.querySelectorAll(".react-flow__node > div")]
+          .filter((el) => el.scrollHeight > el.clientHeight + 1)
+          .map((el) => el.innerText.replace(/\n/g, " / ")),
+        labels: [
+          ...document.querySelectorAll(".react-flow__edgelabel-renderer > div"),
+        ].map(rect),
+        edges: edges.length,
+        animatedEdges: edges.filter((e) => e.classList.contains("animated"))
+          .length,
+      };
+    })(),
+    // Text the lessons must not show any more (LEARN-V2.md "Remove")
+    bannedText: [
+      /From the sandbox/,
+      /\bLive\b/,
+      /Read-only/,
+      /Rule-based/,
+      /decider/,
+    ]
+      .filter((re) => re.test(panel.innerText))
+      .map(String),
   };
 };
 
@@ -125,8 +159,10 @@ const startSampler = () => {
     () => {
       const t0 = performance.now();
       const tick = () => {
-        const pane = document.querySelector('[data-learn="pane"]');
-        const el = pane?.firstElementChild;
+        // The pane on show (Learn v2 keeps all panes mounted); older modals had one pane child
+        const el =
+          document.querySelector('[data-learn="pane-current"]') ??
+          document.querySelector('[data-learn="pane"]')?.firstElementChild;
         if (el) {
           const s = getComputedStyle(el);
           const m = s.transform.match(/matrix\(([^)]+)\)/);
@@ -185,6 +221,30 @@ await page.evaluate(() => localStorage.removeItem("simulator_learned_levels"));
 await page.reload({ waitUntil: "domcontentloaded" });
 await page.getByText("Eight short levels").waitFor({ timeout: 30000 });
 await page.waitForTimeout(2500);
+const paneNames = ["idea", "flow", "number", "check1", "check2"];
+const button = (name) => page.getByRole("button", { name, exact: true });
+const learnedIds = () =>
+  page.evaluate(() =>
+    JSON.parse(localStorage.getItem("simulator_learned_levels") ?? "[]"),
+  );
+// Clicks the open choices of a check, first to last, until Next (or Done) is enabled
+const resolveCheck = async (goOn) => {
+  for (let i = 0; i < 3 && (await button(goOn).isDisabled()); i++) {
+    await page
+      .locator('[data-learn="block"] div.cursor-pointer')
+      .first()
+      .click();
+    await page.waitForTimeout(150);
+  }
+};
+const openLevel = async (title) => {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  await page.getByText(title, { exact: true }).first().click();
+  await page.locator('[data-learn="stepper"]').waitFor();
+  await page.waitForTimeout(500);
+};
+
 await page.evaluate(startSampler);
 await page.getByText("The start rule", { exact: true }).click();
 await page.locator('[data-learn="stepper"]').waitFor();
@@ -202,33 +262,83 @@ const shoot = async (name, panel) =>
     },
   });
 
+// Level 1, pane by pane
 const panes = {};
 panes.idea = await page.evaluate(measureInPage);
 await shoot("1-idea", panes.idea.panel);
-
+// The flow is built when the card opens; Next must show that same element, not build a new one
+await page.evaluate(() => {
+  window.__flowElement = document.querySelector(".react-flow");
+});
 await page.evaluate(startSampler);
-await page.getByRole("button", { name: "Next" }).click();
-await page.waitForTimeout(500);
+await button("Next").click();
+await page.waitForTimeout(700);
 const nextSamples = await page.evaluate(() => window.__samples);
-panes.value = await page.evaluate(measureInPage);
-await shoot("2-value", panes.value.panel);
-
+panes.flow = await page.evaluate(measureInPage);
+const flowMountedOnce = await page.evaluate(
+  () =>
+    !!window.__flowElement &&
+    document.querySelector(".react-flow") === window.__flowElement,
+);
+await shoot("2-flow", panes.flow.panel);
 await page.evaluate(startSampler);
-await page.getByRole("button", { name: "Back" }).click();
+await button("Back").click();
 await page.waitForTimeout(500);
 const backSamples = await page.evaluate(() => window.__samples);
-await page.getByRole("button", { name: "Next" }).click();
+await button("Next").click();
 await page.waitForTimeout(500);
-await page.getByRole("button", { name: "Next" }).click();
+await button("Next").click();
 await page.waitForTimeout(500);
-panes.check = await page.evaluate(measureInPage);
-await shoot("3-check", panes.check.panel);
+panes.number = await page.evaluate(measureInPage);
+await shoot("3-number", panes.number.panel);
+await button("Next").click();
+await page.waitForTimeout(500);
+panes.check1 = await page.evaluate(measureInPage);
+const nextLockedBeforeAnswer = await button("Next").isDisabled();
+await shoot("4-check1", panes.check1.panel);
 await page.getByText("After the first failure", { exact: true }).click();
 await page.waitForTimeout(400);
-panes.checkAnswered = await page.evaluate(measureInPage);
-await shoot("4-answered", panes.checkAnswered.panel);
+panes.check1Answered = await page.evaluate(measureInPage);
+const learnedAfterOneCheck = (await learnedIds()).includes(1);
+await button("Next").click();
+await page.waitForTimeout(500);
+panes.check2 = await page.evaluate(measureInPage);
+await page
+  .getByText("Rev Rec waits for more failures", { exact: true })
+  .click();
+await page.waitForTimeout(400);
+panes.check2Answered = await page.evaluate(measureInPage);
+await shoot("5-check2", panes.check2Answered.panel);
+const learnedAfterBothChecks = (await learnedIds()).includes(1);
 
-// Every level: each pane's content must fit the pane, and the footer must not move
+// Level 2: two wrong picks on check 1 mark the answer; a right check 2 then must not mark the level
+await openLevel("Static vs smart retries");
+for (let i = 0; i < 3; i++) {
+  await button("Next").click();
+  await page.waitForTimeout(400);
+}
+await page.getByText("It retries more often", { exact: true }).click();
+await page.waitForTimeout(200);
+const afterOneWrong = {
+  nextDisabled: await button("Next").isDisabled(),
+  feedback: await page.getByText("Not quite. One more try.").count(),
+};
+await page.getByText("It skips hard declines", { exact: true }).click();
+await page.waitForTimeout(200);
+const afterTwoWrong = {
+  nextDisabled: await button("Next").isDisabled(),
+  answerMarked: await page
+    .getByText("The right answer is marked.", { exact: false })
+    .count(),
+};
+await shoot("6-answer-shown", (await page.evaluate(measureInPage)).panel);
+await button("Next").click();
+await page.waitForTimeout(400);
+await page.getByText("6 hours", { exact: true }).click();
+await page.waitForTimeout(200);
+const level2Learned = (await learnedIds()).includes(2);
+
+// Every level: each pane fits the slot, the footer does not move, the flow fits and is readable
 const levelTitles = [
   "The start rule",
   "Static vs smart retries",
@@ -241,26 +351,47 @@ const levelTitles = [
 ];
 const sweep = [];
 for (const title of levelTitles) {
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-  await page.getByText(title, { exact: true }).first().click();
-  await page.locator('[data-learn="stepper"]').waitFor();
-  await page.waitForTimeout(400);
+  await openLevel(title);
   const row = { title, panes: [] };
-  for (const paneName of ["idea", "value", "check"]) {
+  for (const [index, paneName] of paneNames.entries()) {
     const m = await page.evaluate(measureInPage);
     row.panes.push({
       pane: paneName,
       blockHeight: m.block.height,
       paneHeight: m.pane.height,
       footerY: m.footer.y,
+      footerLinkText: m.footerLink.text,
+      bannedText: m.bannedText,
       headlineLines: m.headline
         ? Math.round(m.headline.height / parseFloat(m.headline.lineHeight))
         : null,
+      flow: m.flow && {
+        scale: m.flow.scale,
+        animatedEdges: m.flow.animatedEdges,
+        edges: m.flow.edges,
+        overflowing: m.flow.overflowing,
+        labelsClear: m.flow.labels.every((l) =>
+          m.flow.nodes.every(
+            (n) =>
+              l.right <= n.x + 0.5 ||
+              l.x >= n.right - 0.5 ||
+              l.bottom <= n.y + 0.5 ||
+              l.y >= n.bottom - 0.5,
+          ),
+        ),
+        nodesInside: m.flow.nodes.every(
+          (n) =>
+            n.x >= m.pane.x - 1 &&
+            n.right <= m.pane.right + 1 &&
+            n.y >= m.pane.y - 1 &&
+            n.bottom <= m.pane.bottom + 1,
+        ),
+      },
     });
-    if (paneName !== "check") {
-      await page.getByRole("button", { name: "Next" }).click();
-      await page.waitForTimeout(400);
+    if (index < paneNames.length - 1) {
+      if (paneName.startsWith("check")) await resolveCheck("Next");
+      await button("Next").click();
+      await page.waitForTimeout(paneName === "idea" ? 700 : 400);
     }
   }
   sweep.push(row);
@@ -327,9 +458,15 @@ for (const [paneName, m] of Object.entries(panes)) {
     "one size",
   );
   const weights = m.labels.map((l) => l.fontWeight);
-  const activeIndex = { idea: 0, value: 1, check: 2, checkAnswered: 2 }[
-    paneName
-  ];
+  const activeIndex = {
+    idea: 0,
+    flow: 1,
+    number: 2,
+    check1: 3,
+    check1Answered: 3,
+    check2: 4,
+    check2Answered: 4,
+  }[paneName];
   const otherWeights = new Set(weights.filter((_, i) => i !== activeIndex));
   check(
     `${paneName}: label weights (active bold)`,
@@ -449,26 +586,103 @@ for (const [name, t, sign] of [
     `opacity from < 0.5, slide ${sign > 0 ? "+" : "-"}8 px, settled by ~180 ms (+ 2 frames)`,
   );
 }
+for (const name of ["check1", "check2"])
+  check(
+    `answering does not move ${name}`,
+    panes[`${name}Answered`].block.y - panes[name].block.y,
+    near(panes[`${name}Answered`].block.y, panes[name].block.y, 0.5),
+    "block top diff <= 0.5 px",
+  );
 check(
-  "answering does not move the check pane",
-  panes.checkAnswered.block.y - panes.check.block.y,
-  near(panes.checkAnswered.block.y, panes.check.block.y, 0.5),
-  "block top diff <= 0.5 px",
+  "level 1 flow: 4 nodes inside the pane, one animated edge, readable zoom",
+  {
+    scale: panes.flow.flow?.scale,
+    nodes: panes.flow.flow?.nodes.length,
+    animatedEdges: panes.flow.flow?.animatedEdges,
+  },
+  !!panes.flow.flow &&
+    panes.flow.flow.nodes.length === 4 &&
+    panes.flow.flow.animatedEdges === 1 &&
+    panes.flow.flow.scale >= 0.6,
+  "4 nodes, 1 animated edge, zoom >= 0.6",
+);
+check(
+  "the flow is built once (Next shows the element built on open)",
+  flowMountedOnce,
+  flowMountedOnce === true,
+  "same element",
+);
+check(
+  "Next is locked until check 1 is answered",
+  nextLockedBeforeAnswer,
+  nextLockedBeforeAnswer === true,
+  "disabled",
+);
+check(
+  "one right check does not learn the level",
+  learnedAfterOneCheck,
+  learnedAfterOneCheck === false,
+  "level 1 not learned after check 1",
+);
+check(
+  "both right checks learn the level",
+  learnedAfterBothChecks,
+  learnedAfterBothChecks === true,
+  "level 1 learned after check 2",
+);
+check(
+  "one wrong pick: one more try",
+  afterOneWrong,
+  afterOneWrong.nextDisabled && afterOneWrong.feedback === 1,
+  "Next locked, 'One more try' shown",
+);
+check(
+  "two wrong picks: the answer is shown and Next opens",
+  afterTwoWrong,
+  !afterTwoWrong.nextDisabled && afterTwoWrong.answerMarked === 1,
+  "Next enabled, answer marked",
+);
+check(
+  "a missed check keeps the level open",
+  level2Learned,
+  level2Learned === false,
+  "level 2 not learned (check 1 missed, check 2 right)",
 );
 for (const row of sweep) {
   const fits = row.panes.every((p) => p.blockHeight <= p.paneHeight + 0.5);
   const footerSpread = spread(row.panes.map((p) => p.footerY));
   const lines = row.panes[0].headlineLines;
+  const flow = row.panes[1].flow;
+  const banned = row.panes.flatMap((p) => p.bannedText);
+  const linkOnlyLast = row.panes.every((p, i) =>
+    i === row.panes.length - 1
+      ? p.footerLinkText.startsWith("Try it")
+      : p.footerLinkText === "",
+  );
   check(
-    `level "${row.title}": panes fit, footer still, headline lines`,
+    `level "${row.title}"`,
     {
       blockHeights: row.panes.map((p) => p.blockHeight),
       paneHeight: row.panes[0].paneHeight,
       footerSpread,
       headlineLines: lines,
+      flow,
+      banned,
+      linkOnlyLast,
     },
-    fits && footerSpread <= 0.5 && lines !== null && lines <= 2,
-    "block <= pane, footer spread <= 0.5 px, headline <= 2 lines",
+    fits &&
+      footerSpread <= 0.5 &&
+      lines !== null &&
+      lines <= 2 &&
+      !!flow &&
+      flow.nodesInside &&
+      flow.labelsClear &&
+      flow.overflowing.length === 0 &&
+      flow.animatedEdges === 1 &&
+      flow.scale >= 0.6 &&
+      banned.length === 0 &&
+      linkOnlyLast,
+    "panes fit, footer still, headline <= 2 lines, flow inside + labels clear of nodes + 1 animated edge + zoom >= 0.6, no chips, Try it on pane 5 only",
   );
 }
 check("no page errors", pageErrors, pageErrors.length === 0, "none");
@@ -480,6 +694,15 @@ const result = {
   panes,
   transitions: { open, next, back },
   levels: sweep,
+  behaviour: {
+    flowMountedOnce,
+    nextLockedBeforeAnswer,
+    learnedAfterOneCheck,
+    learnedAfterBothChecks,
+    afterOneWrong,
+    afterTwoWrong,
+    level2Learned,
+  },
   checks,
   passed: checks.filter((c) => c.pass).length,
   failed: checks.filter((c) => !c.pass).length,

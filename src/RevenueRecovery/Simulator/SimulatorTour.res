@@ -1,27 +1,10 @@
-// Learn Rev Rec (UX-PASS-2 section B): a path of eight levels, one per Rev Rec feature.
-// A level opens a card with three panes: the idea, the real value from the sandbox, one question.
+// Learn Rev Rec v2 (simulator/LEARN-V2.md): a path of eight levels, one per Rev Rec feature. A
+// level is a five-pane lesson: the idea, how it works (a flow), the real number, two checks.
 open SimulatorTourTypes
 open SimulatorTourUtils
 open Typography
 
 let totalLevels = levels->Array.length
-
-module Chip = {
-  @react.component
-  let make = (~text, ~colorClass) =>
-    <span
-      className={`shrink-0 w-fit rounded px-1.5 py-0.5 border whitespace-nowrap ${body.xs.semibold} ${colorClass}`}>
-      {text->React.string}
-    </span>
-}
-
-module SourceChip = {
-  @react.component
-  let make = (~source) => {
-    let (text, colorClass) = source->SimulatorUtils.sourceLabel
-    <Chip text colorClass />
-  }
-}
 
 module ProgressBar = {
   @react.component
@@ -147,11 +130,8 @@ module MoreFeatures = {
                   {switch (feature.setting, configState) {
                   | (Some(key), SimulatorTypes.ConfigLoaded(config)) =>
                     let (value, caption) = config->settingValue(key)
-                    <span className="flex items-center gap-2">
-                      <span className={`${body.md.semibold} text-nd_gray-700`}>
-                        {`${caption}: ${value}`->React.string}
-                      </span>
-                      <SourceChip source=SimulatorTypes.Sandbox />
+                    <span className={`${body.md.semibold} text-nd_gray-700`}>
+                      {`${caption}: ${value}`->React.string}
                     </span>
                   | _ => React.null
                   }}
@@ -166,16 +146,24 @@ module MoreFeatures = {
   }
 }
 
+let lessonPanes = [
+  (IdeaPane, "Idea"),
+  (FlowPane, "How it works"),
+  (NumberPane, "In numbers"),
+  (FirstCheck, "Check 1"),
+  (SecondCheck, "Check 2"),
+]
+
 // Pane steps at the top of the card, in the look of the dashboard's step indicators: the current
-// step filled, a done step outlined with a check, connectors one colour so only the circles move
+// step filled, a done step outlined with a check. Five equal columns, the label under its circle,
+// connectors one colour and one length between the circles.
 module PaneSteps = {
   @react.component
   let make = (~pane) => {
-    let panes = [(IdeaPane, "Idea"), (ValuePane, "Real value"), (CheckPane, "Check")]
-    let currentIndex = panes->Array.findIndex(((p, _)) => p == pane)
+    let currentIndex = lessonPanes->Array.findIndex(((p, _)) => p == pane)
     <AddDataAttributes attributes=[("data-learn", "stepper")]>
-      <div className="flex items-center w-full">
-        {panes
+      <div className="grid grid-cols-5 w-full">
+        {lessonPanes
         ->Array.mapWithIndex(((_, name), index) => {
           let isDone = index < currentIndex
           let isCurrent = index == currentIndex
@@ -187,30 +175,31 @@ module PaneSteps = {
             "bg-white border-nd_gray-200 text-nd_gray-400"
           }
           let labelClass = if isCurrent {
-            `${body.md.semibold} text-nd_gray-800`
+            `${body.sm.semibold} text-nd_gray-800`
           } else {
-            `${body.md.medium} ${isDone ? "text-nd_gray-600" : "text-nd_gray-400"}`
+            `${body.sm.medium} ${isDone ? "text-nd_gray-600" : "text-nd_gray-400"}`
           }
-          <React.Fragment key=name>
+          <div key=name className="relative flex flex-col items-center gap-2">
+            // From 8 px after the previous circle to 8 px before this one
             <RenderIf condition={index > 0}>
               <AddDataAttributes attributes=[("data-learn", "step-connector")]>
-                <div className="flex-1 h-px mx-3 bg-nd_gray-200" />
+                <div
+                  className="absolute top-4 left-[calc(-50%_+_24px)] right-[calc(50%_+_24px)] h-px bg-nd_gray-200"
+                />
               </AddDataAttributes>
             </RenderIf>
-            <div className="flex items-center gap-2 shrink-0">
-              <AddDataAttributes attributes=[("data-learn", "step-circle")]>
-                <div
-                  className={`flex items-center justify-center rounded-full w-8 h-8 border ${body.sm.semibold} ${circleClass}`}>
-                  {isDone
-                    ? <Icon name="nd-check" size=14 className="text-nd_primary_blue-450" />
-                    : (index + 1)->Int.toString->React.string}
-                </div>
-              </AddDataAttributes>
-              <AddDataAttributes attributes=[("data-learn", "step-label")]>
-                <span className=labelClass> {name->React.string} </span>
-              </AddDataAttributes>
-            </div>
-          </React.Fragment>
+            <AddDataAttributes attributes=[("data-learn", "step-circle")]>
+              <div
+                className={`flex items-center justify-center rounded-full w-8 h-8 border ${body.sm.semibold} ${circleClass}`}>
+                {isDone
+                  ? <Icon name="nd-check" size=14 className="text-nd_primary_blue-450" />
+                  : (index + 1)->Int.toString->React.string}
+              </div>
+            </AddDataAttributes>
+            <AddDataAttributes attributes=[("data-learn", "step-label")]>
+              <span className={`whitespace-nowrap ${labelClass}`}> {name->React.string} </span>
+            </AddDataAttributes>
+          </div>
         })
         ->React.array}
       </div>
@@ -218,110 +207,157 @@ module PaneSteps = {
   }
 }
 
-module ValueBlock = {
+// Pane 3: the real number in big type and one line of context
+module NumberBlock = {
   @react.component
-  let make = (~value: levelValue, ~configState) => {
-    let (big, caption, source) = switch value {
-    | Fixed({value, caption, source}) => (value, caption, Some(source))
-    | Setting(key) =>
+  let make = (~number: levelNumber, ~configState) => {
+    let (big, line) = switch number {
+    | Fixed(big, line) => (big, line)
+    | FromConfig(read) =>
       switch configState {
-      | SimulatorTypes.ConfigLoading => ("…", "Reading the sandbox", None)
-      | ConfigFailed => ("–", "Not available", None)
-      | ConfigLoaded(config) =>
-        let (big, caption) = config->settingValue(key)
-        (big, caption, Some(SimulatorTypes.Sandbox))
+      | SimulatorTypes.ConfigLoading => numberWhileLoading
+      | ConfigFailed => numberNotAvailable
+      | ConfigLoaded(config) => config->read
       }
     }
-    <div className="flex flex-col items-center gap-2 text-center min-w-40">
-      <span className={`${display.sm.semibold} text-nd_gray-800`}> {big->React.string} </span>
-      <span className={`${body.md.medium} text-nd_gray-500`}> {caption->React.string} </span>
-      {switch source {
-      | Some(source) => <SourceChip source />
-      | None => React.null
-      }}
+    <div className="flex flex-col items-center gap-3 text-center">
+      <span className={`${display.md.semibold} text-nd_gray-800`}> {big->React.string} </span>
+      <span className={`${body.lg.medium} text-nd_gray-600`}> {line->React.string} </span>
     </div>
   }
 }
 
+// One question. A wrong pick allows one more try; after a second wrong pick the right choice is
+// marked. picks are the choices clicked, in order.
+let isCheckRight = (check: check, picks) => picks->Array.includes(check.answer)
+let isCheckOver = (check: check, picks) => check->isCheckRight(picks) || picks->Array.length >= 2
+
 module CheckChoices = {
   @react.component
-  let make = (~check: check, ~picked, ~onPick) => {
-    let isRight = picked == Some(check.answer)
-    <div className="w-full flex flex-col gap-3">
+  let make = (~check: check, ~picks: array<int>, ~onPick) => {
+    let isRight = check->isCheckRight(picks)
+    let isOver = check->isCheckOver(picks)
+    <div className="w-full flex flex-col gap-2">
       <p className={`${body.lg.semibold} text-nd_gray-800`}> {check.question->React.string} </p>
       {check.choices
       ->Array.mapWithIndex((choice, index) => {
-        let isPicked = picked == Some(index)
-        let stateClass = switch (isPicked, index == check.answer) {
-        | (true, true) => "border-nd_green-400 bg-nd_green-50 text-nd_green-600"
-        | (true, false) => "border-nd_red-400 bg-nd_red-50 text-nd_red-600"
-        | _ => "border-nd_gray-200 text-nd_gray-700 hover:border-nd_primary_blue-450"
+        let isAnswer = index == check.answer
+        let isWrongPick = picks->Array.includes(index) && !isAnswer
+        let stateClass = if isAnswer && isRight {
+          "border-nd_green-400 bg-nd_green-50 text-nd_green-600"
+        } else if isAnswer && isOver {
+          // Shown after two wrong picks
+          "border-nd_green-400 border-dashed text-nd_green-600"
+        } else if isWrongPick {
+          "border-nd_red-400 bg-nd_red-50 text-nd_red-600"
+        } else {
+          "border-nd_gray-200 text-nd_gray-700 hover:border-nd_primary_blue-450"
         }
+        let canPick = !isOver && !isWrongPick
         <div
           key=choice
-          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 ${body.md.semibold} ${stateClass} ${isRight
-              ? "pointer-events-none"
-              : "cursor-pointer"}`}
+          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${body.md.semibold} ${stateClass} ${canPick
+              ? "cursor-pointer"
+              : "pointer-events-none"}`}
           onClick={_ => onPick(index)}>
           <span> {choice->React.string} </span>
-          {switch (isPicked, index == check.answer) {
-          | (true, true) => <Icon name="nd-check-circle" size=18 className="text-nd_green-400" />
-          | (true, false) => <Icon name="nd-cross" size=14 className="text-nd_red-500" />
-          | _ => React.null
+          {if isAnswer && isOver {
+            <Icon name="nd-check-circle" size=18 className="text-nd_green-400" />
+          } else if isWrongPick {
+            <Icon name="nd-cross" size=14 className="text-nd_red-500" />
+          } else {
+            React.null
           }}
         </div>
       })
       ->React.array}
       // The line keeps its height before an answer, so answering does not move the choices
-      {switch picked {
-      | Some(index) if index == check.answer =>
+      {if isRight {
         <p className={`h-5 ${body.md.semibold} text-nd_green-600`}>
-          {"Right. Level learned."->React.string}
+          {(picks->Array.length == 1 ? "Right." : "Right on the second try.")->React.string}
         </p>
-      | Some(_) =>
+      } else if isOver {
+        <p className={`h-5 ${body.md.medium} text-nd_gray-600`}>
+          {"Not this time. The right answer is marked."->React.string}
+        </p>
+      } else if picks->Array.length == 1 {
         <p className={`h-5 ${body.md.medium} text-nd_red-600`}>
-          {"Not quite. Try again."->React.string}
+          {"Not quite. One more try."->React.string}
         </p>
-      | None => <p className="h-5" />
+      } else {
+        <p className="h-5" />
       }}
     </div>
   }
 }
 
-// Each pane slides in from the side it comes from: from the right on Next (1), from the left on
-// Back (-1). On open (0) it does not move, as the modal has its own entrance.
-type paneMove = {pane: modalPane, direction: int}
-
 module LevelModal = {
   @react.component
   let make = (~level: level, ~configState, ~isLearned, ~onLearned, ~onClose) => {
-    let ({pane, direction}, setMove) = React.useState(_ => {pane: IdeaPane, direction: 0})
-    let (picked, setPicked) = React.useState(_ => None)
-    let isRight = picked == Some(level.check.answer)
+    let (pane, setPane) = React.useState(_ => IdeaPane)
+    let ((firstPicks, secondPicks), setPicks) = React.useState(_ => ([], []))
+    let (firstCheck, secondCheck) = level.checks
     let (tryText, tryUrl) = level.tryTarget->tryLink
-    let (tagText, tagClass) = level.tag->tagLabel
+    let paneIndex = lessonPanes->Array.findIndex(((p, _)) => p == pane)
+    let paneAt = index => lessonPanes->Array.get(index)->Option.mapOr(pane, ((p, _)) => p)
 
-    let onPick = index => {
-      setPicked(_ => Some(index))
-      if index == level.check.answer {
+    // The level is learned when both checks are right
+    let onPick = (~isFirst, index) => {
+      let (nextFirst, nextSecond) = isFirst
+        ? (firstPicks->Array.concat([index]), secondPicks)
+        : (firstPicks, secondPicks->Array.concat([index]))
+      setPicks(_ => (nextFirst, nextSecond))
+      if firstCheck->isCheckRight(nextFirst) && secondCheck->isCheckRight(nextSecond) {
         onLearned(level.id)
       }
     }
-    let goNext = () =>
-      setMove(prev => {
-        pane: prev.pane == IdeaPane ? ValuePane : CheckPane,
-        direction: 1,
-      })
-    let goBack = () =>
-      setMove(prev => {
-        pane: prev.pane == CheckPane ? ValuePane : IdeaPane,
-        direction: -1,
-      })
-    let paneKey = switch pane {
-    | IdeaPane => "idea"
-    | ValuePane => "value"
-    | CheckPane => "check"
+    let goNext = () => setPane(_ => paneAt(paneIndex + 1))
+    let goBack = () => setPane(_ => paneAt(paneIndex - 1))
+    // A check pane lets you go on once it is answered (or the level is learned already)
+    let canGoOn = switch pane {
+    | FirstCheck => isLearned || firstCheck->isCheckOver(firstPicks)
+    | SecondCheck => isLearned || secondCheck->isCheckOver(secondPicks)
+    | _ => true
     }
+    let paneContent = lessonPane =>
+      switch lessonPane {
+      | IdeaPane =>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <AddDataAttributes attributes=[("data-learn", "badge")]>
+            <div
+              className="flex items-center justify-center rounded-full w-24 h-24 bg-nd_primary_blue-50">
+              <Icon name=level.icon size=44 className="text-nd_primary_blue-450" />
+            </div>
+          </AddDataAttributes>
+          <AddDataAttributes attributes=[("data-learn", "headline")]>
+            <p
+              className="max-w-[560px] line-clamp-2 text-fs-22 leading-32 font-semibold text-nd_gray-800">
+              {level.idea->React.string}
+            </p>
+          </AddDataAttributes>
+        </div>
+      | FlowPane =>
+        <div className="w-full h-full">
+          <SimulatorLessonFlow flow=level.flow />
+        </div>
+      | NumberPane =>
+        <div className="w-full">
+          <NumberBlock number=level.number configState />
+        </div>
+      // DOM roots, so the audit attribute lands on an element
+      | FirstCheck =>
+        <div className="w-full">
+          <CheckChoices
+            check=firstCheck picks=firstPicks onPick={index => onPick(~isFirst=true, index)}
+          />
+        </div>
+      | SecondCheck =>
+        <div className="w-full">
+          <CheckChoices
+            check=secondCheck picks=secondPicks onPick={index => onPick(~isFirst=false, index)}
+          />
+        </div>
+      }
 
     <Modal
       showModal=true
@@ -334,87 +370,70 @@ module LevelModal = {
       childClass="px-6 pt-4 pb-6">
       <div className="flex flex-col gap-6">
         <PaneSteps pane />
-        // One height for every pane (the check pane is the tallest), so the footer never moves
+        // One slot height for every pane (the checks are the tallest), so the footer never moves.
+        // All five panes stay mounted, stacked: the flow is built once when the card opens, and
+        // Next or Back only fades the panes (180 ms) with an 8 px slide, the new one in from its
+        // side and the old one out the other way. Hidden panes take no clicks.
         <AddDataAttributes attributes=[("data-learn", "pane")]>
-          <div className="h-60">
-            <FramerMotion.Motion.Div
-              key=paneKey
-              initial={{opacity: direction == 0 ? 1.0 : 0.0, x: 8 * direction}}
-              animate={{opacity: 1.0, x: 0}}
-              transition={{duration: 0.18, ease: "easeInOut"}}
-              className="h-full flex flex-col items-center justify-center">
-              <AddDataAttributes attributes=[("data-learn", "block")]>
-                {switch pane {
-                | IdeaPane =>
-                  <div className="flex flex-col items-center gap-4 text-center">
-                    <AddDataAttributes attributes=[("data-learn", "badge")]>
-                      <div
-                        className="flex items-center justify-center rounded-full w-24 h-24 bg-nd_primary_blue-50">
-                        <Icon name=level.icon size=44 className="text-nd_primary_blue-450" />
-                      </div>
-                    </AddDataAttributes>
-                    <AddDataAttributes attributes=[("data-learn", "headline")]>
-                      <p
-                        className="max-w-[560px] line-clamp-2 text-fs-22 leading-32 font-semibold text-nd_gray-800">
-                        {level.idea->React.string}
-                      </p>
-                    </AddDataAttributes>
-                  </div>
-                | ValuePane =>
-                  <div className="flex flex-col items-center gap-5">
-                    <div className="flex flex-wrap justify-center gap-10">
-                      {level.values
-                      ->Array.mapWithIndex((value, index) =>
-                        <ValueBlock key={index->Int.toString} value configState />
-                      )
-                      ->React.array}
-                    </div>
-                    <Chip text=tagText colorClass=tagClass />
-                    {switch level.note {
-                    | Some(note) =>
-                      <p
-                        className={`flex items-center gap-2 text-center ${body.sm.medium} text-nd_yellow-700`}>
-                        <Icon
-                          name="nd-toast-warning" size=14 className="text-nd_yellow-500 shrink-0"
-                        />
-                        {note->React.string}
-                      </p>
-                    | None => React.null
-                    }}
-                  </div>
-                // A DOM root, so the audit attribute lands on the element
-                | CheckPane =>
-                  <div className="w-full">
-                    <CheckChoices check=level.check picked onPick />
-                  </div>
-                }}
+          <div className="relative h-60">
+            {lessonPanes
+            ->Array.mapWithIndex(((lessonPane, name), index) => {
+              let isCurrent = index == paneIndex
+              let rest: FramerMotion.animate = {
+                opacity: isCurrent ? 1.0 : 0.0,
+                x: isCurrent ? 0 : index > paneIndex ? 8 : -8,
+              }
+              let content = lessonPane->paneContent
+              <AddDataAttributes
+                key=name attributes=[("data-learn", isCurrent ? "pane-current" : "pane-hidden")]>
+                <FramerMotion.Motion.Div
+                  initial=rest
+                  animate=rest
+                  transition={{duration: 0.18, ease: "easeInOut"}}
+                  className={`absolute inset-0 flex flex-col items-center justify-center ${isCurrent
+                      ? ""
+                      : "pointer-events-none"}`}>
+                  // Always wrapped, so a pane keeps its content (and its flow) when it shows
+                  <AddDataAttributes
+                    attributes=[("data-learn", isCurrent ? "block" : "block-hidden")]>
+                    content
+                  </AddDataAttributes>
+                </FramerMotion.Motion.Div>
               </AddDataAttributes>
-            </FramerMotion.Motion.Div>
+            })
+            ->React.array}
           </div>
         </AddDataAttributes>
         <AddDataAttributes attributes=[("data-learn", "footer")]>
           <div className="flex items-center justify-between gap-3 border-t border-nd_gray-150 pt-4">
-            <span
-              className={`cursor-pointer text-nd_primary_blue-450 hover:underline ${body.md.semibold}`}
-              onClick={_ => RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=tryUrl))}>
-              {tryText->React.string}
-            </span>
+            // "Try it" on the last pane only; the empty span keeps the buttons on the right
+            {pane == SecondCheck
+              ? <span
+                  className={`cursor-pointer text-nd_primary_blue-450 hover:underline ${body.md.semibold}`}
+                  onClick={_ =>
+                    RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=tryUrl))}>
+                  {tryText->React.string}
+                </span>
+              : <span />}
             <div className="flex items-center gap-3">
               <RenderIf condition={pane != IdeaPane}>
                 <Button text="Back" buttonType=Secondary buttonSize=Small onClick={_ => goBack()} />
               </RenderIf>
-              {switch pane {
-              | CheckPane =>
-                <Button
-                  text="Done"
-                  buttonType=Primary
-                  buttonSize=Small
-                  buttonState={isRight || isLearned ? Normal : Disabled}
-                  onClick={_ => onClose()}
-                />
-              | _ =>
-                <Button text="Next" buttonType=Primary buttonSize=Small onClick={_ => goNext()} />
-              }}
+              {pane == SecondCheck
+                ? <Button
+                    text="Done"
+                    buttonType=Primary
+                    buttonSize=Small
+                    buttonState={canGoOn ? Normal : Disabled}
+                    onClick={_ => onClose()}
+                  />
+                : <Button
+                    text="Next"
+                    buttonType=Primary
+                    buttonSize=Small
+                    buttonState={canGoOn ? Normal : Disabled}
+                    onClick={_ => goNext()}
+                  />}
             </div>
           </div>
         </AddDataAttributes>
@@ -498,9 +517,7 @@ let make = () => {
       currentPageTitle="Learn Rev Rec"
     />
     <div className="flex items-start justify-between gap-4">
-      <PageUtils.PageHeading
-        title="Learn Rev Rec" subTitle="Eight short levels. Each ends with one question."
-      />
+      <PageUtils.PageHeading title="Learn Rev Rec" subTitle="Eight short levels." />
       <SimulatorGlossary.OpenButton />
     </div>
     <ProgressBar learnedCount />
