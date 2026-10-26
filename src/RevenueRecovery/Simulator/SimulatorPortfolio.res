@@ -205,6 +205,33 @@ module Progress = {
   }
 }
 
+// A banner in the column of each side that booked no retries, so a 0 is not read as a result
+module NoRetriesBanners = {
+  @react.component
+  let make = (~run: portfolioRun) => {
+    let banner = (~card, ~mode, ~sideName) =>
+      if run->bookedNoRetries(card) {
+        <AlertV2Binding
+          alertType=Warning
+          slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
+          heading={`${sideName}: no retries booked`}
+          description={noRetriesText(~mode)}
+        />
+      } else {
+        <div />
+      }
+
+    <RenderIf
+      condition={run->bookedNoRetries(run.staticCard) || run->bookedNoRetries(run.smartCard)}>
+      // Same two columns as the result cards: static on the left, Rev Rec on the right
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {banner(~card=run.staticCard, ~mode=run.staticMode, ~sideName="Static retries")}
+        {banner(~card=run.smartCard, ~mode=run.smartMode, ~sideName="Rev Rec")}
+      </div>
+    </RenderIf>
+  }
+}
+
 // Static retries vs Rev Rec, one Intelligent Routing simulator card per metric
 module ResultCards = {
   @react.component
@@ -556,12 +583,18 @@ let make = (~runIdFromUrl: option<string>) => {
             // Results wait for the first copy to finish; before that every value is 0
             {if run.isFixture || run.status->isRunOver || hasFinishedCopy(run) {
               <>
-                // Both sides on one profile or mode: say next to the numbers that differences are noise
-                <RenderIf condition={run.sameStrategy && run.comparisonLabel->isNonEmptyString}>
+                // The proxy's comparison label, next to the numbers: the noise note when both
+                // sides share a strategy, otherwise which strategies are compared
+                <RenderIf condition={run.comparisonLabel->isNonEmptyString}>
                   <p className={`${body.md.semibold} text-nd_gray-600`}>
-                    {`${run.comparisonLabel}.`->React.string}
+                    {(
+                      run.sameStrategy
+                        ? `${run.comparisonLabel}.`
+                        : `Comparison: ${run.comparisonLabel}`
+                    )->React.string}
                   </p>
                 </RenderIf>
+                <NoRetriesBanners run />
                 <ResultCards run />
                 <div
                   className={`flex flex-wrap gap-x-6 gap-y-2 ${body.md.medium} text-nd_gray-500`}>

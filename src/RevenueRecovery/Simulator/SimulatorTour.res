@@ -56,6 +56,15 @@ module FeaturePanel = {
           ->React.array}
         </div>
       </RenderIf>
+      {switch feature.note {
+      | Some(note) =>
+        <AlertV2Binding
+          alertType=Warning
+          slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
+          description=note
+        />
+      | None => React.null
+      }}
       {switch feature.preset {
       | Some(preset) =>
         <span

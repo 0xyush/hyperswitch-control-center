@@ -13,6 +13,9 @@ let getConfig = () => Window.env.simulatorConfig->Option.getOr(Dict.make()->getS
 // Simulator calls go to the proxy itself, not through api_url
 let getSimUrl = path => `${getConfig().simUrl}${path}`
 
+// Why a smart-mode profile books no retries on the sandbox today (PRD ask 2)
+let smartDeciderNote = "Smart mode needs a decider service, which the sandbox does not have for this merchant (ask 2 to Kirthi)."
+
 // PRD section 7: poll the story every 4 s
 let pollIntervalMs = 4000
 

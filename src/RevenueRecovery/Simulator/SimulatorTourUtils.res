@@ -116,6 +116,8 @@ let liveFeatures: array<feature> = [
     description: "Static retries use a fixed ladder of retry times. Smart retries pick the day and hour per invoice. In the simulator, this picks which demo profile the story uses.",
     facts: [Config(RetryMode)],
     preset: None,
+    // The tour reads the static demo profile, so the note says why a smart profile books no retries
+    note: `${SimulatorUtils.smartDeciderNote} So no retries are booked on a smart profile.`,
   },
   {
     title: "Webhooks to the billing system",

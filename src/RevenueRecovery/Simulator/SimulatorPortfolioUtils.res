@@ -176,6 +176,16 @@ let formatMoney = minor =>
 // Copies that reached an end state, for the progress bar
 let finishedCopies = (card: sideCard) => card.recovered + card.terminated + card.cancelled
 
+// At the end of a run, a side with invoices but no Rev Rec attempts at all booked no retries
+let bookedNoRetries = (run: portfolioRun, card: sideCard) =>
+  run.status->isRunOver && card.invoices > 0 && card.revrecAttempts == 0
+
+// The decider reason applies only to a smart profile
+let noRetriesText = (~mode) =>
+  mode == "smart"
+    ? `No retries were booked on this profile. ${SimulatorUtils.smartDeciderNote}`
+    : "No retries were booked on this profile."
+
 let hasFinishedCopy = (run: portfolioRun) =>
   run.staticCard->finishedCopies + run.smartCard->finishedCopies > 0
 

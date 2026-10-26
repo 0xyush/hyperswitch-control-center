@@ -137,4 +137,6 @@ type feature = {
   facts: array<featureFact>,
   // Invoice story preset that shows the feature, if any
   preset: option<int>,
+  // A caveat shown on the panel, for example a missing sandbox service
+  note?: string,
 }
