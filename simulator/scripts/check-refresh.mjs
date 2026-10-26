@@ -20,7 +20,7 @@ const pages = [
   ["/dashboard/v2/recovery/simulator/tour", "Learn Rev Rec"],
   ["/dashboard/v2/recovery/simulator/portfolio", "Decline mix"],
   ...(storyId
-    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "What happened"]]
+    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "Show all"]]
     : []),
 ];
 
