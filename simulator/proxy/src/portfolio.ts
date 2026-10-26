@@ -569,14 +569,14 @@ function pausesOf(run: Run) {
   const at = (minute: number) =>
     new Date(Date.parse(run.startedAt) + minute * 60_000).toISOString();
   const out: { from: string; to: string; minutes: number }[] = [];
-  for (let k = 1; k < run.trend.length; k++) {
-    const gap = run.trend[k].minute - run.trend[k - 1].minute;
+  // The end of the run counts as a last point: its final tick adds no trend point.
+  const points = run.trend.map((t) => t.minute);
+  if (run.endedAt)
+    points.push((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 60_000);
+  for (let k = 1; k < points.length; k++) {
+    const gap = Math.round((points[k] - points[k - 1]) * 2) / 2;
     if (gap * 60_000 > PAUSE_MS)
-      out.push({
-        from: at(run.trend[k - 1].minute),
-        to: at(run.trend[k].minute),
-        minutes: gap,
-      });
+      out.push({ from: at(points[k - 1]), to: at(points[k]), minutes: gap });
   }
   return out;
 }

@@ -1,7 +1,29 @@
 // Gets a dashboard token scoped to the Rev Rec merchant and profile.
 // The token pasted from the browser is often scoped to another merchant (for example Orchestrator).
 // The proxy exchanges it with the same switch calls the dashboard makes. The token is never shown.
+import fs from "node:fs";
+import path from "node:path";
 import { config, jwtClaims, SECRET_VALUES } from "./config.ts";
+
+// The last switched token, kept in the git-ignored data folder (mode 600), so a restart after the
+// pasted token has expired can go on until the switched one expires. On 26 Oct a restart lost
+// a switched token that was still valid for 3 hours.
+const TOKEN_FILE = path.join(config.dataDir, ".dashboard-token");
+function cachedToken(): string {
+  try {
+    return fs.readFileSync(TOKEN_FILE, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+function cacheToken(token: string) {
+  try {
+    fs.mkdirSync(config.dataDir, { recursive: true });
+    fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+  } catch {
+    // A missing cache only costs a re-grab after the next restart.
+  }
+}
 
 type SwitchStep = {
   step: string;
@@ -112,6 +134,21 @@ export function refreshDashboardToken(): Promise<void> {
       return;
     }
     if (expiresSoon(pasted)) {
+      const cached = cachedToken();
+      const c = jwtClaims(cached);
+      if (
+        cached &&
+        !expiresSoon(cached) &&
+        (!state.merchantId || c.merchant_id === state.merchantId)
+      ) {
+        state.token = cached;
+        state.merchantId ||= c.merchant_id ?? "";
+        state.merchantSource ||= "the cached switched token";
+        SECRET_VALUES.push(cached);
+        state.error =
+          "HS_DASHBOARD_JWT has expired; using the cached switched token until it expires. Re-grab soon.";
+        return;
+      }
       state.error =
         "HS_DASHBOARD_JWT has expired. Re-grab it (bash simulator/scripts/grab-jwt.sh).";
       return;
@@ -156,6 +193,7 @@ export function refreshDashboardToken(): Promise<void> {
     }
     state.token = token;
     SECRET_VALUES.push(token);
+    cacheToken(token);
   })().finally(() => {
     inflight = null;
   });
