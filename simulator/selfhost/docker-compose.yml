@@ -1,0 +1,160 @@
+# Self-hosted Hyperswitch v2 for the Rev Rec simulator, on one VM (simulator/selfhost/README.md).
+# Services: Postgres, Redis, prepare + migrate (one-shot), router (v2), scheduler producer and
+# consumer, and seed (run by hand: docker compose --profile seed run --rm seed).
+# The router listens on 127.0.0.1:8080 only. The proxy reaches it through an SSH tunnel.
+# Secrets and image names come from .env (copy .env.example).
+name: revrec-hs
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+# The router and both schedulers read the same config file and secrets.
+x-hs-env: &hs-env
+  ROUTER__SECRETS__ADMIN_API_KEY: ${HS_ADMIN_API_KEY:?set HS_ADMIN_API_KEY in .env}
+  ROUTER__SECRETS__JWT_SECRET: ${HS_JWT_SECRET:?set HS_JWT_SECRET in .env}
+  ROUTER__SECRETS__MASTER_ENC_KEY: ${HS_MASTER_ENC_KEY:?set HS_MASTER_ENC_KEY in .env}
+  ROUTER__API_KEYS__HASH_KEY: ${HS_API_KEY_HASH_KEY:?set HS_API_KEY_HASH_KEY in .env}
+  ROUTER__MASTER_DATABASE__PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  ROUTER__REPLICA_DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
+  ROUTER__ACCOUNTS_DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
+  ROUTER__GLOBAL_DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
+  ROUTER__ANALYTICS__SQLX__PASSWORD: ${POSTGRES_PASSWORD}
+
+x-hs-volumes: &hs-volumes
+  - ./config.toml:/local/config/selfhost.toml:ro
+  - hs_src:/local/src:ro
+
+services:
+  pg:
+    image: docker.io/postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: hyperswitch_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d hyperswitch_db -U db_user"]
+      interval: 5s
+      retries: 20
+
+  # The config file names this host.
+  redis-standalone:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep '^PONG$'"]
+      interval: 5s
+      retries: 20
+
+  # Fetches the migrations and the Superposition seed for HS_TAG, and takes the ladder keys out of
+  # the seed (prepare.sh).
+  prepare:
+    image: docker.io/alpine:3.20
+    logging: *logging
+    environment:
+      HS_TAG: ${HS_TAG:?set HS_TAG in .env}
+    volumes:
+      - ./prepare.sh:/prepare.sh:ro
+      - hs_src:/src
+    command: ["sh", "/prepare.sh"]
+
+  migrate:
+    image: docker.io/debian:trixie-slim
+    logging: *logging
+    depends_on:
+      pg:
+        condition: service_healthy
+      prepare:
+        condition: service_completed_successfully
+    environment:
+      # The password goes in PGPASSWORD (libpq), because diesel prints the URL when it fails.
+      DATABASE_URL: postgresql://db_user@pg:5432/hyperswitch_db
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      DEBIAN_FRONTEND: noninteractive
+    volumes:
+      - ./migrate.sh:/migrate.sh:ro
+      - hs_src:/src:ro
+    command: ["bash", "/migrate.sh"]
+
+  router:
+    image: ${HS_ROUTER_IMAGE:?set HS_ROUTER_IMAGE in .env}
+    restart: unless-stopped
+    logging: *logging
+    command: /local/bin/router -f /local/config/selfhost.toml
+    environment: *hs-env
+    volumes: *hs-volumes
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      redis-standalone:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: curl --fail http://localhost:8080/health || exit 1
+      interval: 5s
+      retries: 30
+      start_period: 10s
+
+  producer:
+    image: ${HS_SCHEDULER_IMAGE:?set HS_SCHEDULER_IMAGE in .env}
+    restart: unless-stopped
+    logging: *logging
+    command: /local/bin/scheduler -f /local/config/selfhost.toml
+    environment:
+      <<: *hs-env
+      SCHEDULER_FLOW: producer
+    volumes: *hs-volumes
+    depends_on:
+      router:
+        condition: service_healthy
+
+  consumer:
+    image: ${HS_SCHEDULER_IMAGE:?set HS_SCHEDULER_IMAGE in .env}
+    restart: unless-stopped
+    logging: *logging
+    command: /local/bin/scheduler -f /local/config/selfhost.toml
+    environment:
+      <<: *hs-env
+      SCHEDULER_FLOW: consumer
+    volumes: *hs-volumes
+    depends_on:
+      router:
+        condition: service_healthy
+
+  # docker compose --profile seed run --rm seed. Writes state/seed.env and state/proxy.env.
+  seed:
+    image: docker.io/alpine:3.20
+    profiles: ["seed"]
+    logging: *logging
+    environment:
+      HS_BASE_URL: http://router:8080
+      HS_ADMIN_API_KEY: ${HS_ADMIN_API_KEY:?set HS_ADMIN_API_KEY in .env}
+      HS_JWT_SECRET: ${HS_JWT_SECRET:?set HS_JWT_SECRET in .env}
+      STRIPE_TEST_KEY: ${STRIPE_TEST_KEY:?set STRIPE_TEST_KEY in .env}
+      RETRY_MODE: ${RETRY_MODE:-cascading}
+      LADDER_JSON: ${LADDER_JSON:-}
+      STATE_DIR: /state
+    volumes:
+      - ./seed.sh:/seed.sh:ro
+      - ./state:/state
+    depends_on:
+      router:
+        condition: service_healthy
+    command:
+      [
+        "sh",
+        "-c",
+        "apk add --no-cache bash curl jq openssl >/dev/null && bash /seed.sh",
+      ]
+
+volumes:
+  pg_data:
+  hs_src:

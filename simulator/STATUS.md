@@ -1,6 +1,6 @@
 # Rev Rec Simulator · status, 26 Oct 2026
 
-For Aayush and reviewers. Everything below runs locally against the real Hyperswitch sandbox and Stripe test mode. Nothing is deployed and nothing is pushed. Details and ids are in `NOTES.md`.
+For Aayush and reviewers. Everything below runs against the real Hyperswitch sandbox and Stripe test mode, locally and on Cloud Run (revision 00002, password gate). Nothing is pushed. Details and ids are in `NOTES.md`.
 
 ## Open sandbox incident (26 Oct): Rev Rec takes over no invoice
 
@@ -12,6 +12,18 @@ For Aayush and reviewers. Everything below runs locally against the real Hypersw
 - **Aayush to raise with Kirthi.** Ids and questions are in `NOTES.md` ("Sandbox incident · 26 Oct 2026").
 - Meanwhile the story screen says "Rev Rec has not booked a retry yet (sandbox scheduler)" after 3 min, instead of a plain "waiting".
 - Everything below was true before the incident. Until it is fixed, stories that need Rev Rec's own retry (presets 2, 6) and the portfolio run cannot finish. "Paid in the app" (preset 1) and the duplicate refusal (preset 3) still work.
+
+## Self-hosted Hyperswitch (26 Oct, in progress)
+
+- **Why:** we cannot tune the shared sandbox (ladder, timings, GSM rows), and it has stalled since 18:04 UTC. Plan: `SELF-HOST.md`.
+- **Ready to run (A):** `selfhost/` holds the compose stack, config, migrations step and an idempotent seed script. Steps: `selfhost/README.md`.
+  - The v2 migrations ran clean on a local Postgres (593 applied; a second run applied none).
+  - `seed.sh` ran twice against a mock router: the second run kept every object.
+- **Next (orchestrator):** v2 router and scheduler images on Cloud Build, one e2-standard-4 VM, `docker compose up -d`, then the seed. The proxy reaches it through an SSH tunnel (`proxy/.env.vm.example`).
+- **Gaps on the self-hosted router:**
+  - No dashboard sign-in: v2 has no sign-in route, so `seed.sh` signs the proxy's token.
+  - No `recovery-aggregate` route, so the invoice status counts fail.
+  - No smart mode: there is no decider.
 
 ## What works on the sandbox today
 

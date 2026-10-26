@@ -354,6 +354,7 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Screenshots** (local, git-ignored): `simulator/screenshots/story-waiting-note.png`, `story-waiting-next.png`, `story-waiting-drawer.png`.
 
 ## Deployed (orchestrator, 26 Oct) — revision revrec-sim-00001-bph
+
 - URL: https://revrec-sim-205511702680.us-central1.run.app (password gate, 7-day cookie). GCP project hs-selfhost-0928-x825 (owner account yushsthajuspay@gmail.com), region us-central1, service `revrec-sim`, image tag = commit 71d2efdfa.
 - Secrets in Secret Manager: revrec-sim-password, revrec-sim-hs-api-key, revrec-sim-stripe-test-key, revrec-sim-hs-dashboard-jwt (dashboard token expires 28 Oct 18:02Z: add a new version + `gcloud run services update revrec-sim --region us-central1 --update-secrets HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest`).
 - Redeploy: `gcloud builds submit . --config simulator/deploy/cloudbuild.all.yaml --substitutions _IMAGE=<tag>,_GIT_COMMIT=<sha>` then `gcloud run deploy revrec-sim --image <tag> ...` (full command in deploy/README.md section 5, plus `--memory 1Gi`).
@@ -384,3 +385,32 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Replay UI** is parked on the local branch `replay-ui-wip` (48f61a174). It needs a rebase onto this story screen. A's replay slice builds its pending row as revrec→revrec; live rows go revrec→processor (passed to A).
 
 - 26 Oct (orchestrator) **revision revrec-sim-00002-5lw** live: image revrec-sim:c2faadb4d (UX pass 2: story form tiles, phase-strip header, short steps, one action, compact card; Learn Rev Rec; portfolio tiles). Same URL and password.
+
+- 2026-10-26 20:45 [A] **Self-host files ready: `simulator/selfhost/` (Hyperswitch v2 on one VM).** Reference: `~/work/hyperswitch-main`, tag 2026.10.26.0 (bc36cd0). Steps in `selfhost/README.md`. Not run on the VM yet.
+  - **Stack:** Postgres 16, Redis 7, `prepare` + `migrate` (one-shot), router (v2, `127.0.0.1:8080` only), scheduler producer + consumer, `seed` (by hand: `docker compose --profile seed run --rm seed`). Images and secrets come from `.env` (`.env.example`).
+  - **config.toml:** based on upstream `config/docker_compose.toml` (the file for the release-feature image). Every change is marked `# selfhost:`.
+    - Rev Rec timings: `monitoring_threshold_in_seconds` 5. In `recovery_timestamp`: initial 5, job_schedule_buffer 5, reopen 5, max_random_schedule_delay 1, unretried_invoice offset 5.
+    - The v2 router needs all six `recovery_timestamp` fields (no serde default). Upstream's compose file lists only three, so it would not start a v2 router as it is.
+    - Other changes: scheduler `loop_interval` 1000 ms, metrics off, `NO_EMAIL_CLIENT`, and the secrets left empty (they come from env).
+  - **Ladder: Superposition wins over the DB** (`core/configs.rs` `fetch_db_config`: Superposition, then the DB configs table, then the default).
+    - The upstream `superposition_seed.toml` holds `process_tracker.pt_mapping_pcr_retries` and `pt_mapping_adaptive_retries`: 60 s, then hours apart. So a ladder set only with `POST /configs` would be ignored.
+    - The router cannot start without Superposition or its backup file (`app.rs`: "Failed to initialize superposition client").
+    - Fix: `prepare.sh` copies the seed file without those two keys (44 lines). The router reads the copy as its backup file. `seed.sh` writes the ladder to the DB configs table (default `{"default_mapping":{"start_after":3,"frequencies":[[5,15]]}}`), and it can change with no restart.
+  - **Migrations:** `migrate.sh` copies `just migrate_v2` (migrations + v2_compatible prefixed 8 + v2_migrations prefixed 9, diesel 2.3.5), without diesel_v2.toml's schema regeneration. Local test on Rancher: 593 applied, a second run applied none.
+  - **No dashboard sign-in on a v2-only router.** `/user/signin`, `/user/signup` and `/user/internal_signup` are v1 routes; the v2 router has only `/v2/users/...` switch and list routes.
+    - `seed.sh` signs a JWT with the router's secret instead (HS256, role `merchant_admin`, the seeded merchant, profile and org, tenant `public`, 30 days).
+    - v2 JWT auth checks the signature, expiry, blacklist, role (built-in roles need no DB row) and that merchant and profile exist. It does not read a users row.
+    - The token is already scoped to the merchant and profile, so the proxy needs no switch. The proxy already answers the dashboard's user calls itself.
+  - **GSM rows** (`v2/gsm`, admin key): `check_hard_decline` (workflows/revenue_recovery.rs) matches connector + flow `revenue_recovery` + sub_flow `sub_flow` + code + message exactly. For Stripe, the message it uses is the error _reason_: `message - <message>, decline_code - <code>` (connectors/stripe.rs).
+    - Rows: `card_declined` / `message - Your card was declined., decline_code - stolen_card`; `expired_card` / `message - Your card has expired., decline_code - expired_card`; and `expired_card` / `Your card has expired.`.
+    - The last row is for the retry scheduler, which matches on the plain message (core/revenue_recovery/types.rs). Stolen card has no plain-message row: Stripe's plain message is the generic "Your card was declined.".
+    - All rows have `error_category` `hard_decline`.
+  - **Seed (admin key, v2 admin APIs):** org (`POST /v2/organizations`) → merchant (`POST /v2/merchant-accounts`, `X-Organization-Id`, product_type recovery) → profile (`X-Merchant-Id`) → Stripe connector → Custom billing connector (0 / 15 / 30, `billing_account_reference` to the Stripe connector) → `PUT` retry mode cascading (after the connectors) → v2 API key (`expiration: "never"`) → ladder → GSM → JWT.
+    - Connector calls need `X-Merchant-Id` and `X-Profile-Id`. The admin header is `Authorization: admin-api-key=<key>`.
+    - Output: `state/seed.env` (ids and the API key) and `state/proxy.env` (the proxy's lines), both mode 600. It prints ids only.
+    - Checked twice against a mock router (macOS bash 3.2, and alpine bash 5): the second run kept every object and took the update path for configs and GSM.
+  - **Proxy:** `simulator/proxy/.env.vm.example`, with `HS_BASE_URL=http://localhost:8090` through `gcloud compute ssh VM -- -N -L 8090:127.0.0.1:8080`.
+  - **Gaps:**
+    - Upstream 2026.10.26.0 has no `/v2/payments/recovery-aggregate` (only `/aggregate`), so the dashboard's invoice status counts fail on this instance.
+    - Smart mode needs the decider. The portfolio pair is not seeded.
+  - **Side note:** a local test sent one `GET /health` and one `POST v2/organizations` (dummy key, answered 404) to port 18081. That port belongs to a local Rancher container. Nothing was created.

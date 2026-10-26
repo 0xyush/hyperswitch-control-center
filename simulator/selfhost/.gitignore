@@ -1,0 +1,3 @@
+# Secrets and seed output (API key, dashboard token).
+.env
+state/
