@@ -65,16 +65,16 @@ let steps: array<stepDetails> = [
     )),
   },
   {
-    title: "Tour the features",
+    title: "Learn Rev Rec",
     description: <div className="flex flex-col gap-4">
       {stepText(
-        "One panel per Rev Rec feature. Each panel says Live, Read-only or Display only, so you always know what is real.",
+        "Eight short levels, one per feature. Each shows the real sandbox value and ends with one question.",
       )}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_tour_the_features",
     cta: Some((
-      "Open the feature tour →",
+      "Open Learn Rev Rec →",
       InternalRoute({
         url: RevenueRecoverySidebarValues.simulatorTourPath,
         trackingEvent: "redirect_to_simulator_tour",

@@ -55,7 +55,7 @@ let revenueRecoverySimulatorStory = {
 
 let revenueRecoverySimulatorTour = {
   Link({
-    name: "Feature Tour",
+    name: "Learn Rev Rec",
     link: simulatorTourPath,
     access: Access,
     icon: "nd-overview",
