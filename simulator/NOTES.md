@@ -10,6 +10,13 @@
 - /api/\* -> allow-listed pass-through to the sandbox with auth headers added
 - **Header `x-sim-session`** (added 2026-10-23 by A, commit 5ccdf3486): the dashboard sends it on every `/sim/*` call. Value = a random id, 8 to 64 characters of `A-Z a-z 0-9 _ -`, made once and kept in the browser's localStorage. It identifies the visitor for `customer: "same"` and for the start limit (5 per hour per session; plus 30 per hour per IP). Missing or malformed: the proxy uses the IP. CORS allows it.
 
+- **Replay mode** (A, 26 Oct, commit 32e3efa8e; see REPLAY.md). No sandbox calls.
+  - `GET /sim/recordings` → `{"recordings": [{"id": "st_…", "title": "…", "preset": 2, "recordedAt": "ISO (when the story ran)", "outcome": "recovered (by Rev Rec)", "steps": 11}]}`, oldest first.
+  - `POST /sim/recordings/:storyId` body `{"title": "…"}` (operator only: header `x-sim-operator` = `SIM_OPERATOR_KEY`, or a direct local call) → the same item; 409 if the story has not finished.
+  - `GET /sim/replay/:storyId?upTo=n` → the normal story view (same fields as `GET /sim/story/:id`), sliced to the first n rows of `timeline` (by `at`; default all), plus `"replay": {"total": 11, "upTo": n, "recordedAt": "ISO", "markedAt": "ISO", "title": "…"}`.
+    - Sliced to match: `stage`, `status`, `stageCaption`, `stageHistory`, `requests` (same stepIds), `attempts`, `attemptSummary`, `processTracker`, `nextRetryAt` plus a `pending` row after a booking not yet run, the invoice's paid state, and `explain` (timeless lines, plus "status at this step"; the full set at the last step).
+    - `done` is true only at `upTo = total`. `actions` are all false. `warnings: []`, `waiting: null`.
+
 ## Builder B (front end) log
 
 - 2026-10-23 13:19 [B] Step 1 done. Node v24.21.0, npm 11.19.0. `npm install` 12 s, `npm run re:build` 38 s (4313 files, no errors), `npm run start` serves http://localhost:9000 (webpack compiles in ~10 s).
