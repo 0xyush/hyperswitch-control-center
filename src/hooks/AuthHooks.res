@@ -13,6 +13,17 @@ let headersForXFeature = (~uri, ~headers) => {
   }
 }
 
+// A relative URL, or an absolute one on the page's own origin. Behind the simulator's password
+// gate (api_url /api, sim_url empty) these calls must carry the gate cookie. Cross-origin calls,
+// such as local dev (dashboard :9000, proxy :8787), keep the old behaviour. The browser ignores
+// leading spaces in a URL, and the config/merchant URL has one.
+let isSameOriginUri = uri => {
+  let uri = uri->String.trim
+  let origin = GlobalVars.getHostUrl
+  let isRelative = !(uri->String.includes("://")) && !(uri->String.startsWith("//"))
+  isRelative || uri == origin || uri->String.startsWith(`${origin}/`)
+}
+
 // offer-engine authenticates Control Center users via x-hyperswitch-token (HSTokenAuth)
 // and is not merchant/profile scoped, so those headers must not be sent either.
 let headersForOffers = (~headers, ~token) => {
@@ -166,7 +177,7 @@ let useApiFetcher = () => {
           Fetch.RequestInit.make(
             ~method_,
             ~body?,
-            ~credentials={forceCookies ? SameOrigin : Omit},
+            ~credentials={forceCookies || uri->isSameOriginUri ? SameOrigin : Omit},
             ~headers=getHeaders(
               ~headers,
               ~uri,
