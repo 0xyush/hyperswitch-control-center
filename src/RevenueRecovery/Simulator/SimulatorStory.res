@@ -217,7 +217,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   }
 
   // Pacing (STORY-STEPS.md section 6), over the grouped steps of STORY-DESIGN.md
-  let (header, items) = React.useMemo1(
+  let (_, items) = React.useMemo1(
     () => story->Option.mapOr(("", []), SimulatorStorySteps.buildStoryItems),
     [story],
   )
@@ -321,7 +321,6 @@ let make = (~storyIdFromUrl: option<string>) => {
           <SimulatorStorySteps.StoryView
             story
             optimistic
-            header
             items
             visibleCount
             isFinished

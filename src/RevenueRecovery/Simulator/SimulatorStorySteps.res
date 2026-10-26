@@ -696,14 +696,55 @@ module PhaseStrip = {
   }
 }
 
-// The story, step by step: header line, phase strip, then the steps on one rail grouped by phase.
+// Under the phase strip: the invoice's live status badge (the Invoices list's own), the amount
+// recovered and Rev Rec's attempts, so the visitor need not open the invoice page
+module StatusLine = {
+  @react.component
+  let make = (~story: story) => {
+    let order = story.invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
+    let order = {...order, status: story.stage->toInvoiceStatus(~default=order.status)}
+    let sign =
+      story.form->Option.mapOr("USD", form => form.currency)->SimulatorFormTiles.currencySign
+    // Until the sandbox records the invoice, the amount is the one the billing system charged
+    let total =
+      story.invoice->LogicUtils.isEmptyDict
+        ? story.form->Option.mapOr(0.0, form => form.amount->LogicUtils.getFloatFromString(0.0))
+        : order.order_amount
+    let money = amount => `${sign}${amount->Float.toFixedWithPrecision(~digits=2)}`
+    let revRecAttempts =
+      story.timeline
+      ->Array.filter(row => row.from == RevRec && row.to == Processor && row.status != StepPending)
+      ->Array.length
+
+    <div
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${body.md.medium} text-nd_gray-600`}>
+      <RenderIf condition={order.status->LogicUtils.isNonEmptyString}>
+        <Table.TableCell cell={RevenueRecoveryEntity.getCell(order, Status)} />
+      </RenderIf>
+      <span>
+        <span className={`${body.md.semibold} text-nd_gray-800`}>
+          {order.amount_captured->money->React.string}
+        </span>
+        {` of ${total->money} recovered`->React.string}
+      </span>
+      <span className="text-nd_gray-300"> {"·"->React.string} </span>
+      <span>
+        {`${revRecAttempts->Int.toString} Rev Rec attempt${revRecAttempts == 1
+            ? ""
+            : "s"}`->React.string}
+      </span>
+    </div>
+  }
+}
+
+// The story, step by step: the phase strip as the header, a status line, then the steps on one
+// rail grouped by phase.
 // The raw event list and the sequence diagram are optional, behind a link and a button.
 module StoryView = {
   @react.component
   let make = (
     ~story: option<story>,
     ~optimistic: option<billingForm>,
-    ~header: string,
     ~items: array<storyItem>,
     ~visibleCount: int,
     ~isFinished: bool,
@@ -733,10 +774,6 @@ module StoryView = {
     let visibleRows = rows->Array.slice(~start=0, ~end=lastRawIndex + 1)
     let hasHistory = story->Option.mapOr(false, s => s.stageHistory->Array.length > 0)
     let hasStory = story->Option.isSome || optimistic->Option.isSome
-    let headerText = switch (header, optimistic) {
-    | ("Invoice", Some(form)) => `Invoice ${form->moneyText}`
-    | (text, _) => text
-    }
     let nextLabel =
       visibleItems->Array.some(item => item.phase >= 3)
         ? "Next step →"
@@ -750,58 +787,47 @@ module StoryView = {
       ->Option.mapOr("", item => item.at)
     let revealOf = index => revealDelays->Dict.get(index->Int.toString)->revealProps
     let lastIndex = shownItems->Array.length - 1
+    // Less common controls live in one menu; auto-play stays off until chosen
+    let menuOptions =
+      [
+        Some((autoPlay ? "Turn auto-play off" : "Turn auto-play on", () => setAutoPlay(!autoPlay))),
+        hasHistory ? Some(("Invoice states", onStatesClick)) : None,
+        story->Option.isSome
+          ? Some((
+              showDiagram ? "Hide sequence diagram" : "Show sequence diagram",
+              () => setShowDiagram(prev => !prev),
+            ))
+          : None,
+      ]->Array.filterMap(option => option)
 
     <div className={`${cardStyle} px-6 py-5 flex flex-col gap-5`}>
       <style> {revealCss->React.string} </style>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className={`${heading.md.semibold} text-nd_gray-900`}>
-            {"What happened"->React.string}
-          </p>
-          <p className={`${body.md.medium} text-nd_gray-500`}>
-            {"Each step is one real event. Click a step to see why it happened."->React.string}
-          </p>
+      // The phase strip is the header; before a story it shows what is coming
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <PhaseStrip
+            items={hasStory ? shownItems : []}
+            isFinished
+            onPhaseClick={phase => scrollToElement(phaseDomId(phase))}
+          />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className={`flex items-center gap-2 ${body.md.medium} text-nd_gray-600`}>
-            <SwitchAdapter isSelected=autoPlay setIsSelected=setAutoPlay />
-            <span> {"Auto-play"->React.string} </span>
-          </div>
-          <RenderIf condition=hasHistory>
-            <Button
-              text="Invoice states"
-              buttonType=Secondary
-              buttonSize=Small
-              onClick={_ => onStatesClick()}
-            />
-          </RenderIf>
-          <RenderIf condition={story->Option.isSome}>
-            <Button
-              text={showDiagram ? "Hide sequence diagram" : "Show sequence diagram"}
-              buttonType=Secondary
-              buttonSize=Small
-              onClick={_ => setShowDiagram(prev => !prev)}
-            />
-          </RenderIf>
-        </div>
+        <ActionMenu options=menuOptions />
       </div>
+      {switch story {
+      | Some(s) => <StatusLine story=s />
+      | None => React.null
+      }}
       {if !hasStory {
         <p className={`${body.md.medium} text-nd_gray-500 py-6 text-center`}>
-          {"Press Charge customer. The billing system's charge and its report to Rev Rec appear here first."->React.string}
+          {"Press Charge customer. Each step appears here."->React.string}
         </p>
       } else {
         <>
-          <PhaseStrip
-            items=shownItems isFinished onPhaseClick={phase => scrollToElement(phaseDomId(phase))}
-          />
           {switch waiting {
           | Some(waiting) => <WaitingNoteLine waiting onWhy=onWaitingClick />
           | None => React.null
           }}
           <div className="max-w-[760px] w-full flex flex-col gap-4">
-            <p className={`${body.lg.semibold} text-nd_gray-800`} style={overflowWrap: "anywhere"}>
-              {headerText->React.string}
-            </p>
             <RenderIf condition=showWorking>
               <div className={`flex items-center gap-2 ${body.md.medium} text-nd_gray-600`}>
                 <span className="relative flex h-2 w-2">

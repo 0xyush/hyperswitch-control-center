@@ -62,8 +62,8 @@ module SelectField = {
   }
 }
 
-// Kebab menu with the billing system's less common actions
-module BillingMenu = {
+// Kebab menu with less common actions (the billing form's, the story panel's)
+module ActionMenu = {
   open HeadlessUI
   @react.component
   let make = (~options: array<(string, unit => unit)>) => {
@@ -152,7 +152,7 @@ module BillingSystemForm = {
           </p>
         </div>
         <RenderIf condition={menuOptions->Array.length > 0}>
-          <BillingMenu options=menuOptions />
+          <ActionMenu options=menuOptions />
         </RenderIf>
       </div>
       <FormField label="Scenario">
