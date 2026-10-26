@@ -211,6 +211,10 @@ test("a replay is sliced step by step", async () => {
   assert.equal(v4.stage, "Scheduled");
   assert.equal(v4.nextRetryAt, "2026-10-24T01:00:58.000Z");
   assert.equal(v4.timeline.at(-1).status, "pending");
+  assert.deepEqual(
+    [v4.timeline.at(-1).from, v4.timeline.at(-1).to],
+    ["revrec", "processor"],
+  );
   assert.equal(v4.processTracker.status, "new");
 
   const v5 = await replay(5); // Rev Rec charged: no pending row any more

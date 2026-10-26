@@ -181,10 +181,12 @@ function replaySlice(view: any, n: number) {
     !["Recovered", "Terminated", "Cancelled"].includes(stage)
       ? (processTracker?.schedule_time_for_payment ?? null)
       : null;
+  // As live: the pending row is Rev Rec's coming charge (revrec → processor), not the booking.
   const pending = nextRetryAt
     ? [
         {
           ...booking,
+          to: "processor",
           at: nextRetryAt,
           status: "pending",
           label: `charge saved card at ${nextRetryAt.slice(11, 19)}`,
