@@ -20,6 +20,7 @@ import {
   DECLINES,
   FIRST_CHARGE_CARDS,
   presetById,
+  presetText,
   resolveCards,
   SAVED_CARDS,
   type CardId,
@@ -152,7 +153,8 @@ export class HttpError extends Error {
 }
 
 // Minutes in Monitoring, with the start rule met and no retry task, before the story says so.
-const WAITING_NOTE_MIN = 1;
+// The fast self-hosted engine books a retry within about 10 s, so it waits 15 s there.
+const WAITING_NOTE_MIN = config.fastEngine ? 0.25 : 1;
 
 // Safety cap on the billing system's own failed charges at start (start rule + 1).
 const MAX_START_FAILURES = 4;
@@ -1588,8 +1590,13 @@ export async function storyView(storyId: string) {
     waitingMin >= WAITING_NOTE_MIN
       ? {
           minutes: Math.floor(waitingMin),
-          text: "Rev Rec has not booked a retry yet (sandbox scheduler)",
-          why: `The start rule is met (${failuresKept} failure${failuresKept === 1 ? "" : "s"} recorded), but Rev Rec has made no retry task for ${Math.floor(waitingMin)} min. On 24 Oct the same profile booked one in about 30 s.`,
+          seconds: Math.floor(waitingMin * 60),
+          text: `Rev Rec has not booked a retry yet (${config.fastEngine ? "engine" : "sandbox"} scheduler)`,
+          why: `The start rule is met (${failuresKept} failure${failuresKept === 1 ? "" : "s"} recorded), but Rev Rec has made no retry task for ${
+            config.fastEngine
+              ? `${Math.floor(waitingMin * 60)} s. This engine books one within about 10 s.`
+              : `${Math.floor(waitingMin)} min. On 24 Oct the same profile booked one in about 30 s.`
+          }`,
           source: "recomputed" as Source,
         }
       : null;
@@ -1637,7 +1644,11 @@ export async function storyView(storyId: string) {
           : []),
         {
           source: "rule",
-          text: "Static retries in production wait 1 min, then 3 h, 6 h, 9 h, 12 h and 18 h steps. The sandbox retries every few minutes.",
+          text: `Static retries in production wait 1 min, then 3 h, 6 h, 9 h, 12 h and 18 h steps. ${
+            config.fastEngine
+              ? "This self-hosted engine uses a fast test ladder: retries seconds apart."
+              : "The sandbox retries every few minutes."
+          }`,
         },
       ],
     });
@@ -1984,8 +1995,8 @@ export async function storyView(storyId: string) {
           id: preset.id,
           title: preset.title,
           v1Status: preset.v1Status,
-          expected: preset.expected,
-          hint: preset.hint,
+          expected: presetText(preset).expected,
+          hint: presetText(preset).hint,
         }
       : null,
     form: {

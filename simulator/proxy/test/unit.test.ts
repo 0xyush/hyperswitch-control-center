@@ -51,11 +51,14 @@ fs.writeFileSync(
 const { matchRule } = await import("../src/passthrough.ts");
 const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
-const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
+const { PRESETS, presetText, resolveCards } =
+  await import("../src/scenarios.ts");
 const { parseStart, reportedError, revrecChargeWhy } =
   await import("../src/story.ts");
-const { parsePortfolio, setupStage } = await import("../src/portfolio.ts");
-const { parseStopAfter, portfolioConfig } = await import("../src/config.ts");
+const { bankRule, drawFlip, parsePortfolio, setupStage } =
+  await import("../src/portfolio.ts");
+const { config, parseStopAfter, portfolioConfig } =
+  await import("../src/config.ts");
 const { createServer } = await import("../src/server.ts");
 
 describe("allow-list", () => {
@@ -276,6 +279,61 @@ describe("plain why lines", () => {
       "Rev Rec charged the saved card. Stripe declined.",
     );
     assert.match(revrecChargeWhy("pending"), /not given its final answer/);
+  });
+});
+
+describe("fast engine pace (SIM_FAST_ENGINE)", () => {
+  test("bank rules: the sandbox words are unchanged; fast runs say seconds", () => {
+    assert.equal(
+      bankRule("insufficient_funds", false),
+      "No money until the payday, 4 to 12 minutes after the first failure.",
+    );
+    assert.equal(
+      bankRule("processing_error", false),
+      "A temporary error: works again after 1 minute.",
+    );
+    assert.equal(
+      bankRule("insufficient_funds", true),
+      "No money until the payday, 15 to 45 s after the first failure.",
+    );
+    assert.equal(
+      bankRule("generic_decline", true),
+      "Works again after a quiet window of 10 to 30 s.",
+    );
+    assert.equal(
+      bankRule("processing_error", true),
+      "A temporary error: works again after 5 s.",
+    );
+    assert.equal(
+      bankRule("stolen_card", true),
+      "Never works again (hard decline).",
+    );
+  });
+  test("bank flips: half minutes at sandbox pace, whole seconds at fast pace", () => {
+    const half = () => 0.5;
+    assert.equal(drawFlip("insufficient_funds", false, half), 8);
+    assert.equal(drawFlip("insufficient_funds", true, half), 0.5); // 30 s
+    assert.equal(drawFlip("processing_error", true, half), 0.083); // 5 s
+    assert.equal(drawFlip("stolen_card", true, half), null);
+    for (let k = 0; k < 50; k++) {
+      const m = drawFlip("generic_decline", true, Math.random)!;
+      assert.ok(m * 60 >= 9.9 && m * 60 <= 30.1, String(m));
+    }
+  });
+  test("preset texts follow the engine", () => {
+    const p7 = PRESETS.find((p: any) => p.id === 7)!;
+    assert.equal(config.fastEngine, false);
+    assert.equal(presetText(p7).liveTime, "~1 min");
+    config.fastEngine = true;
+    try {
+      assert.equal(presetText(p7).liveTime, "a few seconds");
+      assert.match(presetText(p7).expected, /no retry/);
+      // A preset without fast texts keeps its own.
+      const p8 = PRESETS.find((p: any) => p.id === 8)!;
+      assert.equal(presetText(p8).liveTime, p8.liveTime);
+    } finally {
+      config.fastEngine = false;
+    }
   });
 });
 

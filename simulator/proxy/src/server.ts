@@ -196,6 +196,8 @@ async function healthz() {
       portfolioRunsPerHour: portfolioConfig.runsPerHour,
       portfolioMaxInvoices: portfolioConfig.maxInvoices,
       portfolioStopAfterMinutes: portfolioConfig.stopAfterMinutes,
+      // The self-hosted engine (SIM_FAST_ENGINE=1): seconds-apart retries, so screens can poll faster.
+      fastEngine: config.fastEngine,
       portfolioRunsAtOnce: 1,
     },
     contract: contract ?? {

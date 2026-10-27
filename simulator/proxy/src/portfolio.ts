@@ -23,6 +23,7 @@ import {
   readRevRecConfig,
   reportAgain,
   startStory,
+  storyView,
   type Story,
 } from "./story.ts";
 import { hsApiKey } from "./upstream.ts";
@@ -37,37 +38,80 @@ const REASONS = [
 type Reason = (typeof REASONS)[number];
 
 // The scripted bank (PORTFOLIO.md §3): the first-charge card per reason, and when "the money is
-// back" (minutes after the invoice starts, drawn per invoice from the range). null = never.
-const BANK: Record<
-  Reason,
-  { card: FirstChargeId; flip: [number, number] | null; rule: string }
-> = {
+// back" after the invoice starts, drawn per invoice from the range. null = never.
+// flip: minutes, at sandbox pace (Rev Rec retries minutes apart).
+// fastFlipSec: seconds, for the self-hosted engine (SIM_FAST_ENGINE=1; retries 10 to 15 s apart),
+// so a 1 min run still sees each bank change and the next retry after it.
+type Bank = {
+  card: FirstChargeId;
+  flip: [number, number] | null;
+  fastFlipSec: [number, number] | null;
+  rule: (span: string) => string;
+};
+const BANK: Record<Reason, Bank> = {
   insufficient_funds: {
     card: "9995",
     flip: [4, 12],
-    rule: "No money until the payday, 4 to 12 minutes after the first failure.",
+    fastFlipSec: [15, 45],
+    rule: (s) => `No money until the payday, ${s} after the first failure.`,
   },
   generic_decline: {
     card: "0002",
     flip: [2, 6],
-    rule: "Works again after a quiet window of 2 to 6 minutes.",
+    fastFlipSec: [10, 30],
+    rule: (s) => `Works again after a quiet window of ${s}.`,
   },
   processing_error: {
     card: "0119",
     flip: [1, 1],
-    rule: "A temporary error: works again after 1 minute.",
+    fastFlipSec: [5, 5],
+    rule: (s) => `A temporary error: works again after ${s}.`,
   },
   stolen_card: {
     card: "9979",
     flip: null,
-    rule: "Never works again (hard decline).",
+    fastFlipSec: null,
+    rule: () => "Never works again (hard decline).",
   },
   expired_card: {
     card: "0069",
     flip: null,
-    rule: "Never works again in V1 (the account updater is display only).",
+    fastFlipSec: null,
+    rule: () =>
+      "Never works again in V1 (the account updater is display only).",
   },
 };
+
+// The bank rule in words, at the run's pace.
+export function bankRule(reason: Reason, fast: boolean) {
+  const b = BANK[reason];
+  const r = fast ? b.fastFlipSec : b.flip;
+  if (!r) return b.rule("");
+  const [lo, hi] = r;
+  const span = fast
+    ? lo === hi
+      ? `${lo} s`
+      : `${lo} to ${hi} s`
+    : lo === hi
+      ? `${lo} minute${lo === 1 ? "" : "s"}`
+      : `${lo} to ${hi} minutes`;
+  return b.rule(span);
+}
+
+// When the money is back, in minutes after the invoice starts: half minutes at sandbox pace,
+// whole seconds at fast pace. One draw per invoice that flips, as before, so a seed repeats.
+export function drawFlip(reason: Reason, fast: boolean, rng: () => number) {
+  const b = BANK[reason];
+  if (fast) {
+    const f = b.fastFlipSec;
+    return f
+      ? Math.round(((f[0] + Math.round(rng() * (f[1] - f[0]))) / 60) * 1000) /
+          1000
+      : null;
+  }
+  const f = b.flip;
+  return f ? f[0] + Math.round(rng() * (f[1] - f[0]) * 2) / 2 : null;
+}
 
 // The two sides of a run: a copy of each invoice runs on each.
 type Side = "static" | "smart";
@@ -82,6 +126,9 @@ type Copy = {
   revrecAttempts: number;
   recoveredAt: string | null;
   error: string | null;
+  // The bank's swap report for this copy (runs from 27 Oct; see flipDue).
+  swapTries?: number;
+  swappedAt?: string | null;
 };
 
 type PfInvoice = {
@@ -119,6 +166,10 @@ type Run = {
   profiles?: Record<Side, ProfileRef>;
   // Gaps of more than 90 s between ticks: the proxy did not run (on a laptop: sleep).
   lastTickAt?: string;
+  // The pace of the run's scripted bank, fixed at start (SIM_FAST_ENGINE). Older runs: sandbox.
+  fast?: boolean;
+  // Swaps tracked per copy (from 27 Oct). Older runs swapped both copies once, at flippedAt.
+  perCopySwap?: boolean;
   pauses?: { from: string; to: string; minutes: number }[];
 };
 
@@ -217,7 +268,7 @@ export function parsePortfolio(body: any): Dials {
 }
 
 // Splits n invoices over the reasons by weight (largest remainder), then shuffles with the seed.
-function buildInvoices(d: Dials): PfInvoice[] {
+function buildInvoices(d: Dials, fast: boolean): PfInvoice[] {
   const rng = mulberry32(d.seed);
   const entries = Object.entries(d.mix) as [Reason, number][];
   const total = entries.reduce((s, [, w]) => s + w, 0);
@@ -238,13 +289,11 @@ function buildInvoices(d: Dials): PfInvoice[] {
     [reasons[k], reasons[j]] = [reasons[j], reasons[k]];
   }
   return reasons.map((reason, idx) => {
-    const f = BANK[reason].flip;
     return {
       i: idx + 1,
       reason,
       amount: d.amount,
-      // Half-minute steps inside the reason's range.
-      flipAfterMin: f ? f[0] + Math.round(rng() * (f[1] - f[0]) * 2) / 2 : null,
+      flipAfterMin: drawFlip(reason, fast, rng),
       startedAt: null,
       flipAt: null,
       flippedAt: null,
@@ -283,10 +332,12 @@ export function startPortfolio(dials: Dials, owner: string): Run {
     endedAt: null,
     endReason: null,
     dials,
-    invoices: buildInvoices(dials),
+    invoices: buildInvoices(dials, config.fastEngine),
     trend: [],
     error: null,
     profiles: { static: PROFILES.static, smart: PROFILES.smart },
+    fast: config.fastEngine,
+    perCopySwap: true,
   };
   runs.set(run.runId, run);
   save();
@@ -366,16 +417,43 @@ const capReached = (run: Run) =>
 
 const timers = new Map<string, NodeJS.Timeout>();
 const ticking = new Set<string>();
+// A fast run checks its bank flips every 2 s, apart from the status tick: a flip a whole tick late
+// is a large share of a 1 min run.
+const FAST_FLIP_MS = 2_000;
+const flipTimers = new Map<string, NodeJS.Timeout>();
+const flipping = new Set<string>();
 function schedule(run: Run) {
   if (timers.has(run.runId)) return;
   timers.set(
     run.runId,
     setInterval(() => void tick(run), tickMs(run)),
   );
+  if (run.fast)
+    flipTimers.set(
+      run.runId,
+      setInterval(() => void flipLoop(run), FAST_FLIP_MS),
+    );
 }
 function stopTimer(run: Run) {
   clearInterval(timers.get(run.runId));
   timers.delete(run.runId);
+  clearInterval(flipTimers.get(run.runId));
+  flipTimers.delete(run.runId);
+}
+async function flipLoop(run: Run) {
+  if (flipping.has(run.runId)) return;
+  if (run.status !== "setting_up" && run.status !== "running") return;
+  flipping.add(run.runId);
+  try {
+    await flipDue(run);
+  } catch (e) {
+    console.log(
+      `portfolio ${run.runId} flip failed: ${scrubText(String((e as Error).message))}`,
+    );
+  } finally {
+    flipping.delete(run.runId);
+    save();
+  }
 }
 
 async function tick(run: Run) {
@@ -400,7 +478,7 @@ async function tick(run: Run) {
       await poll(run);
       return await end(run, `time cap of ${run.dials.maxMinutes} min`);
     }
-    await flipDue(run);
+    if (!run.fast) await flipDue(run);
     await poll(run);
     // One point per tick, in steps of the tick (half minutes for a 30 s tick).
     const step = tickMs(run) / 60_000;
@@ -429,11 +507,26 @@ async function tick(run: Run) {
   }
 }
 
-// The bank: when an invoice's flip time has passed, both copies get the swap report.
+// Rev Rec is charging the copy now, or its booked charge is from 3 s ahead to 3 s past. A swap
+// takes 1 to 2 s to reach the engine (a Stripe charge first), and a charge about as long.
+async function charging(c: Copy) {
+  const v: any = await storyView(c.storyId).catch(() => null);
+  if (!v) return false;
+  if (/processing/.test(String(v.sandboxStatus))) return true;
+  const t = v.nextRetryAt ? Date.parse(v.nextRetryAt) : Number.NaN;
+  return Number.isFinite(t) && Math.abs(Date.now() - t) <= 3_000;
+}
+
+// The bank: when an invoice's flip time has passed, each copy gets the swap report.
+// A swap that lands while Rev Rec charges the copy collides with that charge: the engine refused
+// it (404) or recorded it and then never retried (pf_df48a281 invoice 2, fast engine, 27 Oct).
+// So a copy's swap waits while Rev Rec charges it or is about to, and a refused swap is sent again
+// at the next tick, up to 3 tries. flippedAt is when the last copy got its swap.
+const SWAP_TRIES = 3;
 async function flipDue(run: Run) {
   for (const inv of run.invoices) {
-    if (!inv.flipAt || inv.flippedAt || Date.now() < Date.parse(inv.flipAt))
-      continue;
+    if (!inv.flipAt || Date.now() < Date.parse(inv.flipAt)) continue;
+    if (!run.perCopySwap && inv.flippedAt) continue;
     const copies = SIDES.map((s) => inv.copies[s]).filter(
       (c) => c !== undefined,
     );
@@ -443,15 +536,37 @@ async function flipDue(run: Run) {
       copies.some((c) => !getStory(c.storyId).started && !c.error)
     )
       continue;
-    inv.flippedAt = new Date().toISOString();
+    const open = copies.filter(
+      (c) => c.recoveryId && !isFinalStatus(c.status) && !c.swappedAt,
+    );
+    const todo = open.filter((c) => (c.swapTries ?? 0) < SWAP_TRIES);
     await Promise.all(
-      copies.map(async (c) => {
-        if (!c.recoveryId || isFinalStatus(c.status)) return;
-        await reportAgain(c.storyId, "swap").catch((e) => {
+      todo.map(async (c) => {
+        if (await charging(c)) return;
+        c.swapTries = (c.swapTries ?? 0) + 1;
+        try {
+          await reportAgain(c.storyId, "swap");
+          c.swappedAt = new Date().toISOString();
+          c.error = null;
+        } catch (e) {
           c.error = scrubText(String((e as Error).message));
-        });
+        }
       }),
     );
+    const left = copies.filter(
+      (c) =>
+        c.recoveryId &&
+        !isFinalStatus(c.status) &&
+        !c.swappedAt &&
+        (c.swapTries ?? 0) < SWAP_TRIES,
+    );
+    if (!inv.flippedAt && !left.length) {
+      const times = copies
+        .map((c) => c.swappedAt)
+        .filter((x): x is string => Boolean(x))
+        .sort();
+      inv.flippedAt = times.at(-1) ?? new Date().toISOString();
+    }
   }
 }
 
@@ -540,15 +655,29 @@ async function maybeEnd(run: Run) {
     return end(run, `time cap of ${run.dials.maxMinutes} min`);
 }
 
+// A copy Rev Rec is charging cannot be cancelled ("payment is in processing state"). On the fast
+// engine a charge lasts about a second, so wait and try again, up to 3 times; a copy left open
+// would keep retrying after the run ends (pf_df48a281, 27 Oct).
+async function cancelCopy(c: Copy) {
+  for (let k = 0; ; k++) {
+    try {
+      await cancelStory(c.storyId);
+      c.status = "cancelled";
+      return;
+    } catch (e) {
+      const msg = scrubText(String((e as Error).message));
+      if (k < 2 && /processing state/i.test(msg)) {
+        await new Promise((ok) => setTimeout(ok, 2_000));
+        continue;
+      }
+      c.error = msg;
+      return;
+    }
+  }
+}
+
 async function end(run: Run, reason: string) {
-  for (const c of openCopies(run))
-    await cancelStory(c.storyId)
-      .then(() => {
-        c.status = "cancelled";
-      })
-      .catch((e) => {
-        c.error = scrubText(String((e as Error).message));
-      });
+  for (const c of openCopies(run)) await cancelCopy(c);
   run.status = "done";
   run.endReason = reason;
   run.endedAt = new Date().toISOString();
@@ -584,7 +713,8 @@ try {
 
 // ---------- the result view (GET /sim/portfolio/:runId) ----------
 
-const LATE_FLIP_SEC = 90;
+// A bank flip later than this is not a fair data point. A fast run reads every 5 to 20 s.
+const lateFlipSec = (run: Run) => (run.fast ? 20 : 90);
 
 // Runs before 26 Oct did not record pauses; their trend points (one per 30 s tick) show them.
 function pausesOf(run: Run) {
@@ -739,7 +869,7 @@ export async function portfolioView(runId: string) {
     bankRules: reasons.map((reason) => ({
       reason,
       firstChargeCard: BANK[reason].card,
-      rule: BANK[reason].rule,
+      rule: bankRule(reason, Boolean(run.fast)),
       source: "scripted",
     })),
     trend: run.trend,
@@ -785,10 +915,10 @@ export async function portfolioView(runId: string) {
       // The scripted bank must be on time to be a fair test. A late flip comes from the proxy
       // (a slow sandbox or a busy machine), not from Rev Rec.
       ...run.invoices
-        .filter((inv) => (lateSec(inv) ?? 0) > LATE_FLIP_SEC)
+        .filter((inv) => (lateSec(inv) ?? 0) > lateFlipSec(run))
         .map(
           (inv) =>
-            `Invoice ${inv.i}: the bank flip came ${Math.round(lateSec(inv)! / 60)} min late, so its result is not a fair data point.`,
+            `Invoice ${inv.i}: the bank flip came ${run.fast ? `${lateSec(inv)} s` : `${Math.round(lateSec(inv)! / 60)} min`} late, so its result is not a fair data point.`,
         ),
     ],
   };

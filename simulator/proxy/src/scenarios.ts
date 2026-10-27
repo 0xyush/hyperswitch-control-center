@@ -2,6 +2,7 @@
 // A story uses two cards: the card the billing system's own charge fails on, and the saved card
 // that Rev Rec retries. Since 23 Oct the sandbox checks each reported charge with Stripe and
 // records Stripe's real decline, so the decline reason comes from the card that failed.
+import { config } from "./config.ts";
 
 export type CardId =
   | "4242"
@@ -173,7 +174,14 @@ export type Preset = {
   // Preset 3: the billing system sends the same failure twice as part of the start.
   sendDuplicateOnStart?: boolean;
   hint: string;
+  // The texts at the pace of the self-hosted engine (SIM_FAST_ENGINE=1): a retry booked within
+  // about 10 s and Rev Rec retries 10 to 15 s apart (measured 27 Oct). Unset fields keep the above.
+  fast?: Partial<Pick<Preset, "summary" | "expected" | "liveTime" | "hint">>;
 };
+
+// A preset's texts for the engine in use.
+export const presetText = (p: Preset) =>
+  config.fastEngine ? { ...p, ...p.fast } : p;
 
 export const PRESETS: Preset[] = [
   {
@@ -189,6 +197,7 @@ export const PRESETS: Preset[] = [
     verified: true,
     reportAgainMode: "new",
     hint: "Wait for Rev Rec to book a retry, then press Customer pays in app.",
+    fast: { liveTime: "about 30 s" },
   },
   {
     id: 2,
@@ -203,6 +212,7 @@ export const PRESETS: Preset[] = [
     verified: true,
     reportAgainMode: "duplicate",
     hint: "Wait for the Rev Rec retry. No action needed.",
+    fast: { liveTime: "about 15 s" },
   },
   {
     id: 3,
@@ -218,6 +228,7 @@ export const PRESETS: Preset[] = [
     reportAgainMode: "duplicate",
     sendDuplicateOnStart: true,
     hint: "Click the second report: Rev Rec refused it.",
+    fast: { liveTime: "about 10 s" },
   },
   {
     id: 4,
@@ -232,6 +243,13 @@ export const PRESETS: Preset[] = [
     verified: false,
     reportAgainMode: "new",
     hint: "Long. Cancel the invoice when you have seen enough.",
+    fast: {
+      summary:
+        "A card that never works. Rev Rec retries every 10 to 15 s on this engine.",
+      expected: "15 Rev Rec retries, then Terminated (max retries 15)",
+      liveTime: "about 3 min",
+      hint: "About 3 min to reach max retries. Cancel the invoice when you have seen enough.",
+    },
   },
   {
     id: 5,
@@ -246,6 +264,12 @@ export const PRESETS: Preset[] = [
     verified: false,
     reportAgainMode: "new",
     hint: "Long. Cancel the invoice when you have seen enough.",
+    fast: {
+      expected:
+        "Max retries (15) comes before the Visa limit (~20): Terminated after 15 retries",
+      liveTime: "about 3 min",
+      hint: "About 3 min. Cancel the invoice when you have seen enough.",
+    },
   },
   {
     id: 6,
@@ -261,6 +285,10 @@ export const PRESETS: Preset[] = [
     verified: true,
     reportAgainMode: "swap",
     hint: "After a Rev Rec retry fails, press Report another failure to send the working card.",
+    fast: {
+      expected: "Recovered by Rev Rec's next retry after the swap (about 15 s)",
+      liveTime: "about 15 s after the swap",
+    },
   },
   {
     id: 7,
@@ -275,6 +303,12 @@ export const PRESETS: Preset[] = [
     verified: false,
     reportAgainMode: "duplicate",
     hint: "On 23 Oct the sandbox still retried. Cancel the invoice when done.",
+    fast: {
+      expected:
+        "Terminated at once: the reported stolen card is a hard decline, so Rev Rec makes no retry",
+      liveTime: "a few seconds",
+      hint: "No action needed.",
+    },
   },
   {
     id: 8,
@@ -297,7 +331,7 @@ export const presetById = (id: number) => PRESETS.find((p) => p.id === id);
 // Form data for the dashboard: presets with the field values they fill, and the card options.
 export function publicPresets() {
   return {
-    presets: PRESETS.map((p) => ({
+    presets: PRESETS.map(presetText).map((p) => ({
       id: p.id,
       title: p.title,
       summary: p.summary,

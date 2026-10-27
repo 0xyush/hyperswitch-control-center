@@ -444,3 +444,16 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - A plain `card_declined` has no row and stays soft. A generic decline reports `…, decline_code - generic_decline`, which no row matches.
     - No reseed was needed: the three rows were on the VM (read back with `/v2/gsm/get`). seed.sh comments now explain the three lookups.
   - **Saved stolen card: Stripe refuses.** Attaching `pm_card_chargeDeclinedStolenCard` or `pm_card_chargeDeclinedExpiredCard` to a customer returns 402 (`card_declined/stolen_card`, `expired_card`). Only 0341 attaches and then declines (generic). So the saved card stays 0341. The stop comes from the reported failure marking that card's token, which matches real life: the saved card is the stolen card.
+
+- 2026-10-27 05:55 [A] **Self-host: fast timings (`SIM_FAST_ENGINE=1`, in `.env.vm` and `.env.vm.example`).** Unset = sandbox pace, as before. `/healthz` `limits.fastEngine` tells the UI.
+  - **Scripted bank** in seconds (`fastFlipSec`): payday 15–45 s, quiet window 10–30 s, temporary error 5 s. Each run keeps its pace (`run.fast`), so old runs keep their minutes texts.
+    - A fast run checks its flips every 2 s on its own loop (`flipLoop`). A late flip counts as unfair above 20 s, not 90 s.
+  - **Story:** the waiting note comes after 15 s, not 1 min, in seconds ("This engine books one within about 10 s"; `waiting.seconds` is new). Preset texts follow the engine (`presetText`; for example preset 7: "Terminated at once…", "a few seconds").
+  - **Two races the fast engine showed** (`pf_df48a281`, invoice 2, a temporary error flipping at 5 s):
+    - A swap report that lands while Rev Rec charges the copy is refused (404 "Failed to load recovery attempt"), or is recorded and then Rev Rec never retries again. Now a copy's swap waits while it is processing or its booked charge is within ±3 s, and a refused swap is sent again (up to 3 tries). Swaps are tracked per copy (`swapTries`, `swappedAt`).
+    - The cancel at the cap is refused while Rev Rec charges ("cannot be cancelled while its payment is in processing state"), and the copy kept retrying after the run. The cancel now tries again 2 s later, up to 3 times.
+  - **Measured on the VM (ladder start 3 s, 15 retries 5 s apart):**
+    - Preset 2 recovered at +12 s (`st_899b2fe6ba96`). Preset 6 recovered at +27 s, with the swap pressed at +14 s (`st_7cf173c33600`).
+    - Portfolio 1 min, default mix (`pf_df48a281`, before the race fix): 91 s in all (setup 25 s), 8/10 recovered on each side, the stolen card terminated with 0 attempts.
+    - 10 temporary errors on a test instance (`pf_a1742cdd`): 20/20 recovered, ended at 50 s, flips 3–14 s late.
+  - **Preset 4 is engine-bound:** a retry every 13 s (5 s reopen buffer in config.toml + 5 s ladder gap + 1 s random delay + about 2 s of work), so 15 retries take about 3.3 min. For about 1 min: ladder gap 1 s (`LADDER_JSON`, seed.sh, no restart) gives about 9 s per retry; `reopen_workflow_buffer_time_in_seconds` 1 too (config.toml, restart router and schedulers) gives about 5 s. Or a lower max retries. Not changed: the orchestrator's call.

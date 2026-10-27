@@ -91,6 +91,10 @@ export const config = {
       Number(read("RATE_LIMIT_STARTS_PER_HOUR") || 5) * 6,
   ),
   dataDir: read("SIM_DATA_DIR") || path.join(PROXY_ROOT, "data"),
+  // The self-hosted engine retries within seconds (simulator/selfhost). SIM_FAST_ENGINE=1 puts the
+  // simulator's own waits on that pace: the scripted bank, the waiting note and the preset texts.
+  // Unset = sandbox pace (minutes).
+  fastEngine: read("SIM_FAST_ENGINE") === "1",
 };
 
 // "story" is the existing demo profile (HS_PROFILE_ID): the invoice story runs there.
