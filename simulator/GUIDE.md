@@ -57,7 +57,7 @@ Every explanation line carries one of three tags, so nobody mistakes a guess for
 
 - **From the sandbox**: read from the real system (the booked time, the attempt result, Stripe's decline).
 - **Re-computed**: worked out from sandbox data (which ladder step this is, how many retries remain against the network cap).
-- **Rule-based**: the simulator's stand-in explanation for smart timing (for example "insufficient funds: month start, Thursday or Friday", from the Appercut report patterns). This is **not** the real Rev Rec model. The model needs access we have asked Kirthi for.
+- **Rule-based**: the simulator's stand-in explanation for smart timing (for example "insufficient funds: month start, Thursday or Friday", from internal pilot report patterns). This is **not** the real Rev Rec model. The model needs access we have asked Kirthi for.
 
 ## 6. The portfolio run and the scripted bank
 
