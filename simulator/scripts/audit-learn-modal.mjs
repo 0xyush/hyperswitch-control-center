@@ -114,6 +114,14 @@ const measureInPage = () => {
       text: b.innerText.trim(),
       ...rect(b),
     })),
+    flowCanvas: document.querySelector('[data-learn="flow-canvas"]')
+      ? rect(document.querySelector('[data-learn="flow-canvas"]'))
+      : null,
+    flowCaption: document.querySelector('[data-learn="flow-caption"]')
+      ? rect(
+          document.querySelector('[data-learn="flow-caption"]').parentElement,
+        )
+      : null,
     footerLink: {
       ...rect(footer.firstElementChild),
       text: footer.firstElementChild.textContent.trim(),
@@ -275,6 +283,72 @@ await button("Next").click();
 await page.waitForTimeout(700);
 const nextSamples = await page.evaluate(() => window.__samples);
 panes.flow = await page.evaluate(measureInPage);
+// The walk plays by itself: sample the caption, the arrows and the lit node every 100 ms
+const walk = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const samples = [];
+      const t0 = performance.now();
+      const tick = () => {
+        const caption = document.querySelector(
+          '[data-learn="flow-caption"]',
+        )?.innerText;
+        const active = [...document.querySelectorAll(".lesson-edge-active")];
+        const paths = [
+          ...document.querySelectorAll(".react-flow__edge-path"),
+        ].map((el) => getComputedStyle(el));
+        const lit = [...document.querySelectorAll(".react-flow__node > div")]
+          .map((el) => getComputedStyle(el))
+          .filter((n) => n.borderTopColor === "rgb(36, 125, 249)");
+        const activeStyle = active[0] && getComputedStyle(active[0]);
+        samples.push({
+          t: Math.round(performance.now() - t0),
+          caption,
+          button: [
+            ...document.querySelectorAll('[data-learn="pane-current"] button'),
+          ]
+            .map((b) => b.innerText.trim())
+            .join("|"),
+          activeEdges: active.length,
+          greenEdges: paths.filter((p) => p.stroke === "rgb(45, 161, 96)")
+            .length,
+          litNodes: lit.length,
+          litBackground: lit[0]?.backgroundColor ?? null,
+          activeStyle: activeStyle && {
+            stroke: activeStyle.stroke,
+            strokeWidth: activeStyle.strokeWidth,
+            strokeDasharray: activeStyle.strokeDasharray,
+            animationName: activeStyle.animationName,
+            animationDuration: activeStyle.animationDuration,
+          },
+        });
+        if (performance.now() - t0 < 5600) setTimeout(tick, 100);
+        else resolve(samples);
+      };
+      tick();
+    }),
+);
+// A click on a node jumps to its step and pauses
+await page.getByText("Declines the charge", { exact: true }).click();
+await page.waitForTimeout(300);
+const jump = await page.evaluate(() => ({
+  caption: document.querySelector('[data-learn="flow-caption"]')?.innerText,
+  button: [...document.querySelectorAll('[data-learn="pane-current"] button')]
+    .map((b) => b.innerText.trim())
+    .join("|"),
+}));
+// Fullscreen fills the window; Esc goes back to the card, which stays open
+await page.locator('[data-learn="fullscreen"]').click();
+await page.waitForTimeout(600);
+const fullscreenPanel = (await page.evaluate(measureInPage)).panel;
+await shoot("2-flow-fullscreen", fullscreenPanel);
+await page.keyboard.press("Escape");
+await page.waitForTimeout(600);
+const afterEscape = {
+  open: await page.locator('[data-learn="stepper"]').count(),
+  panel: (await page.evaluate(measureInPage)).panel,
+};
+
 const flowMountedOnce = await page.evaluate(
   () =>
     !!window.__flowElement &&
@@ -304,7 +378,9 @@ await button("Next").click();
 await page.waitForTimeout(500);
 panes.check2 = await page.evaluate(measureInPage);
 await page
-  .getByText("Rev Rec waits for more failures", { exact: true })
+  .getByText("Rev Rec waits. The billing system keeps trying first.", {
+    exact: true,
+  })
   .click();
 await page.waitForTimeout(400);
 panes.check2Answered = await page.evaluate(measureInPage);
@@ -312,7 +388,7 @@ await shoot("5-check2", panes.check2Answered.panel);
 const learnedAfterBothChecks = (await learnedIds()).includes(1);
 
 // Level 2: two wrong picks on check 1 mark the answer; a right check 2 then must not mark the level
-await openLevel("Static vs smart retries");
+await openLevel("Static or smart retries");
 for (let i = 0; i < 3; i++) {
   await button("Next").click();
   await page.waitForTimeout(400);
@@ -341,13 +417,13 @@ const level2Learned = (await learnedIds()).includes(2);
 // Every level: each pane fits the slot, the footer does not move, the flow fits and is readable
 const levelTitles = [
   "The start rule",
-  "Static vs smart retries",
-  "Max retries & grace period",
+  "Static or smart retries",
+  "Max retries and grace period",
   "Hard declines",
   "Card network limits",
   "Invoice queuing",
   "Paid outside Rev Rec",
-  "Record back & webhooks",
+  "Record back and webhooks",
 ];
 const sweep = [];
 for (const title of levelTitles) {
@@ -593,18 +669,111 @@ for (const name of ["check1", "check2"])
     near(panes[`${name}Answered`].block.y, panes[name].block.y, 0.5),
     "block top diff <= 0.5 px",
   );
+const viewport = { width: 1440, height: 1000 };
 check(
-  "level 1 flow: 4 nodes inside the pane, one animated edge, readable zoom",
+  "the card is 92vw x 90vh, at most 1400 px wide",
+  [idea.panel.width, idea.panel.height],
+  near(idea.panel.width, Math.min(viewport.width * 0.92, 1400), 1) &&
+    near(idea.panel.height, viewport.height * 0.9, 1),
+  "1324.8 x 900 at 1440 x 1000",
+);
+check(
+  "the diagram fills the pane (canvas + caption row)",
   {
-    scale: panes.flow.flow?.scale,
-    nodes: panes.flow.flow?.nodes.length,
-    animatedEdges: panes.flow.flow?.animatedEdges,
+    paneTop: panes.flow.pane.y,
+    canvasTop: panes.flow.flowCanvas?.y,
+    paneBottom: panes.flow.pane.bottom,
+    captionBottom: panes.flow.flowCaption?.bottom,
   },
-  !!panes.flow.flow &&
-    panes.flow.flow.nodes.length === 4 &&
-    panes.flow.flow.animatedEdges === 1 &&
-    panes.flow.flow.scale >= 0.6,
-  "4 nodes, 1 animated edge, zoom >= 0.6",
+  !!panes.flow.flowCanvas &&
+    !!panes.flow.flowCaption &&
+    near(panes.flow.flowCanvas.y, panes.flow.pane.y, 1) &&
+    near(panes.flow.flowCanvas.width, panes.flow.pane.width, 1) &&
+    near(panes.flow.flowCaption.bottom, panes.flow.pane.bottom, 1),
+  "canvas from the pane top, full width; caption row ends at the pane bottom",
+);
+const expectedSteps = [
+  "The billing system charges the card for this month's invoice.",
+  "The bank declines. The billing system reports the failure to Rev Rec.",
+  "Rev Rec counts the failures. Start rule 0 means: take over after the first failure.",
+  "The rule is met, so Rev Rec takes over and plans a retry.",
+];
+const changes = walk.filter(
+  (sample, i) => i === 0 || sample.caption !== walk[i - 1].caption,
+);
+// The first sample starts mid-step, so only full steps between two caption changes count
+const realChanges = changes.slice(1);
+const intervals = realChanges
+  .slice(1)
+  .map((sample, i) => sample.t - realChanges[i].t);
+check(
+  "the walk plays the four steps in order",
+  changes.map((sample) => sample.caption),
+  JSON.stringify(changes.map((sample) => sample.caption).slice(-4)) ===
+    JSON.stringify(expectedSteps),
+  "LEARN-COPY.md level 1 steps",
+);
+check(
+  "one step every 1.2 s",
+  intervals,
+  intervals.length >= 2 && intervals.every((ms) => near(ms, 1200, 150)),
+  "1200 +- 150 ms between captions (sampled every 100 ms)",
+);
+// A sample well inside a step (colours change over 300 ms when a step starts)
+const activeSample = walk.find(
+  (sample) =>
+    sample.activeStyle &&
+    realChanges.some(
+      (change) => sample.t >= change.t + 400 && sample.t < change.t + 1000,
+    ),
+);
+check(
+  "the active arrow: green, 3 px, dashes 10 6 moving every 0.8 s",
+  activeSample?.activeStyle,
+  !!activeSample &&
+    activeSample.activeStyle.stroke === "rgb(45, 161, 96)" &&
+    activeSample.activeStyle.strokeWidth === "3px" &&
+    activeSample.activeStyle.strokeDasharray.replace(/px/g, "") === "10, 6" &&
+    activeSample.activeStyle.animationName === "lessonDash" &&
+    activeSample.activeStyle.animationDuration === "0.8s",
+  "stroke nd_green-400, width 3, dasharray 10 6, lessonDash 0.8s",
+);
+check(
+  "the node a step reaches is lit: blue border, light blue fill",
+  { litNodes: activeSample?.litNodes, background: activeSample?.litBackground },
+  activeSample?.litNodes === 1 &&
+    activeSample.litBackground === "rgb(246, 250, 254)",
+  "one lit node, nd_primary_blue-450 border, nd_primary_blue-25 fill",
+);
+const end = walk.at(-1);
+check(
+  "at the end: passed arrows solid green, Replay",
+  {
+    activeEdges: end.activeEdges,
+    greenEdges: end.greenEdges,
+    button: end.button,
+  },
+  end.activeEdges === 0 &&
+    end.greenEdges === 3 &&
+    end.button.includes("Replay"),
+  "0 moving, 3 green, Replay shown",
+);
+check(
+  "a click on a node jumps to its step and pauses",
+  jump,
+  jump.caption === expectedSteps[1] &&
+    jump.button.includes("Play") &&
+    !jump.button.includes("Pause"),
+  "step 2 caption, Play shown",
+);
+check(
+  "fullscreen fills the window; Esc goes back and the card stays open",
+  { fullscreen: [fullscreenPanel.width, fullscreenPanel.height], afterEscape },
+  near(fullscreenPanel.width, viewport.width, 1) &&
+    near(fullscreenPanel.height, viewport.height, 1) &&
+    afterEscape.open === 1 &&
+    near(afterEscape.panel.width, idea.panel.width, 1),
+  "1440 x 1000, then back to the card size",
 );
 check(
   "the flow is built once (Next shows the element built on open)",
@@ -678,11 +847,10 @@ for (const row of sweep) {
       flow.nodesInside &&
       flow.labelsClear &&
       flow.overflowing.length === 0 &&
-      flow.animatedEdges === 1 &&
       flow.scale >= 0.6 &&
       banned.length === 0 &&
       linkOnlyLast,
-    "panes fit, footer still, headline <= 2 lines, flow inside + labels clear of nodes + 1 animated edge + zoom >= 0.6, no chips, Try it on pane 5 only",
+    "panes fit, footer still, headline <= 2 lines, flow inside + labels clear of nodes + captions fit + zoom >= 0.6, no chips, Try it on pane 5 only",
   );
 }
 check("no page errors", pageErrors, pageErrors.length === 0, "none");
@@ -694,6 +862,10 @@ const result = {
   panes,
   transitions: { open, next, back },
   levels: sweep,
+  walk,
+  jump,
+  fullscreenPanel,
+  afterEscape,
   behaviour: {
     flowMountedOnce,
     nextLockedBeforeAnswer,

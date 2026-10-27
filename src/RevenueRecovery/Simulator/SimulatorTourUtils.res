@@ -103,53 +103,56 @@ let saveLearned = (ids: array<int>) =>
   | _ => ()
   }
 
-// Flow nodes, one helper per actor. Captions say what the actor does at that step.
-let billing = (id, caption, ~col, ~row=0.0, ~highlighted=false): flowNode => {
+// Flow nodes, one helper per actor (simulator/LEARN-COPY.md). The title says who, the caption
+// says what that actor does. Rev Rec does its own retries, so a retry node is Rev Rec.
+let billing = (id, caption, ~col, ~row=0.0, ~isKey=false): flowNode => {
   id,
   actor: Some(SimulatorTypes.Billing),
   title: "Billing system",
   caption,
   col,
   row,
-  highlighted,
+  isKey,
 }
-let revRec = (id, caption, ~title="Rev Rec", ~col, ~row=0.0, ~highlighted=false): flowNode => {
+let revRec = (id, caption, ~title="Rev Rec", ~col, ~row=0.0, ~isKey=false): flowNode => {
   id,
   actor: Some(SimulatorTypes.RevRec),
   title,
   caption,
   col,
   row,
-  highlighted,
+  isKey,
 }
-let processor = (id, caption, ~col, ~row=0.0, ~highlighted=false): flowNode => {
+let processor = (id, caption, ~col, ~row=0.0, ~isKey=false): flowNode => {
   id,
   actor: Some(SimulatorTypes.Processor),
   title: "Processor",
   caption,
   col,
   row,
-  highlighted,
+  isKey,
 }
-let customer = (id, caption, ~col, ~row=0.0, ~highlighted=false): flowNode => {
+let customer = (id, caption, ~col, ~row=0.0, ~isKey=false): flowNode => {
   id,
   actor: Some(SimulatorTypes.Customer),
   title: "Customer",
   caption,
   col,
   row,
-  highlighted,
+  isKey,
 }
-let merchant = (id, caption, ~col, ~row=0.0, ~highlighted=false): flowNode => {
+let merchant = (id, caption, ~col, ~row=0.0, ~isKey=false): flowNode => {
   id,
   actor: None,
   title: "Merchant app",
   caption,
   col,
   row,
-  highlighted,
+  isKey,
 }
-let arrow = (from, to, ~label="", ~highlighted=false): flowEdge => {from, to, label, highlighted}
+let arrow = (from, to, ~label): flowEdge => {from, to, label}
+// One step of the walk, in the order it plays
+let step = (~at, ~via=[], says): flowStep => {at, via, says}
 
 // Pane 3 while the demo profile is being read, or when it cannot be read
 let numberWhileLoading = ("…", "Reading the demo profile")
@@ -161,18 +164,41 @@ let levels: array<level> = [
     title: "The start rule",
     hook: "When Rev Rec takes over",
     icon: "nd-flag",
-    idea: "The start rule says how many failures the billing system handles before Rev Rec.",
+    idea: "The start rule decides when Rev Rec steps in: after how many failed charges.",
     flow: {
       nodes: [
-        billing("charge", "Charges the card", ~col=0.0),
-        processor("decline", "Declines", ~col=1.0),
-        revRec("count", "Counts failures vs the start rule", ~col=2.0, ~highlighted=true),
-        processor("retry", "Rev Rec retries", ~col=3.0),
+        billing("charge", "Charges the customer's card", ~col=0.0),
+        processor("decline", "Declines the charge", ~col=1.0),
+        revRec(
+          "count",
+          "Counts the failed charges and checks the start rule",
+          ~col=2.0,
+          ~isKey=true,
+        ),
+        revRec("retry", "Takes over and plans a retry", ~col=3.0),
       ],
       edges: [
-        arrow("charge", "decline", ~label="charge"),
-        arrow("decline", "count", ~label="reported"),
-        arrow("count", "retry", ~label="takes over", ~highlighted=true),
+        arrow("charge", "decline", ~label="payment"),
+        arrow("decline", "count", ~label="failure reported"),
+        arrow("count", "retry", ~label="rule met"),
+      ],
+      steps: [
+        step(~at="charge", "The billing system charges the card for this month's invoice."),
+        step(
+          ~at="decline",
+          ~via=[("charge", "decline")],
+          "The bank declines. The billing system reports the failure to Rev Rec.",
+        ),
+        step(
+          ~at="count",
+          ~via=[("decline", "count")],
+          "Rev Rec counts the failures. Start rule 0 means: take over after the first failure.",
+        ),
+        step(
+          ~at="retry",
+          ~via=[("count", "retry")],
+          "The rule is met, so Rev Rec takes over and plans a retry.",
+        ),
       ],
     },
     number: FromConfig(
@@ -193,10 +219,10 @@ let levels: array<level> = [
         answer: 0,
       },
       {
-        question: "Start rule is 2 and the billing system reported one failure. What happens?",
+        question: "The start rule is 2. The billing system has reported one failed charge. What happens?",
         choices: [
           "Rev Rec retries now",
-          "Rev Rec waits for more failures",
+          "Rev Rec waits. The billing system keeps trying first.",
           "The invoice is cancelled",
         ],
         answer: 1,
@@ -206,30 +232,61 @@ let levels: array<level> = [
   },
   {
     id: 2,
-    title: "Static vs smart retries",
-    hook: "A fixed ladder or the best hour",
+    title: "Static or smart retries",
+    hook: "A fixed timetable or the best hour",
     icon: "nd-swap-arrow-horizontal",
-    idea: "Static retries follow a fixed schedule; smart retries pick the best time per invoice.",
+    idea: "Static retries use the same fixed timetable for every invoice. Smart retries choose the best time for each invoice.",
     flow: {
       nodes: [
-        revRec("pick", "Picks a retry time", ~col=0.0),
-        revRec("static", "Fixed ladder: 1 min, 3 h, 6 h", ~title="Static", ~col=1.25, ~row=-0.6),
-        revRec("smart", "Scores each hour", ~title="Smart", ~col=1.25, ~row=0.6, ~highlighted=true),
-        processor("retry", "Retries at the booked time", ~col=2.5),
+        revRec("pick", "Must choose when to retry", ~col=0.0),
+        revRec(
+          "static",
+          "Follows a fixed timetable: 1 min, then 3 h, then 6 h",
+          ~title="Static",
+          ~col=1.0,
+          ~row=-0.5,
+        ),
+        revRec(
+          "smart",
+          "Picks the hour most likely to work",
+          ~title="Smart",
+          ~col=1.0,
+          ~row=0.5,
+          ~isKey=true,
+        ),
+        revRec("retry", "Retries the card at that time", ~col=2.0),
       ],
       edges: [
-        arrow("pick", "static", ~label="static"),
-        arrow("pick", "smart", ~label="smart", ~highlighted=true),
-        arrow("static", "retry", ~label="next rung"),
+        arrow("pick", "static", ~label="static mode"),
+        arrow("pick", "smart", ~label="smart mode"),
+        arrow("static", "retry", ~label="next time slot"),
         arrow("smart", "retry", ~label="best hour"),
+      ],
+      steps: [
+        step(~at="pick", "The card was declined. Rev Rec must choose when to try again."),
+        step(
+          ~at="static",
+          ~via=[("pick", "static")],
+          "Static mode: Rev Rec follows the same timetable for every invoice.",
+        ),
+        step(
+          ~at="smart",
+          ~via=[("pick", "smart")],
+          "Smart mode: Rev Rec looks at the decline reason, the card, the day and the hour, and picks the best time.",
+        ),
+        step(
+          ~at="retry",
+          ~via=[("static", "retry"), ("smart", "retry")],
+          "At the chosen time, Rev Rec charges the saved card again.",
+        ),
       ],
     },
     number: FromConfig(
       config =>
         switch config.retryMode {
-        | Some("cascading") => ("Static", "The demo profile uses the fixed ladder")
-        | Some("smart") => ("Smart", "The demo profile picks the best hour")
-        | Some("monitoring") => ("Monitoring", "The demo profile watches but does not retry")
+        | Some("cascading") => ("Static", "This demo uses the fixed timetable")
+        | Some("smart") => ("Smart", "This demo picks the best hour")
+        | Some("monitoring") => ("Monitoring", "This demo watches but does not retry")
         | Some(other) => (other->snakeToTitle, "Retry mode of the demo profile")
         | None => ("–", "No retry mode set on the demo profile")
         },
@@ -245,7 +302,7 @@ let levels: array<level> = [
         answer: 2,
       },
       {
-        question: "Static retry number 3 waits how long on the production ladder?",
+        question: "On the fixed timetable, how long is the wait before retry number 3?",
         choices: ["6 hours", "1 minute", "1 day"],
         answer: 0,
       },
@@ -254,23 +311,46 @@ let levels: array<level> = [
   },
   {
     id: 3,
-    title: "Max retries & grace period",
+    title: "Max retries and grace period",
     hook: "How long Rev Rec keeps trying",
     icon: "nd-hour-glass-outline",
-    idea: "Max retries caps the tries per invoice; the grace period caps the days.",
+    idea: "Rev Rec stops after a set number of retries (max retries) or a set number of days (grace period), whichever comes first.",
     flow: {
       nodes: [
-        revRec("retry", "Retries", ~col=0.0),
-        processor("decline", "Declines", ~col=1.0),
-        revRec("check", "Under max and inside grace?", ~col=2.0, ~highlighted=true),
-        revRec("again", "Retries again", ~col=3.0, ~row=-0.6),
-        revRec("stop", "Stops", ~col=3.0, ~row=0.6),
+        revRec("retry", "Retries the card", ~col=0.0),
+        processor("decline", "Declines again", ~col=1.0),
+        revRec("check", "Retries left, and still inside the grace period?", ~col=2.0, ~isKey=true),
+        revRec("again", "Plans the next retry", ~col=3.0, ~row=-0.5),
+        revRec("stop", "Stops retrying this invoice", ~col=3.0, ~row=0.5),
       ],
       edges: [
         arrow("retry", "decline", ~label="retry"),
-        arrow("decline", "check", ~label="count + 1"),
+        arrow("decline", "check", ~label="one retry used"),
         arrow("check", "again", ~label="yes"),
-        arrow("check", "stop", ~label="no", ~highlighted=true),
+        arrow("check", "stop", ~label="no"),
+      ],
+      steps: [
+        step(~at="retry", "Rev Rec retries the saved card."),
+        step(
+          ~at="decline",
+          ~via=[("retry", "decline")],
+          "The card is declined again. One more retry is used up.",
+        ),
+        step(
+          ~at="check",
+          ~via=[("decline", "check")],
+          "Rev Rec checks two limits: retries used against the maximum, and days passed against the grace period.",
+        ),
+        step(
+          ~at="again",
+          ~via=[("check", "again")],
+          "Both limits are fine: Rev Rec plans another retry.",
+        ),
+        step(
+          ~at="stop",
+          ~via=[("check", "stop")],
+          "One limit is reached: Rev Rec stops. The invoice ends as Terminated.",
+        ),
       ],
     },
     number: FromConfig(
@@ -303,18 +383,39 @@ let levels: array<level> = [
     title: "Hard declines",
     hook: "When retrying is pointless",
     icon: "nd-shield",
-    idea: "A hard decline, like a stolen card, never works, so Rev Rec stops.",
+    idea: "Some declines can never succeed, like a stolen or closed card. Rev Rec stops on these at once.",
     flow: {
       nodes: [
-        processor("decline", "Declines", ~col=0.0),
-        revRec("catalogue", "Error catalogue: soft or hard?", ~col=1.0, ~highlighted=true),
-        revRec("later", "Retries later", ~col=2.0, ~row=-0.6),
-        revRec("stop", "Stops at once", ~col=2.0, ~row=0.6),
+        processor("decline", "Declines and gives a reason", ~col=0.0),
+        revRec("catalogue", "Looks up the reason: can a retry still work?", ~col=1.0, ~isKey=true),
+        revRec("later", "Soft decline: retries later", ~col=2.0, ~row=-0.5),
+        revRec("stop", "Hard decline: stops at once", ~col=2.0, ~row=0.5),
       ],
       edges: [
-        arrow("decline", "catalogue", ~label="decline code"),
-        arrow("catalogue", "later", ~label="soft"),
-        arrow("catalogue", "stop", ~label="hard", ~highlighted=true),
+        arrow("decline", "catalogue", ~label="decline reason"),
+        arrow("catalogue", "later", ~label="yes"),
+        arrow("catalogue", "stop", ~label="no"),
+      ],
+      steps: [
+        step(
+          ~at="decline",
+          "The bank declines and gives a reason, for example insufficient funds or stolen card.",
+        ),
+        step(
+          ~at="catalogue",
+          ~via=[("decline", "catalogue")],
+          "Rev Rec looks up the reason in its list of decline codes.",
+        ),
+        step(
+          ~at="later",
+          ~via=[("catalogue", "later")],
+          "Soft decline, like insufficient funds: the money may come back, so Rev Rec retries later.",
+        ),
+        step(
+          ~at="stop",
+          ~via=[("catalogue", "stop")],
+          "Hard decline, like a stolen card: a retry can never work, so Rev Rec stops.",
+        ),
       ],
     },
     number: Fixed("0", "Retries after a hard decline"),
@@ -339,32 +440,46 @@ let levels: array<level> = [
   {
     id: 5,
     title: "Card network limits",
-    hook: "Visa and Mastercard set caps",
+    hook: "Visa and Mastercard set limits",
     icon: "nd-payment-terminal",
-    idea: "Card networks cap how often one card may be retried each day.",
+    idea: "Visa and Mastercard limit how often a merchant may retry the same card. Rev Rec stays inside these limits.",
     flow: {
       nodes: [
-        revRec("want", "Wants to retry", ~col=0.0),
-        revRec("cap", "Under the cap? (day, month)", ~col=1.0, ~highlighted=true),
-        processor("retry", "Retries", ~col=2.0, ~row=-0.6),
-        revRec("wait", "Waits for the window", ~col=2.0, ~row=0.6),
+        revRec("want", "Is ready to retry the card", ~col=0.0),
+        revRec("cap", "Has this card reached the Visa or Mastercard limit?", ~col=1.0, ~isKey=true),
+        revRec("retry", "Not yet: retries now", ~col=2.0, ~row=-0.5),
+        revRec("wait", "Limit reached: waits for it to reset", ~col=2.0, ~row=0.5),
       ],
       edges: [
-        arrow("want", "cap", ~label="count"),
-        arrow("cap", "retry", ~label="yes"),
-        arrow("cap", "wait", ~label="no", ~highlighted=true),
+        arrow("want", "cap", ~label="check limit"),
+        arrow("cap", "retry", ~label="no"),
+        arrow("cap", "wait", ~label="yes"),
+      ],
+      steps: [
+        step(~at="want", "Rev Rec is ready to retry the card."),
+        step(
+          ~at="cap",
+          ~via=[("want", "cap")],
+          "First it counts this card's retries today and in the last 30 days.",
+        ),
+        step(~at="retry", ~via=[("cap", "retry")], "Under the limit: Rev Rec retries now."),
+        step(
+          ~at="wait",
+          ~via=[("cap", "wait")],
+          "Limit reached: Rev Rec waits until the count resets, then retries.",
+        ),
       ],
     },
-    number: Fixed("20", "Visa retries per card a day; Mastercard allows 10"),
+    number: Fixed("20", "Retries per Visa card per day. Mastercard allows 10."),
     checks: (
       {
-        question: "Who sets the cap on retries per card?",
+        question: "Who sets the limit on retries per card?",
         choices: ["The merchant", "Stripe", "The card networks, Visa and Mastercard"],
         answer: 2,
       },
       {
-        question: "The cap is reached. Rev Rec…",
-        choices: ["Waits until the window resets", "Switches card", "Gives up"],
+        question: "The limit is reached. Rev Rec…",
+        choices: ["Waits until the limit resets", "Switches to another card", "Gives up"],
         answer: 0,
       },
     ),
@@ -375,18 +490,32 @@ let levels: array<level> = [
     title: "Invoice queuing",
     hook: "One invoice per customer",
     icon: "nd-payment-queued",
-    idea: "With smart retries, Rev Rec works on one invoice per customer at a time.",
+    idea: "When one customer has several unpaid invoices, smart retries work on them one at a time.",
     flow: {
       nodes: [
-        customer("open", "2 open invoices", ~col=0.0),
-        revRec("first", "Works on invoice 1", ~col=1.0, ~highlighted=true),
-        processor("recovered", "Invoice 1 recovered", ~col=2.0),
-        revRec("next", "Starts invoice 2", ~col=3.0),
+        customer("open", "Has 2 unpaid invoices on one card", ~col=0.0),
+        revRec("first", "Retries invoice 1 only", ~col=1.0, ~isKey=true),
+        processor("recovered", "Approves: invoice 1 is paid", ~col=2.0),
+        revRec("next", "Moves on to invoice 2", ~col=3.0),
       ],
       edges: [
-        arrow("open", "first", ~label="queues"),
+        arrow("open", "first", ~label="wait in line"),
         arrow("first", "recovered", ~label="retry"),
-        arrow("recovered", "next", ~label="next", ~highlighted=true),
+        arrow("recovered", "next", ~label="next in line"),
+      ],
+      steps: [
+        step(~at="open", "One customer has two unpaid invoices on the same card."),
+        step(
+          ~at="first",
+          ~via=[("open", "first")],
+          "Rev Rec puts them in line and retries invoice 1 only.",
+        ),
+        step(
+          ~at="recovered",
+          ~via=[("first", "recovered")],
+          "The bank approves. Invoice 1 is paid.",
+        ),
+        step(~at="next", ~via=[("recovered", "next")], "Now Rev Rec starts on invoice 2."),
       ],
     },
     number: Fixed("1", "Invoice per customer at a time"),
@@ -401,7 +530,7 @@ let levels: array<level> = [
         choices: [
           "The processor requires it",
           "It is faster",
-          "Spend the retry budget wisely and avoid fraud flags",
+          "Every retry hits the same card. One at a time wastes fewer retries and avoids fraud alerts.",
         ],
         answer: 2,
       },
@@ -413,21 +542,39 @@ let levels: array<level> = [
     title: "Paid outside Rev Rec",
     hook: "The customer paid another way",
     icon: "nd-wallet",
-    idea: "When the customer pays another way, the billing system tells Rev Rec to stop.",
+    idea: "If the customer pays another way, for example in the app, the billing system tells Rev Rec. Rev Rec stops retrying.",
     flow: {
       nodes: [
-        customer("pay", "Pays in the app", ~col=0.0),
-        billing("report", "Reports the success", ~col=1.0),
-        revRec("stop", "Stops retrying", ~col=2.0, ~highlighted=true),
-        revRec("closed", "Recovered, paid outside", ~col=3.0),
+        customer("pay", "Pays the invoice in the app", ~col=0.0),
+        billing("report", "Tells Rev Rec the invoice is paid", ~col=1.0),
+        revRec("stop", "Cancels its planned retries", ~col=2.0, ~isKey=true),
+        revRec("closed", "Closes the invoice as paid outside Rev Rec", ~col=3.0),
       ],
       edges: [
         arrow("pay", "report", ~label="payment"),
-        arrow("report", "stop", ~label="success", ~highlighted=true),
-        arrow("stop", "closed", ~label="closes"),
+        arrow("report", "stop", ~label="invoice paid"),
+        arrow("stop", "closed", ~label="close"),
+      ],
+      steps: [
+        step(~at="pay", "While Rev Rec is still retrying, the customer pays in the app."),
+        step(
+          ~at="report",
+          ~via=[("pay", "report")],
+          "The billing system sees the payment and tells Rev Rec.",
+        ),
+        step(
+          ~at="stop",
+          ~via=[("report", "stop")],
+          "Rev Rec cancels the retries it had planned, so the customer is never charged twice.",
+        ),
+        step(
+          ~at="closed",
+          ~via=[("stop", "closed")],
+          "The invoice closes as paid, but Rev Rec does not count it as its own recovery.",
+        ),
       ],
     },
-    number: Fixed("0", "Retries after the customer pays outside Rev Rec"),
+    number: Fixed("0", "Retries after the customer pays another way"),
     checks: (
       {
         question: "The customer pays in the app mid-recovery. Rev Rec…",
@@ -435,7 +582,7 @@ let levels: array<level> = [
         answer: 0,
       },
       {
-        question: "Who counts that recovery?",
+        question: "Who gets credit for that payment?",
         choices: ["Rev Rec", "The billing system, not Rev Rec", "Nobody"],
         answer: 1,
       },
@@ -444,24 +591,45 @@ let levels: array<level> = [
   },
   {
     id: 8,
-    title: "Record back & webhooks",
+    title: "Record back and webhooks",
     hook: "Telling the billing system",
     icon: "nd-webhook",
-    idea: "When an invoice changes, Rev Rec can tell the billing system by webhook.",
+    idea: "When Rev Rec recovers an invoice, the merchant must learn it was paid. Rev Rec can update the billing platform directly (record back) or send a message (webhook).",
     flow: {
       nodes: [
-        processor("approved", "Retry approved", ~col=0.0),
-        revRec("recovers", "Recovers the invoice", ~col=1.0),
-        billing("paid", "Marks it paid", ~col=2.4, ~row=-0.6, ~highlighted=true),
-        merchant("updates", "Updates the account", ~col=2.4, ~row=0.6),
+        processor("approved", "Approves the retry", ~col=0.0),
+        revRec("recovers", "Marks the invoice recovered", ~col=1.0),
+        billing("paid", "Shows the invoice as paid", ~col=2.0, ~row=-0.5, ~isKey=true),
+        merchant("updates", "Gets the message and unlocks the account", ~col=2.0, ~row=0.5),
       ],
       edges: [
         arrow("approved", "recovers", ~label="approved"),
-        arrow("recovers", "paid", ~label="record back", ~highlighted=true),
+        arrow("recovers", "paid", ~label="record back"),
         arrow("recovers", "updates", ~label="webhook"),
       ],
+      steps: [
+        step(~at="approved", "The bank approves Rev Rec's retry."),
+        step(
+          ~at="recovers",
+          ~via=[("approved", "recovers")],
+          "Rev Rec marks the invoice recovered.",
+        ),
+        step(
+          ~at="paid",
+          ~via=[("recovers", "paid")],
+          "Record back: Rev Rec writes \"paid\" straight into the billing platform, for example Chargebee or Recurly.",
+        ),
+        step(
+          ~at="updates",
+          ~via=[("recovers", "updates")],
+          "Webhook: Rev Rec also sends a message to the merchant's server, so the app can unlock the account.",
+        ),
+      ],
     },
-    number: Fixed("0", "Record backs on this demo's Custom connector; webhooks carry the result"),
+    number: Fixed(
+      "Webhook",
+      "This demo's billing system has no record back. It learns the result by webhook.",
+    ),
     checks: (
       {
         question: "Record back means…",
@@ -473,8 +641,8 @@ let levels: array<level> = [
         answer: 2,
       },
       {
-        question: "Custom billing has no record back. The merchant learns the result from…",
-        choices: ["The webhook", "An email", "Nothing"],
+        question: "This demo's billing system has no record back. How does the merchant learn the result?",
+        choices: ["By webhook", "By email", "It never learns"],
         answer: 0,
       },
     ),

@@ -295,6 +295,21 @@ module LevelModal = {
   @react.component
   let make = (~level: level, ~configState, ~isLearned, ~onLearned, ~onClose) => {
     let (pane, setPane) = React.useState(_ => IdeaPane)
+    let (isFullscreen, setIsFullscreen) = React.useState(_ => false)
+
+    // Esc leaves fullscreen first; the Modal's own Esc (close) is off while fullscreen
+    React.useEffect(() => {
+      let onKeyUp = event => {
+        open ReactEvent.Keyboard
+        if event->key === "Escape" || event->keyCode === 27 {
+          setIsFullscreen(_ => false)
+        }
+      }
+      if isFullscreen {
+        Window.addEventListener("keyup", onKeyUp)
+      }
+      Some(() => Window.removeEventListener("keyup", onKeyUp))
+    }, [isFullscreen])
     let ((firstPicks, secondPicks), setPicks) = React.useState(_ => ([], []))
     let (firstCheck, secondCheck) = level.checks
     let (tryText, tryUrl) = level.tryTarget->tryLink
@@ -338,7 +353,7 @@ module LevelModal = {
         </div>
       | FlowPane =>
         <div className="w-full h-full">
-          <SimulatorLessonFlow flow=level.flow />
+          <SimulatorLessonFlow flow=level.flow isActive={pane == FlowPane} isFullscreen />
         </div>
       | NumberPane =>
         <div className="w-full">
@@ -346,13 +361,13 @@ module LevelModal = {
         </div>
       // DOM roots, so the audit attribute lands on an element
       | FirstCheck =>
-        <div className="w-full">
+        <div className="w-full max-w-2xl">
           <CheckChoices
             check=firstCheck picks=firstPicks onPick={index => onPick(~isFirst=true, index)}
           />
         </div>
       | SecondCheck =>
-        <div className="w-full">
+        <div className="w-full max-w-2xl">
           <CheckChoices
             check=secondCheck picks=secondPicks onPick={index => onPick(~isFirst=false, index)}
           />
@@ -362,20 +377,34 @@ module LevelModal = {
     <Modal
       showModal=true
       setShowModal={_ => onClose()}
-      closeOnOutsideClick=true
+      closeOnOutsideClick={!isFullscreen}
       modalHeading=level.title
       modalHeadingDescription={`Level ${level.id->Int.toString} of ${totalLevels->Int.toString}`}
-      modalClass="w-full max-w-2xl mx-auto my-auto"
+      // 92vw x 90vh (at most 1400 px wide), or the whole window in fullscreen
+      modalClass={isFullscreen
+        ? "w-screen max-w-none !rounded-none !border-0 flex flex-col"
+        : "w-[92vw] max-w-[1400px] mx-auto my-auto flex flex-col"}
+      customHeight={isFullscreen ? "h-screen" : "h-[90vh]"}
+      rightHeading={<AddDataAttributes attributes=[("data-learn", "fullscreen")]>
+        <button
+          type_="button"
+          title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+          ariaLabel={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          className="mr-4 flex items-center justify-center w-8 h-8 rounded-md text-nd_gray-600 hover:bg-nd_gray-50"
+          onClick={_ => setIsFullscreen(prev => !prev)}>
+          <Icon name={isFullscreen ? "compress-alt" : "expand-alt"} size=16 />
+        </button>
+      </AddDataAttributes>}
       headingClass="!p-6"
-      childClass="px-6 pt-4 pb-6">
-      <div className="flex flex-col gap-6">
+      childClass="flex-1 min-h-0 flex flex-col px-6 pt-4 pb-6">
+      <div className="flex-1 min-h-0 flex flex-col gap-6">
         <PaneSteps pane />
-        // One slot height for every pane (the checks are the tallest), so the footer never moves.
+        // The panes fill the card between the stepper and the footer, so the footer never moves.
         // All five panes stay mounted, stacked: the flow is built once when the card opens, and
         // Next or Back only fades the panes (180 ms) with an 8 px slide, the new one in from its
         // side and the old one out the other way. Hidden panes take no clicks.
         <AddDataAttributes attributes=[("data-learn", "pane")]>
-          <div className="relative h-60">
+          <div className="relative flex-1 min-h-0">
             {lessonPanes
             ->Array.mapWithIndex(((lessonPane, name), index) => {
               let isCurrent = index == paneIndex

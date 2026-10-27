@@ -1,7 +1,8 @@
 // Learn Rev Rec v2 (simulator/LEARN-V2.md): one five-pane lesson per Rev Rec feature
 
-// Pane 2: a read-only flow of actors, left to right. Positions are in grid steps: col to the
-// right, row up (-) or down (+) for a branch. The highlighted node and edge are what the level is about.
+// Pane 2 (simulator/LEARN-COPY.md): a flow of actors, left to right, walked step by step.
+// Positions are in grid steps: col to the right, row up (-) or down (+) for a branch.
+// The key node is the one the level is about.
 type flowNode = {
   id: string,
   actor: option<SimulatorTypes.actor>,
@@ -9,12 +10,17 @@ type flowNode = {
   caption: string,
   col: float,
   row: float,
-  highlighted: bool,
+  isKey: bool,
 }
 
-type flowEdge = {from: string, to: string, label: string, highlighted: bool}
+// An arrow and its label: what passes between the boxes, or the answer of a yes/no box
+type flowEdge = {from: string, to: string, label: string}
 
-type lessonFlow = {nodes: array<flowNode>, edges: array<flowEdge>}
+// One step of the walk: the node it reaches, the arrows it lights (none for the first step), and
+// the plain-words line under the diagram
+type flowStep = {at: string, via: array<(string, string)>, says: string}
+
+type lessonFlow = {nodes: array<flowNode>, edges: array<flowEdge>, steps: array<flowStep>}
 
 // Pane 3: the real number for the demo profile, with one line of context
 type levelNumber =
