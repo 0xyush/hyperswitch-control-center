@@ -2,7 +2,7 @@
 // simulator sends, and still returns the fields the proxy reads. It writes nothing: the
 // POST /v2/recovery probe carries one unknown field, so the sandbox refuses it while parsing.
 // The last result and any field drift show in /healthz under "contract".
-import { config, PROFILES } from "./config.ts";
+import { config, type Engine, PROFILES } from "./config.ts";
 import { scrubText } from "./redact.ts";
 import { contractTargets, sampleRecoveryBodies } from "./story.ts";
 import { hsApiKey, hsDashboard, type Upstream } from "./upstream.ts";
@@ -58,11 +58,23 @@ const READ_FIELDS: Record<string, string[]> = {
   ],
 };
 
+// Fields an engine is known not to return, as "<read>: <field>". The proxy reads each with a
+// fallback. Listed per engine, so /healthz names them (knownAbsent) on that engine only: on the
+// sandbox the same field gone is still drift.
+const KNOWN_ABSENT: Record<Engine, string[]> = {
+  sandbox: [],
+  // Upstream main's v2 intent response has no created_at (27 Oct, tag 2026.10.26.0). The story
+  // view falls back to the first recorded attempt (story.ts summary.createdAt).
+  selfhost: ["invoice detail: created_at"],
+};
+
 type Check = { name: string; ok: boolean; detail: string };
 export type ContractResult = {
   ok: boolean;
   at: string;
   ms: number;
+  engine: Engine;
+  knownAbsent: string[]; // fields this engine does not return, read with a fallback
   checks: Check[];
   drift: {
     requestFieldsGone: string[]; // we send them; the sandbox no longer accepts them
@@ -101,6 +113,7 @@ export async function runContractTest(): Promise<ContractResult> {
     requestFieldsNowRequired: [],
     responseFieldsMissing: [],
   };
+  const knownAbsent: string[] = [];
   const check = (name: string, ok: boolean, detail: string) =>
     checks.push({ name, ok, detail });
   const reads = (name: string, r: Upstream | null) => {
@@ -121,19 +134,24 @@ export async function runContractTest(): Promise<ContractResult> {
       return;
     }
     const missing: string[] = [];
+    const absent: string[] = [];
     let empty = 0;
     for (const f of READ_FIELDS[name]) {
       const has = hasPath(r.json, f);
       if (has === "empty list") empty++;
+      else if (!has && KNOWN_ABSENT[config.engine].includes(`${name}: ${f}`))
+        absent.push(f);
       else if (!has) missing.push(f);
     }
     drift.responseFieldsMissing.push(...missing.map((f) => `${name}: ${f}`));
+    knownAbsent.push(...absent.map((f) => `${name}: ${f}`));
+    const present = READ_FIELDS[name].length - empty - absent.length;
     check(
       name,
       missing.length === 0,
       missing.length
         ? `missing ${missing.join(", ")}`
-        : `all ${READ_FIELDS[name].length - empty} fields present${empty ? ` (${empty} not checked: empty list)` : ""}`,
+        : `all ${present} fields present${empty ? ` (${empty} not checked: empty list)` : ""}${absent.length ? ` (${absent.join(", ")}: not returned by the ${config.engine} engine, read with a fallback)` : ""}`,
     );
   };
 
@@ -247,6 +265,8 @@ export async function runContractTest(): Promise<ContractResult> {
     ok: checks.every((c) => c.ok),
     at: new Date().toISOString(),
     ms: Date.now() - t0,
+    engine: config.engine,
+    knownAbsent,
     checks,
     drift,
   };
@@ -271,6 +291,8 @@ export function scheduleContractTest(
         ok: false,
         at: new Date().toISOString(),
         ms: 0,
+        engine: config.engine,
+        knownAbsent: [],
         checks: [
           {
             name: "contract test",

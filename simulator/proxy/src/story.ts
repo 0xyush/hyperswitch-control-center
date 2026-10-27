@@ -2040,7 +2040,19 @@ export async function storyView(storyId: string) {
       firstChargeCard: story.firstCharge,
       recordedReason: recorded,
       reportsSent: story.reportsSent,
-      createdAt: intent?.created_at ?? null,
+      // The sandbox's invoice detail has created_at; upstream main's v2 has none (self-hosted
+      // engine, 27 Oct). The first failure report makes the invoice, so fall back to its first
+      // recorded attempt, then to the time of the story's first accepted report.
+      createdAt:
+        intent?.created_at ??
+        attempts[0]?.at ??
+        story.requests.find(
+          (q) =>
+            q.system === "sandbox" &&
+            q.request.method === "POST" &&
+            q.response.status === 200,
+        )?.at ??
+        null,
     },
     attemptSummary: attempts,
     explain,

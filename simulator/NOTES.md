@@ -468,3 +468,9 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - Preset 4 `st_b81c58767e37`: 15 retries 5.0 s apart (76 s from the first failure), Terminated at +79 s.
   - Fast preset texts updated to the 5 s pace (preset 4 and 5: "about 80 s").
   - **Local proxy only:** `.env.vm` `RATE_LIMIT_PORTFOLIO_PER_HOUR=20` (cloud default unchanged: 1, `deploy/proxy.env.yaml` untouched). The limit counts runs started in the past hour from the run store, so `pf_df48a281` (05:29) uses 1 of the 20 until it ages out; no run was deleted.
+
+- 2026-10-27 06:00 [A] **Contract test per engine; `created_at` fallback.** On the self-hosted engine `/healthz` was red: "invoice detail: missing created_at". Upstream main's v2 intent response (tag 2026.10.26.0) has no `created_at`; the shared sandbox has it.
+  - **Readers:** the dashboard reads no `created_at` from invoice detail. Its intent mapper uses `invoice_billing_started_at_time`, then `created`; its `created_at` read is on attempts, which still have it. The proxy reads it once: the story view's `summary.createdAt` (no screen shows it yet). That now falls back to the first recorded attempt, then to the time of the story's first accepted report.
+  - **Engine:** `config.engine` is `sandbox` or `selfhost`, from `HS_ENGINE`, or else from the base URL (sandbox.hyperswitch.io or none → sandbox; any other → selfhost). It shows in `/healthz` `config.engine` and `contract.engine`.
+  - **Contract test:** `KNOWN_ABSENT.selfhost = ["invoice detail: created_at"]`. On the selfhost engine that field is listed in `contract.knownAbsent` and named in the check text, not counted as drift. Any other missing field is still drift, and on the sandbox `created_at` missing is still drift. Offline tests cover both engines.
+  - The self-hosted invoice detail also carries `client_secret`; the proxy's redaction already hides it (`/secret/` field rule).

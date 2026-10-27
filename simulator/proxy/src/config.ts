@@ -50,6 +50,23 @@ export function jwtClaims(token: string): JwtClaims {
   }
 }
 
+// Which Hyperswitch the proxy talks to. "sandbox": the shared sandbox (a Juspay build).
+// "selfhost": upstream main on our VM (simulator/selfhost), whose responses differ in places (the
+// contract test expects each engine's own fields). HS_ENGINE sets it; by default a base URL other
+// than sandbox.hyperswitch.io is "selfhost", and no base URL is "sandbox" (the strict choice).
+export type Engine = "sandbox" | "selfhost";
+export function engineOf(baseUrl: string, override: string): Engine {
+  if (override === "sandbox" || override === "selfhost") return override;
+  if (!baseUrl) return "sandbox";
+  try {
+    return new URL(baseUrl).hostname === "sandbox.hyperswitch.io"
+      ? "sandbox"
+      : "selfhost";
+  } catch {
+    return "sandbox";
+  }
+}
+
 export const config = {
   port: Number(read("PORT") || 8787),
   host: read("HOST") || "127.0.0.1",
@@ -60,6 +77,7 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
   hsBaseUrl: read("HS_BASE_URL").replace(/\/+$/, ""),
+  engine: engineOf(read("HS_BASE_URL"), read("HS_ENGINE")),
   hsApiKey: read("HS_API_KEY"),
   hsProfileId: read("HS_PROFILE_ID"),
   hsBillingMcaId: read("HS_BILLING_MCA_ID"),
@@ -167,6 +185,7 @@ export function configStatus() {
     ),
     stripeTestMode,
     recoveryPath: config.hsRecoveryPath,
+    engine: config.engine,
     profileId: config.hsProfileId || null,
   };
 }
