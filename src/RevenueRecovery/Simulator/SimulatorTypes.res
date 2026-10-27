@@ -88,7 +88,12 @@ type stageVisit = {stage: stage, firstSeenAt: string, fromSandbox: bool}
 
 // What the side drawer shows: one diagram step, the invoice's states over time, or why Rev Rec
 // has not booked a retry yet
-type drawerContent = StepDetails(diagramRow) | StateHistory | WaitingDetails
+type drawerContent =
+  | StepDetails(diagramRow)
+  | StateHistory
+  | WaitingDetails
+  // One Rev Rec retry: its booking, its charge (none while it waits) and its number
+  | RetryDetails(option<diagramRow>, option<diagramRow>, int)
 
 // Set by the proxy after 3 min in Monitoring with the start rule met and no retry booked
 // (sandbox incident of 26 Oct, simulator/NOTES.md)

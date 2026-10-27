@@ -11,7 +11,16 @@ type tone = ToneOk | ToneDeclined | ToneRevRec | TonePending | ToneInfo
 // The outcome card's colour: green when Rev Rec recovered, red when it stopped, grey otherwise
 type outcomeTone = OutcomeGreen | OutcomeRed | OutcomeGrey
 
-// One thing the viewer reads: a step under a phase, or the outcome card
+// One Rev Rec retry: the time it booked and the charge it made. A retry still to run has no
+// charge yet and is due at dueAt.
+type retry = {
+  number: int,
+  booking: option<diagramRow>,
+  charge: option<diagramRow>,
+  dueAt: option<string>,
+}
+
+// One thing the viewer reads: a step under a phase, the retries block, or the outcome card
 type storyItem = {
   phase: int,
   actor: option<actor>,
@@ -21,13 +30,13 @@ type storyItem = {
   detail: string,
   tone: tone,
   at: string,
-  // While Rev Rec's booked retry has not run: its time, shown as a countdown
-  pendingAt: option<string>,
   // The raw event the drawer opens
   row: option<diagramRow>,
   outcome: option<outcomeTone>,
   // Raw events up to here are covered, for "Show all events"
   lastRawIndex: int,
+  // The Rev Rec retries block: one row per retry (empty for every other item)
+  retries: array<retry>,
 }
 
 // Phase 6 is the outcome; phase 5 shows only when the customer acted
@@ -37,8 +46,7 @@ let phaseTitle = phase =>
   switch phase {
   | 1 => "The charge fails"
   | 2 => "Rev Rec is told"
-  | 3 => "Rev Rec plans a retry"
-  | 4 => "Rev Rec retries"
+  | 3 | 4 => "Rev Rec retries"
   | 5 => "The customer acts"
   | _ => "Outcome"
   }
@@ -57,13 +65,16 @@ let reasonOf = label =>
   ->capture(label)
   ->Option.map(reason => reason->String.replaceRegExp(%re("/_/g"), " "))
 
-// "pick retry time → 18:20:31" is UTC on the day of the event; show it in the viewer's time
-let bookedTimeOf = (row: diagramRow) =>
+// "pick retry time → 18:20:31" is UTC on the day of the event
+let bookedIsoOf = (row: diagramRow) =>
   switch %re("/(\d{2}:\d{2}:\d{2})/")->capture(row.label) {
   | Some(hms) if row.at->String.length >= 10 =>
-    `${row.at->String.slice(~start=0, ~end=10)}T${hms}Z`->toClockTime
-  | _ => ""
+    Some(`${row.at->String.slice(~start=0, ~end=10)}T${hms}Z`)
+  | _ => None
   }
+
+// The booked time in the viewer's time zone
+let bookedTimeOf = (row: diagramRow) => row->bookedIsoOf->Option.mapOr("", toClockTime)
 
 let toneOf = status =>
   switch status {
@@ -86,18 +97,120 @@ let chargeChip = (row: diagramRow) =>
 
 let hardDeclines = ["stolen card", "lost card", "pickup card", "fraudulent"]
 
-let outcomeTitle = (story: story) => {
-  let hardDecline =
-    story.timeline->Array.some(row =>
-      row.label->reasonOf->Option.mapOr(false, reason => hardDeclines->Array.includes(reason))
+// "38 s", "2 min 05 s"
+let secondsInWords = seconds =>
+  if seconds < 60 {
+    `${seconds->Int.toString} s`
+  } else {
+    let rest = mod(seconds, 60)
+    `${(seconds / 60)->Int.toString} min ${rest < 10 ? "0" : ""}${rest->Int.toString} s`
+  }
+
+let retriesText = count => count == 1 ? "1 retry" : `${count->Int.toString} retries`
+
+// The end row: how the invoice ended, in one line
+let outcomeTitle = (story: story, ~retries: array<retry>, ~maxRetries: option<int>) => {
+  let charged = retries->Array.filter(retry => retry.charge->Option.isSome)
+  let count = charged->Array.length
+  let firstFailure =
+    story.timeline->Array.find(row =>
+      row.from == Billing && row.to == Processor && row.status != StepOk
     )
+  let hardReason =
+    firstFailure
+    ->Option.flatMap(row => row.label->reasonOf)
+    ->Option.filter(reason => hardDeclines->Array.includes(reason))
   switch story.stage {
-  | Recovered if story.recoveredBy == "revrec" => ("Invoice recovered by Rev Rec", OutcomeGreen)
-  | Recovered => ("Invoice paid outside Rev Rec", OutcomeGrey)
-  | Terminated => (hardDecline ? "Rev Rec stopped: hard decline" : "Rev Rec stopped", OutcomeRed)
-  | Cancelled => ("Invoice cancelled", OutcomeGrey)
+  | Recovered if story.recoveredBy == "revrec" => {
+      let approved =
+        charged->Array.find(retry => retry.charge->Option.mapOr(false, row => row.status == StepOk))
+      let after = switch (firstFailure, approved->Option.flatMap(retry => retry.charge)) {
+      | (Some(first), Some(charge)) =>
+        ` · ${((charge.at->toMillis -. first.at->toMillis) /. 1000.0)
+          ->Float.toInt
+          ->secondsInWords} after the first failure`
+      | _ => ""
+      }
+      let number = approved->Option.mapOr(count, retry => retry.number)
+      (`Recovered on retry ${number->Int.toString}${after}`, OutcomeGreen)
+    }
+  | Recovered => (
+      count > 0 ? `Paid outside Rev Rec after ${count->retriesText}` : "Paid outside Rev Rec",
+      OutcomeGrey,
+    )
+  | Terminated =>
+    switch (count, hardReason, maxRetries) {
+    | (0, Some(reason), _) => (`Stopped at once · hard decline (${reason})`, OutcomeRed)
+    | (_, _, Some(max)) if count >= max => (
+        `Stopped after ${count->retriesText} · max retries reached`,
+        OutcomeRed,
+      )
+    | (0, None, _) => ("Rev Rec stopped", OutcomeRed)
+    | _ => (`Stopped after ${count->retriesText}`, OutcomeRed)
+    }
+  | Cancelled => (
+      count > 0 ? `Cancelled after ${count->retriesText}` : "Invoice cancelled",
+      OutcomeGrey,
+    )
   | StoryError => ("The story stopped with an error", OutcomeRed)
   | stage => (`Story complete: the invoice is still ${stage->stageName}`, OutcomeGrey)
+  }
+}
+
+// Pairs each Rev Rec charge with its booking: the latest booking due at or before the charge. The
+// proxy can note a booking after its charge, or miss one when retries come fast. A booking that is
+// still to run becomes the waiting retry, due at the booked time.
+let pairRetries = (
+  ~bookings: array<diagramRow>,
+  ~charges: array<diagramRow>,
+  ~pending: option<diagramRow>,
+  ~isOver,
+) => {
+  let dueMs =
+    bookings->Array.map(booking =>
+      booking->bookedIsoOf->Option.mapOr(booking.at->toMillis, iso => iso->toMillis)
+    )
+  let used = bookings->Array.map(_ => false)
+  let retries = charges->Array.mapWithIndex((charge, index) => {
+    let chargeMs = charge.at->toMillis
+    let best = ref(-1)
+    dueMs->Array.forEachWithIndex((ms, j) =>
+      if (
+        !(used->Array.getUnsafe(j)) &&
+        ms <= chargeMs +. 3000.0 &&
+        (best.contents < 0 || ms >= dueMs->Array.getUnsafe(best.contents))
+      ) {
+        best := j
+      }
+    )
+    let booking = if best.contents >= 0 {
+      used->Array.setUnsafe(best.contents, true)
+      bookings->Array.get(best.contents)
+    } else {
+      None
+    }
+    {number: index + 1, booking, charge: Some(charge), dueAt: None}
+  })
+  let lastChargeMs = charges->Array.at(-1)->Option.mapOr(0.0, charge => charge.at->toMillis)
+  let waitingIndex = ref(-1)
+  dueMs->Array.forEachWithIndex((ms, j) =>
+    if !(used->Array.getUnsafe(j)) && ms > lastChargeMs {
+      waitingIndex := j
+    }
+  )
+  let waitingBooking = bookings->Array.get(waitingIndex.contents)
+  let dueAt = switch (isOver, pending, waitingBooking) {
+  | (true, _, _) => None
+  | (false, Some(row), _) => Some(row.at)
+  | (false, None, Some(booking)) => booking->bookedIsoOf
+  | (false, None, None) => None
+  }
+  switch dueAt {
+  | Some(_) =>
+    retries->Array.concat([
+      {number: charges->Array.length + 1, booking: waitingBooking, charge: None, dueAt},
+    ])
+  | None => retries
   }
 }
 
@@ -115,7 +228,7 @@ let customerIdOf = (story: story) =>
 // The story header ("Invoice $65.40 · customer cus_… · card ••4242") and its items, built from
 // every event that has arrived. Repeats fold into one step: three declined billing charges are
 // one step with "3 tries" in its detail line.
-let buildStoryItems = (story: story) => {
+let buildStoryItems = (story: story, ~maxRetries: option<int>) => {
   let items: array<storyItem> = []
   let amount = ref("")
   let savedCard = ref("")
@@ -125,6 +238,11 @@ let buildStoryItems = (story: story) => {
   let reportIndex = ref(-1)
   let outcomeDetails = []
   let outcomeRow = ref(None)
+  // Rev Rec's retries form one block, placed where its first event came
+  let retryIndex = ref(-1)
+  let bookings = []
+  let charges = []
+  let pending = ref(None)
   // The card of the billing system's own charge; the proxy's label leaves it out
   let firstChargeCard = switch story.firstChargeCard {
   | "" => story.form->Option.mapOr("", form => form.firstCharge)
@@ -142,13 +260,30 @@ let buildStoryItems = (story: story) => {
     detail: "",
     tone,
     at: row.at,
-    pendingAt: None,
     row: Some(row),
     outcome: None,
     lastRawIndex: index,
+    retries: [],
   }
-  let lastIndexOfPhase = phase =>
-    items->Array.reduceWithIndex(-1, (found, item, index) => item.phase == phase ? index : found)
+  let noteRetryEvent = (~row: diagramRow, ~index) =>
+    switch retryIndex.contents {
+    | -1 => {
+        retryIndex := items->Array.length
+        push({
+          ...step(
+            ~row,
+            ~index,
+            ~phase=3,
+            ~actor=RevRec,
+            ~title="Rev Rec retries",
+            ~chip=None,
+            ~tone=ToneRevRec,
+          ),
+          row: None,
+        })
+      }
+    | existing => update(existing, item => {...item, lastRawIndex: index})
+    }
 
   story.timeline->Array.forEachWithIndex((row, index) => {
     let label = row.label
@@ -257,52 +392,18 @@ let buildStoryItems = (story: story) => {
           ),
         )
       }
-    | (RevRec, RevRec) =>
-      push(
-        step(
-          ~row,
-          ~index,
-          ~phase=3,
-          ~actor=RevRec,
-          ~title=`Picked a retry time: ${row->bookedTimeOf}`,
-          ~chip=None,
-          ~tone=ToneRevRec,
-        ),
-      )
-    // The booked retry belongs to the step that picked its time; its dot turns dashed
-    | (RevRec, Processor) if row.status == StepPending =>
-      switch lastIndexOfPhase(3) {
-      | -1 =>
-        push({
-          ...step(
-            ~row,
-            ~index,
-            ~phase=3,
-            ~actor=RevRec,
-            ~title=`Booked a retry for ${row.at->toClockTime}`,
-            ~chip=None,
-            ~tone=TonePending,
-          ),
-          pendingAt: Some(row.at),
-        })
-      | existing =>
-        update(existing, item => {...item, pendingAt: Some(row.at), lastRawIndex: index})
+    // A booking, the booked retry still to run, and each charge: rows of the retries block
+    | (RevRec, RevRec) => {
+        noteRetryEvent(~row, ~index)
+        bookings->Array.push(row)->ignore
+      }
+    | (RevRec, Processor) if row.status == StepPending => {
+        noteRetryEvent(~row, ~index)
+        pending := Some(row)
       }
     | (RevRec, Processor) => {
-        let card = label->cardOf
-        push(
-          step(
-            ~row,
-            ~index,
-            ~phase=4,
-            ~actor=RevRec,
-            ~title=card->LogicUtils.isNonEmptyString
-              ? `Charged the saved card ••${card}`
-              : "Charged the saved card",
-            ~chip=row->chargeChip,
-            ~tone=row.status->toneOf,
-          ),
-        )
+        noteRetryEvent(~row, ~index)
+        charges->Array.push(row)->ignore
       }
     // "invoice recovered → mark paid" / "invoice paid outside Rev Rec": the outcome card's title
     // already says how it ended, so only the billing system's follow-up is added
@@ -317,7 +418,7 @@ let buildStoryItems = (story: story) => {
         step(
           ~row,
           ~index,
-          ~phase=Math.Int.min(row.phase, 4),
+          ~phase=Math.Int.min(row.phase, 3),
           ~actor=from,
           ~title=label,
           ~chip=None,
@@ -327,8 +428,14 @@ let buildStoryItems = (story: story) => {
     }
   })
 
-  if story.done || story.stage->isFinalStage {
-    let (title, tone) = story->outcomeTitle
+  let isOver = story.done || story.stage->isFinalStage
+  let retries = pairRetries(~bookings, ~charges, ~pending=pending.contents, ~isOver)
+  if retryIndex.contents >= 0 {
+    update(retryIndex.contents, item => {...item, retries})
+  }
+
+  if isOver {
+    let (title, tone) = story->outcomeTitle(~retries, ~maxRetries)
     let errorDetail = story.stage == StoryError ? [story.startError] : []
     push({
       phase: outcomePhase,
@@ -341,10 +448,10 @@ let buildStoryItems = (story: story) => {
       ->Array.joinWith(" · "),
       tone: ToneInfo,
       at: outcomeRow.contents->Option.mapOr("", row => row.at),
-      pendingAt: None,
       row: outcomeRow.contents,
       outcome: Some(tone),
       lastRawIndex: story.timeline->Array.length - 1,
+      retries: [],
     })
   }
 
@@ -373,10 +480,10 @@ let creatingItem = (~form: option<billingForm>): storyItem => {
   detail: "",
   tone: TonePending,
   at: "",
-  pendingAt: None,
   row: None,
   outcome: None,
   lastRawIndex: -1,
+  retries: [],
 }
 
 // ---------- pacing over items (STORY-STEPS.md section 6) ----------
@@ -388,10 +495,12 @@ let autoItemCount = (items: array<storyItem>) =>
   | index => index
   }
 
+// Once the viewer lets Rev Rec retry (or auto-play is on), every later step shows as it happens
+let isFollowingLive = (~items: array<storyItem>, ~revealLimit, ~autoPlay) =>
+  autoPlay || revealLimit > items->autoItemCount
+
 let visibleItemCount = (~items: array<storyItem>, ~revealLimit, ~autoPlay) =>
-  autoPlay
-    ? items->Array.length
-    : Math.Int.min(items->Array.length, Math.Int.max(items->autoItemCount, revealLimit))
+  isFollowingLive(~items, ~revealLimit, ~autoPlay) ? items->Array.length : items->autoItemCount
 
 // ---------- rendering ----------
 
@@ -442,25 +551,6 @@ let sinceText = (~at, ~firstAt) =>
       : `+${(seconds / 60)->Int.toString} min ${mod(seconds, 60)->Int.toString} s since charge`
   }
 
-// "in 0:28" until the booked retry
-module ClockCountdown = {
-  @react.component
-  let make = (~until) => {
-    let (nowMs, setNowMs) = React.useState(_ => Date.now())
-    React.useEffect(() => {
-      let intervalId = setInterval(() => setNowMs(_ => Date.now()), 1000)
-      Some(() => clearInterval(intervalId))
-    }, [])
-    let seconds = ((until->toMillis -. nowMs) /. 1000.0)->Float.toInt
-    let rest = mod(seconds, 60)
-    let text =
-      seconds <= 0
-        ? "due now"
-        : `in ${(seconds / 60)->Int.toString}:${rest < 10 ? "0" : ""}${rest->Int.toString}`
-    text->React.string
-  }
-}
-
 module Chip = {
   @react.component
   let make = (~className, ~children) => {
@@ -506,7 +596,7 @@ module StepRow = {
     ~time=?,
     ~children=React.null,
   ) => {
-    let tone = item.pendingAt->Option.isSome ? TonePending : item.tone
+    let tone = item.tone
     let canOpen = item.row->Option.isSome
     <div
       id=domId
@@ -536,14 +626,10 @@ module StepRow = {
               style={overflowWrap: "anywhere"}>
               {item.title->React.string}
             </p>
-            {switch (item.pendingAt, item.chip) {
-            | (Some(until), _) =>
-              <Chip className={TonePending->toneChipClass}>
-                <ClockCountdown until />
-              </Chip>
-            | (None, Some((text, chipTone))) =>
+            {switch item.chip {
+            | Some((text, chipTone)) =>
               <Chip className={chipTone->toneChipClass}> {text->React.string} </Chip>
-            | _ => React.null
+            | None => React.null
             }}
           </div>
           <RenderIf condition=canOpen>
@@ -632,14 +718,169 @@ module StatePill = {
   }
 }
 
+// The profile's max retries: a setting of the invoice's billing connector, read once per connector
+let useMaxRetries = (story: option<story>) => {
+  let getURL = APIUtils.useGetURL()
+  let fetchQuietly = APIUtils.useGetMethod(~showErrorToast=false)
+  let (maxRetries, setMaxRetries) = React.useState(_ => None)
+  let billingConnectorId =
+    story->Option.mapOr("", s =>
+      (s.invoice->RevenueRecoveryEntity.itemToObjMapperForIntents).billing_connector_id
+    )
+  React.useEffect(() => {
+    if billingConnectorId->LogicUtils.isNonEmptyString {
+      let load = async () =>
+        try {
+          let url = getURL(
+            ~entityName=V2(V2_CONNECTOR),
+            ~methodType=Get,
+            ~id=Some(billingConnectorId),
+          )
+          let json = await fetchQuietly(url, ~version=V2)
+          setMaxRetries(_ =>
+            json
+            ->LogicUtils.getDictFromJsonObject
+            ->LogicUtils.getDictfromDict("feature_metadata")
+            ->LogicUtils.getDictfromDict("revenue_recovery")
+            ->LogicUtils.getOptionInt("max_retry_count")
+          )
+        } catch {
+        | _ => ()
+        }
+      load()->ignore
+    }
+    None
+  }, [billingConnectorId])
+  maxRetries
+}
+
+// One retry on one line: "Retry 3 of 15 · charged ••0341" with its result chip, or, while it waits,
+// "Retry 4 of 15 · booked for 8:40:36 · in 3 s". The time sits in the right column.
+module RetryRow = {
+  @react.component
+  let make = (~retry: retry, ~maxRetries: option<int>, ~onOpen) => {
+    let number = `Retry ${retry.number->Int.toString}${maxRetries->Option.mapOr("", max =>
+        ` of ${max->Int.toString}`
+      )}`
+    let (dot, text, chip, time) = switch (retry.charge, retry.dueAt) {
+    | (Some(charge), _) => {
+        let card = charge.label->cardOf
+        (
+          charge.status->toneOf->dotClass,
+          <>
+            {`${number} · charged ${card->LogicUtils.isNonEmptyString
+                ? `••${card}`
+                : "the saved card"}`->React.string}
+          </>,
+          charge->chargeChip,
+          charge.at->toClockTime,
+        )
+      }
+    | (None, dueAt) => (
+        "bg-nd_gray-300 animate-pulse",
+        <>
+          {`${number} · booked for ${dueAt->Option.mapOr("", toClockTime)} · `->React.string}
+          {switch dueAt {
+          | Some(time) => <Countdown nextRetryAt=time />
+          | None => React.null
+          }}
+        </>,
+        None,
+        retry.booking->Option.mapOr("", booking => booking.at->toClockTime),
+      )
+    }
+    <div className="flex items-center gap-3 min-h-12 cursor-pointer" onClick={_ => onOpen()}>
+      <div className="w-8 shrink-0 flex justify-center">
+        <div className={`relative z-10 w-2.5 h-2.5 rounded-full ${dot}`} />
+      </div>
+      <div
+        className="flex-1 min-w-0 min-h-12 py-1.5 flex items-center gap-4 rounded-md px-3 hover:bg-nd_gray-25">
+        // The sentence and its chip share a line when they fit; else the chip wraps under it
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <p className={`${body.md.semibold} text-nd_gray-800`}> text </p>
+          {switch chip {
+          | Some((label, chipTone)) =>
+            <Chip className={chipTone->toneChipClass}> {label->React.string} </Chip>
+          | None => React.null
+          }}
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <HelpButton onClick=onOpen />
+          <span className={`w-20 text-right ${body.sm.regular} text-nd_gray-400`}>
+            {time->React.string}
+          </span>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+let shownRetryLimit = 5
+
+// Rev Rec's retries under one heading, one row each. A long run shows the latest five, with the
+// rest behind "Show all N retries".
+module RetryBlock = {
+  @react.component
+  let make = (
+    ~retries: array<retry>,
+    ~maxRetries,
+    ~onRetryClick: retry => unit,
+    ~revealClass,
+    ~animationDelay,
+    ~children=React.null,
+  ) => {
+    let (showAll, setShowAll) = React.useState(_ => false)
+    let total = retries->Array.length
+    let shown =
+      showAll || total <= shownRetryLimit
+        ? retries
+        : retries->Array.slice(~start=total - shownRetryLimit, ~end=total)
+    <div className={`flex flex-col ${revealClass}`} style={animationDelay: ?animationDelay}>
+      <RenderIf condition={total > shownRetryLimit}>
+        <span
+          className={`ml-11 w-fit py-1 cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
+          onClick={_ => setShowAll(prev => !prev)}>
+          {(
+            showAll ? "Show the latest 5" : `Show all ${total->Int.toString} retries`
+          )->React.string}
+        </span>
+      </RenderIf>
+      {shown
+      ->Array.map(retry =>
+        <RetryRow
+          key={retry.number->Int.toString} retry maxRetries onOpen={() => onRetryClick(retry)}
+        />
+      )
+      ->React.array}
+      <div className="ml-11"> children </div>
+    </div>
+  }
+}
+
+// Keeps the newest step in view while the viewer follows along: when the end of the rail was on
+// screen before the step landed (within about two rows), the page scrolls down with it
+type tailRect = {top: float}
+@val @scope("document")
+external getElementById: string => Nullable.t<Dom.element> = "getElementById"
+@send external getTailRect: Dom.element => tailRect = "getBoundingClientRect"
+@val @scope("window") external windowHeight: float = "innerHeight"
+
+let tailDomId = "sim-story-tail"
+
+let followTail = () =>
+  getElementById(tailDomId)
+  ->Nullable.toOption
+  ->Option.forEach(tail =>
+    if (tail->getTailRect).top -. 200.0 <= windowHeight {
+      tail->Webapi.Dom.Element.scrollIntoViewWithOptions({"behavior": "smooth", "block": "end"})
+    }
+  )
+
 // The panel's header row: the state pill, the amount recovered, and Rev Rec's retries against the
 // profile's maximum. The rail below shows the steps.
 module StatusRow = {
   @react.component
-  let make = (~story: option<story>, ~form: option<billingForm>) => {
-    let getURL = APIUtils.useGetURL()
-    let fetchQuietly = APIUtils.useGetMethod(~showErrorToast=false)
-    let (maxRetries, setMaxRetries) = React.useState(_ => None)
+  let make = (~story: option<story>, ~form: option<billingForm>, ~maxRetries: option<int>) => {
     let stage = story->Option.mapOr(Starting, s => s.stage)
     let invoice = story->Option.mapOr(Dict.make(), s => s.invoice)
     let order = invoice->RevenueRecoveryEntity.itemToObjMapperForIntents
@@ -651,32 +892,6 @@ module StatusRow = {
         : order.order_amount
     let money = amount => `${sign}${amount->Float.toFixedWithPrecision(~digits=2)}`
     let retries = story->Option.mapOr(0, s => s->attemptCount(~by="revrec"))
-
-    // Max retries is a setting of the invoice's billing connector, read once per connector
-    React.useEffect(() => {
-      if order.billing_connector_id->LogicUtils.isNonEmptyString {
-        let load = async () =>
-          try {
-            let url = getURL(
-              ~entityName=V2(V2_CONNECTOR),
-              ~methodType=Get,
-              ~id=Some(order.billing_connector_id),
-            )
-            let json = await fetchQuietly(url, ~version=V2)
-            setMaxRetries(_ =>
-              json
-              ->LogicUtils.getDictFromJsonObject
-              ->LogicUtils.getDictfromDict("feature_metadata")
-              ->LogicUtils.getDictfromDict("revenue_recovery")
-              ->LogicUtils.getOptionInt("max_retry_count")
-            )
-          } catch {
-          | _ => ()
-          }
-        load()->ignore
-      }
-      None
-    }, [order.billing_connector_id])
 
     <div className={`flex-1 min-w-0 flex items-center gap-4 ${body.md.medium} text-nd_gray-600`}>
       <StatePill stage />
@@ -721,6 +936,8 @@ module StoryView = {
     ~onRowClick,
     ~onStatesClick,
     ~onWaitingClick,
+    ~onRetryClick: retry => unit,
+    ~maxRetries: option<int>,
   ) => {
     let (showEvents, setShowEvents) = React.useState(_ => false)
     let rows = story->Option.mapOr([], s => s.timeline)
@@ -734,11 +951,25 @@ module StoryView = {
     let visibleRows = rows->Array.slice(~start=0, ~end=lastRawIndex + 1)
     let hasHistory = story->Option.mapOr(false, s => s.stageHistory->Array.length > 0)
     let hasStory = story->Option.isSome || optimistic->Option.isSome
-    let nextLabel =
-      visibleItems->Array.some(item => item.phase >= 3) ? "Next step →" : "Let Rev Rec retry →"
+    let hasRetries = visibleItems->Array.some(item => item.phase >= 3)
     // Rev Rec is overdue to book a retry: the proxy's note replaces the "Working…" line
     let waiting = isFinished ? None : story->Option.flatMap(s => s.waiting)
-    let showWorking = hasStory && !isFinished && !showNext && waiting->Option.isNone
+    // Until the report; after it the retry rows and the pills say what is going on
+    let showWorking =
+      hasStory &&
+      !isFinished &&
+      !showNext &&
+      !isWaitingForNext &&
+      !hasRetries &&
+      waiting->Option.isNone
+    let retryRows = shownItems->Array.reduce(0, (count, item) => count + item.retries->Array.length)
+    let growthKey = `${shownItems
+      ->Array.length
+      ->Int.toString}-${retryRows->Int.toString}-${isFinished ? "end" : ""}`
+    React.useEffect(() => {
+      followTail()
+      None
+    }, [growthKey])
     let firstAt =
       items
       ->Array.find(item => item.phase == 1 && item.at->LogicUtils.isNonEmptyString)
@@ -766,7 +997,9 @@ module StoryView = {
       // The panel's header band, 56 px: state pill, amount, Rev Rec retries, then the menu
       <div className="-mx-6 -mt-5 h-14 px-5 flex items-center gap-4 border-b border-nd_gray-150">
         {if hasStory {
-          <StatusRow story form={optimistic->Option.orElse(story->Option.flatMap(s => s.form))} />
+          <StatusRow
+            story form={optimistic->Option.orElse(story->Option.flatMap(s => s.form))} maxRetries
+          />
         } else {
           <p className={`flex-1 ${body.md.medium} text-nd_gray-500`}>
             {"Press Charge customer. Each step appears here."->React.string}
@@ -825,12 +1058,29 @@ module StoryView = {
                       animationDelay
                     />
                   </RenderIf>
-                  {switch item.outcome {
-                  | Some(_) =>
+                  {switch (item.outcome, item.retries) {
+                  | (Some(_), _) =>
                     <div id={phaseDomId(outcomePhase)}>
                       <OutcomeCard item revealClass animationDelay onOpen />
                     </div>
-                  | None =>
+                  | (None, retries) if retries->Array.length > 0 =>
+                    <RetryBlock
+                      retries=item.retries maxRetries onRetryClick revealClass animationDelay>
+                      <RenderIf condition=isLast>
+                        <NextControls
+                          showNext
+                          nextLabel="Let Rev Rec retry →"
+                          isWaiting=isWaitingForNext
+                          nextRetryAt={story->Option.flatMap(s => s.nextRetryAt)}
+                          waiting
+                          onWaitingWhy=onWaitingClick
+                          onNext
+                          inlineActions={isFinished ? [] : inlineActions}
+                          isBusy
+                        />
+                      </RenderIf>
+                    </RetryBlock>
+                  | (None, _) =>
                     <StepRow
                       domId={stepDomId(index)}
                       item
@@ -843,7 +1093,7 @@ module StoryView = {
                       <RenderIf condition={isLast && !isCreating}>
                         <NextControls
                           showNext
-                          nextLabel
+                          nextLabel="Let Rev Rec retry →"
                           isWaiting=isWaitingForNext
                           nextRetryAt={story->Option.flatMap(s => s.nextRetryAt)}
                           waiting
@@ -859,6 +1109,7 @@ module StoryView = {
               })
               ->React.array}
             </div>
+            <div id=tailDomId />
             <RenderIf condition={visibleRows->Array.length > 0}>
               <span
                 className={`w-fit cursor-pointer text-blue-500 hover:text-blue-700 ${body.md.medium}`}

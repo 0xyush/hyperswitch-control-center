@@ -97,7 +97,10 @@ let make = (~storyIdFromUrl: option<string>) => {
                   // A reopened story shows every step it already has
                   if startedHereId.current != id {
                     setRevealLimit(_ =>
-                      polledStory->SimulatorStorySteps.buildStoryItems->snd->Array.length
+                      polledStory
+                      ->SimulatorStorySteps.buildStoryItems(~maxRetries=None)
+                      ->snd
+                      ->Array.length
                     )
                   }
                 }
@@ -177,7 +180,9 @@ let make = (~storyIdFromUrl: option<string>) => {
           ~body=Dict.make()->JSON.Encode.object,
         )
         let updated = json->storyMapper
-        setRevealLimit(_ => updated->SimulatorStorySteps.buildStoryItems->snd->Array.length)
+        setRevealLimit(_ =>
+          updated->SimulatorStorySteps.buildStoryItems(~maxRetries=None)->snd->Array.length
+        )
         setStory(_ => Some(updated))
       } catch {
       | exn =>
@@ -207,20 +212,28 @@ let make = (~storyIdFromUrl: option<string>) => {
     )
   }
 
-  // Pacing (STORY-STEPS.md section 6), over the grouped steps of STORY-DESIGN.md
-  let (_, items) = React.useMemo1(
-    () => story->Option.mapOr(("", []), SimulatorStorySteps.buildStoryItems),
-    [story],
+  // Pacing: the billing part shows by itself, then one press of "Let Rev Rec retry" and every
+  // retry after it shows live until the invoice ends
+  let maxRetries = SimulatorStorySteps.useMaxRetries(story)
+  let (_, items) = React.useMemo2(
+    () =>
+      story->Option.mapOr(("", []), story =>
+        story->SimulatorStorySteps.buildStoryItems(~maxRetries)
+      ),
+    (story, maxRetries),
   )
   let itemTotal = items->Array.length
+  let isFollowing = SimulatorStorySteps.isFollowingLive(~items, ~revealLimit, ~autoPlay)
   let visibleCount = SimulatorStorySteps.visibleItemCount(~items, ~revealLimit, ~autoPlay)
   let allShown = visibleCount == itemTotal
   // The outcome card is the last item once the story is done
   let isFinished = isDone && itemTotal > 0 && allShown
   // The pause starts once the billing system has told Rev Rec
   let hasReport = items->Array.some(item => item.phase >= 2)
-  let showNext = !autoPlay && hasReport && !isFinished
-  let isWaitingForNext = showNext && revealLimit > visibleCount && allShown
+  let hasRetries = items->Array.some(item => item.phase >= 3)
+  let showNext = !isFollowing && hasReport && !isFinished
+  // Rev Rec has not booked its first retry yet
+  let isWaitingForNext = isFollowing && hasReport && !hasRetries && !isFinished
   let onNext = () => {
     mixpanelEvent(~eventName="recovery_simulator_next_step")
     setRevealLimit(_ => visibleCount + 1)
@@ -326,6 +339,9 @@ let make = (~storyIdFromUrl: option<string>) => {
             onRowClick={row => setDrawerContent(_ => Some(StepDetails(row)))}
             onStatesClick={() => setDrawerContent(_ => Some(StateHistory))}
             onWaitingClick={() => setDrawerContent(_ => Some(WaitingDetails))}
+            onRetryClick={retry =>
+              setDrawerContent(_ => Some(RetryDetails(retry.booking, retry.charge, retry.number)))}
+            maxRetries
           />
           {switch story {
           | Some(s) if !(s.invoice->isEmptyDict) => <InvoiceCard story=s />

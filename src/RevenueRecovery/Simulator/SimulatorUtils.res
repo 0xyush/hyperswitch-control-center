@@ -16,8 +16,8 @@ let getSimUrl = path => `${getConfig().simUrl}${path}`
 // Why a smart-mode profile books no retries on the sandbox today (PRD ask 2)
 let smartDeciderNote = "Smart mode needs a decider service. The sandbox lacks it for this merchant (ask 2)."
 
-// PRD section 7: poll the story every 4 s
-let pollIntervalMs = 4000
+// The story polls every 2 s while it runs, so a retry on the fast engine shows within about 2 s
+let pollIntervalMs = 2000
 
 // Amount on the wire is in minor units (6540 = 65.40); the form shows major units
 let toMajorText = minor => (minor->Int.toFloat /. 100.0)->Float.toFixedWithPrecision(~digits=2)

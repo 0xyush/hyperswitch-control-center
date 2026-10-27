@@ -556,26 +556,26 @@ module NextControls = {
     ~isBusy,
   ) => {
     let isStalled = waiting->Option.isSome
-    <RenderIf condition={showNext || isStalled || inlineActions->Array.length > 0}>
+    <RenderIf condition={showNext || isStalled || isWaiting || inlineActions->Array.length > 0}>
       // Clicks here must not open the step's drawer
       <div
         className="flex flex-wrap items-center gap-3 pt-3"
         onClick={event => event->ReactEvent.Mouse.stopPropagation}>
         {switch (isStalled, showNext, isWaiting, nextRetryAt) {
         | (true, _, _, _) => <StallPill onWhy=onWaitingWhy />
-        | (false, false, _, _) => React.null
-        | (false, true, true, Some(time)) =>
+        | (false, _, true, Some(time)) =>
           <div className={`${pillStyle} bg-nd_gray-150 text-nd_gray-600`}>
             {"Rev Rec retries "->React.string}
             <Countdown nextRetryAt=time />
           </div>
-        | (false, true, true, None) =>
+        | (false, _, true, None) =>
           <div className={`${pillStyle} bg-nd_gray-150 text-nd_gray-600`}>
             <Loadericon size=14 iconColor="text-nd_gray-500" />
             {"Waiting for Rev Rec…"->React.string}
           </div>
         | (false, true, false, _) =>
           <Button text=nextLabel buttonType=Primary buttonSize=Medium onClick={_ => onNext()} />
+        | (false, false, false, _) => React.null
         }}
         {inlineActions
         ->Array.map(((text, onClick)) =>

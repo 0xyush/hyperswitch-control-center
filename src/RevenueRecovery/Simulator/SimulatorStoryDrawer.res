@@ -362,6 +362,87 @@ module ExplainDrawer = {
             </Section>
           </RenderIf>
         </Body>
+      // One retry: the booking and the charge together
+      | Some(RetryDetails(booking, charge, number)) =>
+        let rows = [booking, charge]->Array.filterMap(row => row)
+        let requests =
+          rows->Array.flatMap(row => story->Option.mapOr([], s => s.requests->requestsForRow(row)))
+        let main = charge->Option.orElse(booking)
+        let title = switch charge {
+        | Some(row) =>
+          `Retry ${number->Int.toString} · ${row->isApproved ? "Approved" : "Declined"}`
+        | None => `Retry ${number->Int.toString} · Booked`
+        }
+        let facts = [
+          Some(("Who", "Rev Rec to Stripe"->React.string)),
+          booking->Option.map(row => (
+            "Booked",
+            `For ${row->SimulatorStorySteps.bookedTimeOf}, picked at ${row.at->toClockTime}`->React.string,
+          )),
+          charge->Option.map(row => (
+            "Charged",
+            <Table.DateCell
+              textStyle={`${body.md.medium} text-nd_gray-800`}
+              timestamp={row.at->toUtcIso->String.replaceRegExp(%re("/\.\d+(?=Z$)/"), "")}
+              isCard=true
+            />,
+          )),
+          main->Option.flatMap(row =>
+            history
+            ->stageAt(row.at)
+            ->Option.map(visit => (
+              "Invoice state",
+              `${visit.stage->stageName} (since ${visit.firstSeenAt->toClockTime})`->React.string,
+            ))
+          ),
+          charge
+          ->Option.flatMap(row => row->chargeIdOf(~story))
+          ->Option.map(id => ("Charge", <CopyId id />)),
+          recoveryId->LogicUtils.isNonEmptyString
+            ? Some(("Invoice", <CopyId id=recoveryId />))
+            : None,
+          Some((
+            "Result",
+            switch charge {
+            | Some(row) => row->resultText(~httpStatus=None)
+            | None => "Waiting for the booked time"
+            }->React.string,
+          )),
+        ]->Array.filterMap(fact => fact)
+        let meaningText =
+          rows->Array.map(meaning)->Array.filter(LogicUtils.isNonEmptyString)->Array.joinWith(" ")
+        // The same reason can come with both events
+        let why =
+          rows
+          ->Array.flatMap(row => row.why)
+          ->Array.reduce([], (kept, line: explainLine) =>
+            kept->Array.some((other: explainLine) => other.text == line.text)
+              ? kept
+              : kept->Array.concat([line])
+          )
+        <Body>
+          {title->drawerTitle}
+          <Facts facts />
+          <RenderIf condition={meaningText->LogicUtils.isNonEmptyString}>
+            <Section title="What this means">
+              <p className={`${body.md.medium} text-nd_gray-700`}> {meaningText->React.string} </p>
+            </Section>
+          </RenderIf>
+          <RenderIf condition={why->Array.length > 0}>
+            <Section title="Why">
+              <WhyLines lines=why />
+            </Section>
+          </RenderIf>
+          <RenderIf condition={requests->Array.length > 0}>
+            <Section title="Request and response">
+              <div className="flex flex-col gap-4">
+                {requests
+                ->Array.mapWithIndex((log, index) => <CallCard key={index->Int.toString} log />)
+                ->React.array}
+              </div>
+            </Section>
+          </RenderIf>
+        </Body>
       | Some(WaitingDetails) =>
         <Body>
           {switch story->Option.flatMap(s => s.waiting) {
