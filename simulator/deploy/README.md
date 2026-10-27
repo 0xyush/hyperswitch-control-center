@@ -88,6 +88,7 @@ gcloud run deploy revrec-sim-dashboard --image $DASH_IMAGE --region $REGION \
 ```
 
 - **Keys checked by B** with the dashboard's own config handler: `api_url`, `sim_url` (no `/api`; the dashboard calls `/sim/*` there), the three feature flags and the simulator ids. The flags and ids are already in the committed `config.toml`, so only `api_url` and `sim_url` are strictly needed.
+- **The `[default.simulator]` ids must match the engine the proxy talks to.** The committed `config.toml` holds the self-hosted VM engine's org, merchant and profile; when the proxy uses another engine (for example the shared sandbox), set `default__simulator__org_id`, `default__simulator__merchant_id` and `default__simulator__profile_id`, or every page answers 403 ("Access Forbidden").
 - **Why not the repo-root `Dockerfile`:**
   - Its `npm i` runs the postinstall `git config core.hooksPath`, which fails without `.git`, and Cloud Build uploads no `.git`.
   - `webpack.server.js` runs `git rev-parse HEAD`.

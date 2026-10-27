@@ -133,9 +133,10 @@ display_configs=[]
 # Override with env, for example default__simulator__profile_id=pro_xxx
 [default.simulator]
 sim_url="http://localhost:8787"
-org_id="org_zS11mfgp7UAPtCdunDYj"
-merchant_id="revenue_recovery_x8gd0pzm6l_MhOXrZKGDMGeVFF7VT17"
-profile_id="pro_2qWOGZLPJQRRY0O75DXg"
+# The engine the proxy talks to: the self-hosted VM engine (simulator/selfhost)
+org_id="org_l6DAJCc3YH0hY8KC0quv"
+merchant_id="revrec_sim_UI1B0CLGpcQUbVoFuZmc"
+profile_id="pro_ERRABdriTTf2P9zQAaOo"
 [default.merchant_config]
 [default.merchant_config.allowlist]
 [default.merchant_config.allowlist.dev_recon_engine_v1]
