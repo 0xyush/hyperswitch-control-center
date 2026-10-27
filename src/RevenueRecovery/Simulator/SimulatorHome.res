@@ -42,6 +42,12 @@ let make = () => {
             text="Try It Out"
             buttonType=Primary
             buttonSize=Large
+            // 48 px high, 32 px each side. The padding goes on the text, not the button: the
+            // button's gradient is clipped to its content box, so button padding shows a box.
+            customHeightClass="h-12"
+            customTextPaddingClass="py-3 pl-8 pr-8"
+            textWeight="text-base font-semibold"
+            customButtonStyle="!w-auto"
             onClick={_ => {
               mixpanelEvent(~eventName="recovery_simulator_try_it_out")
               RescriptReactRouter.push(
