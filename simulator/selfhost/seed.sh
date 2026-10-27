@@ -90,7 +90,7 @@ PH() { echo "X-Profile-Id: $PROFILE_ID"; }
 
 # 0. Wait for the router.
 for _ in $(seq 1 60); do
-  api GET health
+  api GET v2/health
   [ "$CODE" = 200 ] && break
   sleep 2
 done
