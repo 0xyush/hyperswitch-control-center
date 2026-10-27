@@ -653,14 +653,31 @@ async function failingCharge(story: Story, step: string, suffix: string) {
         : []),
     ],
   });
-  // What the billing system tells Rev Rec: what its processor said.
-  const error = {
+  return { txnId, error: reportedError(err, declineCode, d?.ndc) };
+}
+
+// What the billing system tells Rev Rec: what its processor said. The message carries Stripe's
+// decline code in the form Hyperswitch's Stripe connector gives its error reason
+// ("message - <message>, decline_code - <code>", connectors/stripe.rs). Rev Rec marks the reported
+// card as a hard decline from a GSM row matched on the reported code and message only
+// (core/webhooks/recovery_incoming.rs, store_payment_processor_tokens_in_redis), and Stripe's
+// plain message is the same for a stolen card and a generic decline. In this form, one GSM row
+// matches both the reported failure and Rev Rec's own Stripe retries (check_hard_decline reads
+// the reason for Stripe), and a plain card_declined stays a soft decline.
+export function reportedError(
+  err: { code?: string; message?: string; decline_code?: string },
+  declineCode: string,
+  ndc: string | undefined,
+) {
+  const message = err.message ?? "Your card was declined.";
+  return {
     code: err.code ?? "card_declined",
-    message: err.message ?? "Your card was declined.",
+    message: err.decline_code
+      ? `message - ${message}, decline_code - ${err.decline_code}`
+      : message,
     reason: `decline_code - ${declineCode}`,
-    network_decline_code: d?.ndc ?? "05",
+    network_decline_code: ndc ?? "05",
   };
-  return { txnId, error };
 }
 
 // The POST /v2/recovery body, as the sandbox accepts it on 23 Oct 2026.
@@ -724,12 +741,15 @@ export function sampleRecoveryBodies() {
     txnId: "pi_contract_probe_failure",
     token: "pm_contract_probe",
     card: "0341",
-    error: {
-      code: "card_declined",
-      message: "Your card was declined.",
-      reason: "decline_code - generic_decline",
-      network_decline_code: "05",
-    },
+    error: reportedError(
+      {
+        code: "card_declined",
+        message: "Your card was declined.",
+        decline_code: "generic_decline",
+      },
+      "generic_decline",
+      "05",
+    ),
   });
   const charged = recoveryBody(story, {
     status: "charged",

@@ -52,7 +52,8 @@ const { matchRule } = await import("../src/passthrough.ts");
 const { redact } = await import("../src/redact.ts");
 const { shellStub } = await import("../src/shell.ts");
 const { PRESETS, resolveCards } = await import("../src/scenarios.ts");
-const { parseStart, revrecChargeWhy } = await import("../src/story.ts");
+const { parseStart, reportedError, revrecChargeWhy } =
+  await import("../src/story.ts");
 const { parsePortfolio, setupStage } = await import("../src/portfolio.ts");
 const { parseStopAfter, portfolioConfig } = await import("../src/config.ts");
 const { createServer } = await import("../src/server.ts");
@@ -208,6 +209,59 @@ describe("presets and start body", () => {
         { status: 400 },
         JSON.stringify(body),
       );
+  });
+});
+
+describe("reported failure", () => {
+  test("the message carries Stripe's decline code, as the GSM hard-decline rows expect", () => {
+    const stolen = reportedError(
+      {
+        code: "card_declined",
+        message: "Your card was declined.",
+        decline_code: "stolen_card",
+      },
+      "stolen_card",
+      "43",
+    );
+    assert.equal(stolen.code, "card_declined");
+    assert.equal(
+      stolen.message,
+      "message - Your card was declined., decline_code - stolen_card",
+    );
+    assert.equal(stolen.network_decline_code, "43");
+    const expired = reportedError(
+      {
+        code: "expired_card",
+        message: "Your card has expired.",
+        decline_code: "expired_card",
+      },
+      "expired_card",
+      "54",
+    );
+    assert.equal(
+      expired.message,
+      "message - Your card has expired., decline_code - expired_card",
+    );
+    // A generic decline is not one of the hard-decline messages.
+    const generic = reportedError(
+      {
+        code: "card_declined",
+        message: "Your card was declined.",
+        decline_code: "generic_decline",
+      },
+      "generic_decline",
+      "01",
+    );
+    assert.notEqual(generic.message, stolen.message);
+    // No decline code from Stripe: the plain message.
+    assert.equal(
+      reportedError(
+        { code: "processing_error", message: "An error occurred." },
+        "processing_error",
+        "96",
+      ).message,
+      "An error occurred.",
+    );
   });
 });
 

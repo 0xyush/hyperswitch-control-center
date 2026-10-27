@@ -211,12 +211,18 @@ for key in pt_mapping_pcr_retries pt_mapping_adaptive_retries; do
 done
 say "retry ladder $(jq -c '.default_mapping' <<<"$LADDER_JSON")"
 
-# 9. GSM rows: Stripe hard declines stop Rev Rec at once.
-# check_hard_decline (crates/router/src/workflows/revenue_recovery.rs) looks up connector, flow
-# "revenue_recovery", sub_flow "sub_flow", the error code, and for Stripe the error reason
-# ("message - <message>, decline_code - <code>", connectors/stripe.rs). The retry scheduler
-# (core/revenue_recovery/types.rs) looks up the plain message, so expired_card has both forms.
-# Stripe's plain message for stolen_card is the generic "Your card was declined.", so it has one.
+# 9. GSM rows: Stripe hard declines stop Rev Rec at once. Every lookup matches connector "stripe",
+# flow "revenue_recovery", sub_flow "sub_flow", code and message exactly. Three lookups use them:
+# - The reported failure (core/webhooks/recovery_incoming.rs, store_payment_processor_tokens_in_redis)
+#   uses the code and message the billing system sent, and marks the reported card's token as a hard
+#   decline. When every token of the customer is a hard decline, Rev Rec ends the retry work with no
+#   charge. The simulator reports the message as "message - <message>, decline_code - <code>"
+#   (proxy src/story.ts reportedError), because Stripe's plain message is the same for a stolen card
+#   and a generic decline.
+# - Rev Rec's own Stripe charge (workflows/revenue_recovery.rs check_hard_decline) uses the error
+#   reason for Stripe, in the same form (connectors/stripe.rs). So the first two rows serve both.
+# - The retry scheduler (core/revenue_recovery/types.rs) uses the plain message: the third row.
+#   A stolen card has no plain-message row: "Your card was declined." would stop generic declines.
 gsm_row() { # code message description
   jq -cn --arg code "$1" --arg message "$2" --arg description "$3" '
     {connector: "stripe", flow: "revenue_recovery", sub_flow: "sub_flow", code: $code,
