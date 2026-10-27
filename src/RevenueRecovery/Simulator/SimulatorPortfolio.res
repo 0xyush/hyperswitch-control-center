@@ -738,7 +738,6 @@ let make = (~runIdFromUrl: option<string>) => {
 
   let isOver = run->Option.mapOr(false, (r: portfolioRun) => r.status->isRunOver || r.isFixture)
   let isRunning = run->Option.isSome && !isOver
-  let isSettingUp = run->Option.mapOr(false, (r: portfolioRun) => r.status == SettingUp)
   let (limits, setLimits) = React.useState(_ => defaultLimits)
 
   // The proxy's limits: how many invoices, and the stop-after choices
@@ -769,7 +768,7 @@ let make = (~runIdFromUrl: option<string>) => {
     None
   }, [])
 
-  // Poll a real run until it is done
+  // Poll a real run every 2 s while it is active; no polling once it has ended
   React.useEffect(() => {
     switch runIdFromUrl {
     | Some(id) if !isOver => {
@@ -798,10 +797,7 @@ let make = (~runIdFromUrl: option<string>) => {
           }
         }
         poll()->ignore
-        let intervalId = setInterval(
-          () => poll()->ignore,
-          isSettingUp ? setupPollIntervalMs : pollIntervalMs,
-        )
+        let intervalId = setInterval(() => poll()->ignore, activePollIntervalMs)
         Some(
           () => {
             cancelled := true
@@ -811,7 +807,7 @@ let make = (~runIdFromUrl: option<string>) => {
       }
     | _ => None
     }
-  }, (runIdFromUrl, isOver, isSettingUp))
+  }, (runIdFromUrl, isOver))
 
   let onRun = async () => {
     setIsBusy(_ => true)

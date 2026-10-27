@@ -1,10 +1,10 @@
 open SimulatorPortfolioTypes
 open LogicUtils
 
-// The proxy refreshes a run every 30 s, so the screen polls at the same pace. During setup the
-// proxy only reads its own memory, so the live board polls every 2 s.
-let pollIntervalMs = 30000
-let setupPollIntervalMs = 2000
+// While a run is active (setting up or running) the screen polls every 2 s: the proxy answers
+// from its own memory, and on the fast self-hosted engine a whole run takes about a minute.
+// Polling stops when the run ends.
+let activePollIntervalMs = 2000
 
 let portfolioPath = RevenueRecoverySidebarValues.simulatorPortfolioPath
 
