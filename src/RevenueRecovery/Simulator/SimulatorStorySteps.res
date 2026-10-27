@@ -754,8 +754,8 @@ let useMaxRetries = (story: option<story>) => {
   maxRetries
 }
 
-// One retry on one line: "Retry 3 of 15 · charged ••0341" with its result chip, or, while it waits,
-// "Retry 4 of 15 · booked for 8:40:36 · in 3 s". The time sits in the right column.
+// One retry, one row of the block's grid: dot | sentence | chip | ? | time. The chip is the
+// charge's result, or, while the retry waits, its countdown ("in 3 s").
 module RetryRow = {
   @react.component
   let make = (~retry: retry, ~maxRetries: option<int>, ~onOpen) => {
@@ -767,57 +767,52 @@ module RetryRow = {
         let card = charge.label->cardOf
         (
           charge.status->toneOf->dotClass,
-          <>
-            {`${number} · charged ${card->LogicUtils.isNonEmptyString
-                ? `••${card}`
-                : "the saved card"}`->React.string}
-          </>,
-          charge->chargeChip,
+          `${number} · charged ${card->LogicUtils.isNonEmptyString
+              ? `••${card}`
+              : "the saved card"}`,
+          charge
+          ->chargeChip
+          ->Option.mapOr(React.null, ((label, chipTone)) =>
+            <Chip className={chipTone->toneChipClass}> {label->React.string} </Chip>
+          ),
           charge.at->toClockTime,
         )
       }
     | (None, dueAt) => (
         "bg-nd_gray-300 animate-pulse",
-        <>
-          {`${number} · booked for ${dueAt->Option.mapOr("", toClockTime)} · `->React.string}
-          {switch dueAt {
-          | Some(time) => <Countdown nextRetryAt=time />
-          | None => React.null
-          }}
-        </>,
-        None,
+        // A non-breaking space keeps "10:13:01 AM" together when the sentence wraps
+        `${number} · booked for ${dueAt->Option.mapOr("", time =>
+            time->toClockTime->String.replaceRegExp(%re("/ /g"), "\u00A0")
+          )}`,
+        dueAt->Option.mapOr(React.null, time =>
+          <Chip className={ToneInfo->toneChipClass}>
+            <Countdown nextRetryAt=time />
+          </Chip>
+        ),
         retry.booking->Option.mapOr("", booking => booking.at->toClockTime),
       )
     }
-    <div className="flex items-center gap-3 min-h-12 cursor-pointer" onClick={_ => onOpen()}>
-      <div className="w-8 shrink-0 flex justify-center">
+    <div
+      className="col-span-5 grid grid-cols-subgrid items-center min-h-12 py-1.5 rounded-md cursor-pointer hover:bg-nd_gray-25"
+      onClick={_ => onOpen()}>
+      <div className="flex justify-center">
         <div className={`relative z-10 w-2.5 h-2.5 rounded-full ${dot}`} />
       </div>
-      <div
-        className="flex-1 min-w-0 min-h-12 py-1.5 flex items-center gap-4 rounded-md px-3 hover:bg-nd_gray-25">
-        // The sentence and its chip share a line when they fit; else the chip wraps under it
-        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-4 gap-y-1">
-          <p className={`${body.md.semibold} text-nd_gray-800`}> text </p>
-          {switch chip {
-          | Some((label, chipTone)) =>
-            <Chip className={chipTone->toneChipClass}> {label->React.string} </Chip>
-          | None => React.null
-          }}
-        </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <HelpButton onClick=onOpen />
-          <span className={`w-20 text-right ${body.sm.regular} text-nd_gray-400`}>
-            {time->React.string}
-          </span>
-        </div>
-      </div>
+      <p className={`${body.md.semibold} text-nd_gray-800`}> {text->React.string} </p>
+      <div className="min-w-0"> chip </div>
+      <HelpButton onClick=onOpen />
+      <span className={`text-right pr-2 ${body.sm.regular} text-nd_gray-400`}>
+        {time->React.string}
+      </span>
     </div>
   }
 }
 
 let shownRetryLimit = 5
 
-// Rev Rec's retries under one heading, one row each. A long run shows the latest five, with the
+// Rev Rec's retries under one heading, one row each, on one grid so every chip, "?" and time
+// starts at the same x. The chip column is as wide as the widest chip; the sentence takes the
+// rest and wraps in its cell when the panel is narrow. A long run shows the latest five, with the
 // rest behind "Show all N retries".
 module RetryBlock = {
   @react.component
@@ -838,21 +833,23 @@ module RetryBlock = {
     <div className={`flex flex-col ${revealClass}`} style={animationDelay: ?animationDelay}>
       <RenderIf condition={total > shownRetryLimit}>
         <span
-          className={`ml-11 w-fit py-1 cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
+          className={`ml-12 w-fit py-1 cursor-pointer text-blue-500 hover:text-blue-700 ${body.sm.medium}`}
           onClick={_ => setShowAll(prev => !prev)}>
           {(
             showAll ? "Show the latest 5" : `Show all ${total->Int.toString} retries`
           )->React.string}
         </span>
       </RenderIf>
-      {shown
-      ->Array.map(retry =>
-        <RetryRow
-          key={retry.number->Int.toString} retry maxRetries onOpen={() => onRetryClick(retry)}
-        />
-      )
-      ->React.array}
-      <div className="ml-11"> children </div>
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)_max-content_auto_5rem] gap-x-4">
+        {shown
+        ->Array.map(retry =>
+          <RetryRow
+            key={retry.number->Int.toString} retry maxRetries onOpen={() => onRetryClick(retry)}
+          />
+        )
+        ->React.array}
+      </div>
+      <div className="ml-12"> children </div>
     </div>
   }
 }
