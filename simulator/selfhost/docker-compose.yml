@@ -92,6 +92,10 @@ services:
     volumes: *hs-volumes
     ports:
       - "127.0.0.1:8080:8080"
+      # The VM's private address, so Cloud Run reaches the router over the VPC (Direct VPC egress).
+      # Not reachable from the internet: the firewall allows 8080 only from inside the VPC.
+      # Unset = 127.0.0.2, a second loopback address, so nothing extra is exposed.
+      - "${HS_PRIVATE_IP:-127.0.0.2}:8080:8080"
     depends_on:
       redis-standalone:
         condition: service_healthy
