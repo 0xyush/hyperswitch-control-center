@@ -29,8 +29,9 @@ STATE="$STATE_DIR/seed.env"
 RETRY_MODE="${RETRY_MODE:-cascading}"
 JWT_DAYS="${JWT_DAYS:-30}"
 # start_after: seconds before Rev Rec's first charge; [gap, count]: seconds between later retries.
-# Default: first charge after 3 s, then every 5 s, 15 times (simulator/SELF-HOST.md).
-DEFAULT_LADDER='{"default_mapping":{"start_after":3,"frequencies":[[5,15]]}}'
+# Default: first charge after 3 s, then every 1 s, 15 times. With the 1 s reopen buffer in
+# config.toml, a retry cycle is about 5 s, so 15 retries take about 75 s (27 Oct; it was [[5,15]]).
+DEFAULT_LADDER='{"default_mapping":{"start_after":3,"frequencies":[[1,15]]}}'
 LADDER_JSON="${LADDER_JSON:-$DEFAULT_LADDER}"
 
 die() {

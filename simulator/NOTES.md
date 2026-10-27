@@ -457,3 +457,14 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
     - Portfolio 1 min, default mix (`pf_df48a281`, before the race fix): 91 s in all (setup 25 s), 8/10 recovered on each side, the stolen card terminated with 0 attempts.
     - 10 temporary errors on a test instance (`pf_a1742cdd`): 20/20 recovered, ended at 50 s, flips 3–14 s late.
   - **Preset 4 is engine-bound:** a retry every 13 s (5 s reopen buffer in config.toml + 5 s ladder gap + 1 s random delay + about 2 s of work), so 15 retries take about 3.3 min. For about 1 min: ladder gap 1 s (`LADDER_JSON`, seed.sh, no restart) gives about 9 s per retry; `reopen_workflow_buffer_time_in_seconds` 1 too (config.toml, restart router and schedulers) gives about 5 s. Or a lower max retries. Not changed: the orchestrator's call.
+
+- 2026-10-27 05:45 [A] **Self-host engine at a 5 s retry cycle** (orchestrator's call on the 05:55 numbers).
+  - `config.toml` `reopen_workflow_buffer_time_in_seconds` 5 → 1. seed.sh default ladder `{"start_after":3,"frequencies":[[1,15]]}` (was `[[5,15]]`). The VM's `.env` `LADDER_JSON` line was set to the same value; it had held the old ladder.
+  - Deployed: both files copied in place to `/opt/revrec-hs`; `docker compose up -d --no-deps --force-recreate router producer consumer` (router healthy in 9 s); seed rerun (every object kept, ladder and GSM rows written). The tunnel `localhost:8090` answered 200 after the restart.
+  - **Re-proof** (four presets at once):
+    - Preset 7 `st_1e6acbfbdf89`: Terminated at +4 s, 0 Rev Rec attempts.
+    - Preset 2 `st_d905788218bf`: Recovered at +8 s, 1 attempt.
+    - Preset 6 `st_0029cee4d044`: swap at +10 s, Recovered at +14 s, 2 attempts.
+    - Preset 4 `st_b81c58767e37`: 15 retries 5.0 s apart (76 s from the first failure), Terminated at +79 s.
+  - Fast preset texts updated to the 5 s pace (preset 4 and 5: "about 80 s").
+  - **Local proxy only:** `.env.vm` `RATE_LIMIT_PORTFOLIO_PER_HOUR=20` (cloud default unchanged: 1, `deploy/proxy.env.yaml` untouched). The limit counts runs started in the past hour from the run store, so `pf_df48a281` (05:29) uses 1 of the 20 until it ages out; no run was deleted.

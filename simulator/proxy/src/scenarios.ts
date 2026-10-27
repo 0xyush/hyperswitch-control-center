@@ -175,7 +175,7 @@ export type Preset = {
   sendDuplicateOnStart?: boolean;
   hint: string;
   // The texts at the pace of the self-hosted engine (SIM_FAST_ENGINE=1): a retry booked within
-  // about 10 s and Rev Rec retries 10 to 15 s apart (measured 27 Oct). Unset fields keep the above.
+  // about 10 s and Rev Rec retries about 5 s apart (measured 27 Oct). Unset fields keep the above.
   fast?: Partial<Pick<Preset, "summary" | "expected" | "liveTime" | "hint">>;
 };
 
@@ -245,10 +245,10 @@ export const PRESETS: Preset[] = [
     hint: "Long. Cancel the invoice when you have seen enough.",
     fast: {
       summary:
-        "A card that never works. Rev Rec retries every 10 to 15 s on this engine.",
+        "A card that never works. Rev Rec retries about every 5 s on this engine.",
       expected: "15 Rev Rec retries, then Terminated (max retries 15)",
-      liveTime: "about 3 min",
-      hint: "About 3 min to reach max retries. Cancel the invoice when you have seen enough.",
+      liveTime: "about 80 s",
+      hint: "About 80 s to reach max retries. No action needed.",
     },
   },
   {
@@ -267,8 +267,8 @@ export const PRESETS: Preset[] = [
     fast: {
       expected:
         "Max retries (15) comes before the Visa limit (~20): Terminated after 15 retries",
-      liveTime: "about 3 min",
-      hint: "About 3 min. Cancel the invoice when you have seen enough.",
+      liveTime: "about 80 s",
+      hint: "About 80 s. No action needed.",
     },
   },
   {

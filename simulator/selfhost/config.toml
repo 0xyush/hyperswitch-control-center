@@ -1592,7 +1592,7 @@ max_retry_count_for_thirty_day = 20
 # selfhost: fast demo. The v2 router needs all six fields; upstream lists three.
 initial_timestamp_in_seconds = 5
 job_schedule_buffer_time_in_seconds = 5
-reopen_workflow_buffer_time_in_seconds = 5
+reopen_workflow_buffer_time_in_seconds = 1 # selfhost: 1 s, so a retry cycle is about 5 s (27 Oct)
 max_random_schedule_delay_in_seconds = 1
 redis_ttl_buffer_in_seconds = 300
 unretried_invoice_schedule_time_offset_seconds = 5

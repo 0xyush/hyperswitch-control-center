@@ -43,7 +43,7 @@ The plan and the acceptance checks are in `../SELF-HOST.md`.
 
 The ladder is in the DB configs table, so a change needs no restart.
 
-- Set it for the next seed run: `LADDER_JSON='{"default_mapping":{"start_after":3,"frequencies":[[5,15]]}}'` in `.env`, then run the seed again.
+- Set it for the next seed run: `LADDER_JSON='{"default_mapping":{"start_after":3,"frequencies":[[1,15]]}}'` (the default) in `.env`, then run the seed again.
 - `start_after` is the wait in seconds before Rev Rec's first charge. Each `[gap, count]` pair is `count` retries, `gap` seconds apart.
 - Why the DB: Hyperswitch reads Superposition first, then the DB. The upstream Superposition seed holds a slow ladder (60 s, then hours apart). `prepare.sh` removes the ladder keys from the copy the router reads, so the DB value applies.
 

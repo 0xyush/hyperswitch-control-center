@@ -40,7 +40,7 @@ type Reason = (typeof REASONS)[number];
 // The scripted bank (PORTFOLIO.md §3): the first-charge card per reason, and when "the money is
 // back" after the invoice starts, drawn per invoice from the range. null = never.
 // flip: minutes, at sandbox pace (Rev Rec retries minutes apart).
-// fastFlipSec: seconds, for the self-hosted engine (SIM_FAST_ENGINE=1; retries 10 to 15 s apart),
+// fastFlipSec: seconds, for the self-hosted engine (SIM_FAST_ENGINE=1; retries about 5 s apart),
 // so a 1 min run still sees each bank change and the next retry after it.
 type Bank = {
   card: FirstChargeId;
