@@ -320,6 +320,34 @@ describe("fast engine pace (SIM_FAST_ENGINE)", () => {
       assert.ok(m * 60 >= 9.9 && m * 60 <= 30.1, String(m));
     }
   });
+  test("no preset text says sandbox on the self-hosted engine, at either pace", () => {
+    const saved = { engine: config.engine, fast: config.fastEngine };
+    try {
+      config.engine = "selfhost";
+      for (const fast of [false, true]) {
+        config.fastEngine = fast;
+        for (const p of PRESETS) {
+          const x = presetText(p);
+          for (const f of ["title", "summary", "expected", "liveTime", "hint"])
+            assert.doesNotMatch(
+              String((x as any)[f]),
+              /sandbox/i,
+              `preset ${p.id} ${f} (fast ${fast})`,
+            );
+        }
+      }
+      // The sandbox keeps its own words.
+      config.engine = "sandbox";
+      config.fastEngine = false;
+      assert.match(
+        presetText(PRESETS.find((p: any) => p.id === 7)!).hint,
+        /sandbox/,
+      );
+    } finally {
+      config.engine = saved.engine;
+      config.fastEngine = saved.fast;
+    }
+  });
   test("preset texts follow the engine", () => {
     const p7 = PRESETS.find((p: any) => p.id === 7)!;
     assert.equal(config.fastEngine, false);

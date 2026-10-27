@@ -177,11 +177,17 @@ export type Preset = {
   // The texts at the pace of the self-hosted engine (SIM_FAST_ENGINE=1): a retry booked within
   // about 10 s and Rev Rec retries about 5 s apart (measured 27 Oct). Unset fields keep the above.
   fast?: Partial<Pick<Preset, "summary" | "expected" | "liveTime" | "hint">>;
+  // Texts without the word "sandbox", for the self-hosted engine (HS_ENGINE=selfhost) at any pace.
+  selfhost?: Partial<Pick<Preset, "summary" | "expected" | "hint">>;
 };
 
-// A preset's texts for the engine in use.
-export const presetText = (p: Preset) =>
-  config.fastEngine ? { ...p, ...p.fast } : p;
+// A preset's texts for the engine in use: the base texts, then the self-hosted ones, then the
+// fast-pace ones.
+export const presetText = (p: Preset): Preset => ({
+  ...p,
+  ...(config.engine === "selfhost" ? p.selfhost : {}),
+  ...(config.fastEngine ? p.fast : {}),
+});
 
 export const PRESETS: Preset[] = [
   {
@@ -235,6 +241,9 @@ export const PRESETS: Preset[] = [
     title: "Card keeps declining",
     summary:
       "A card that never works. Rev Rec retries every few minutes on the sandbox.",
+    selfhost: {
+      summary: "A card that never works. Rev Rec retries it until max retries.",
+    },
     card: "0341",
     customer: "new",
     expected: "A retry every ~2 min; the end state is not yet verified",
@@ -303,6 +312,11 @@ export const PRESETS: Preset[] = [
     verified: false,
     reportAgainMode: "duplicate",
     hint: "On 23 Oct the sandbox still retried. Cancel the invoice when done.",
+    selfhost: {
+      expected:
+        "Terminated at once: the reported stolen card is a hard decline, so Rev Rec makes no retry",
+      hint: "No action needed.",
+    },
     fast: {
       expected:
         "Terminated at once: the reported stolen card is a hard decline, so Rev Rec makes no retry",

@@ -393,7 +393,7 @@ if (import.meta.main) {
       `Rev Rec simulator proxy on http://${config.host}:${config.port}`,
     );
     console.log(
-      `  sandbox ${config.hsBaseUrl || "(not set)"}, Rev Rec merchant ${auth.revrecMerchantId ?? "(unknown)"}`,
+      `  ${config.engine} engine ${config.hsBaseUrl || "(not set)"}, Rev Rec merchant ${auth.revrecMerchantId ?? "(unknown)"}`,
     );
     console.log(
       `  dashboard token: ${auth.ok ? `scoped to ${auth.scoped?.merchantId} / ${auth.scoped?.profileId}` : `none (${auth.error}); api-key reads only`}`,

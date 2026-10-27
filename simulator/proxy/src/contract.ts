@@ -195,7 +195,7 @@ export async function runContractTest(): Promise<ContractResult> {
       check(
         `POST /${config.hsRecoveryPath} (${kind} body)`,
         false,
-        `the sandbox now requires ${missing[1]}`,
+        `${config.engine === "sandbox" ? "the sandbox" : "the engine"} now requires ${missing[1]}`,
       );
     } else {
       check(

@@ -1,6 +1,7 @@
 // /api/* pass-through for the dashboard. Only allow-listed Rev Rec reads reach the sandbox.
 // Connector writes, API-key, user and every other endpoint get 403.
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { config } from "./config.ts";
 import { redact, scrubText } from "./redact.ts";
 import { shellStub } from "./shell.ts";
 import { hsApiKey, hsDashboard } from "./upstream.ts";
@@ -188,7 +189,7 @@ export async function passThrough(
       error: {
         type: "api",
         code: "SIM_UPSTREAM",
-        message: `sandbox unreachable: ${scrubText(String((e as Error).message))}`,
+        message: `${config.engine === "sandbox" ? "sandbox" : "Rev Rec engine"} unreachable: ${scrubText(String((e as Error).message))}`,
       },
     });
   }

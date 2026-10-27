@@ -152,6 +152,11 @@ export class HttpError extends Error {
   }
 }
 
+// Who answers, in text a visitor reads: the shared sandbox, or Rev Rec on the self-hosted engine
+// (HS_ENGINE). The source key "sandbox" on explain and why lines stays as it is.
+const isSandbox = () => config.engine === "sandbox";
+const Answerer = () => (isSandbox() ? "The sandbox" : "Rev Rec");
+
 // Minutes in Monitoring, with the start rule met and no retry task, before the story says so.
 // The fast self-hosted engine books a retry within about 10 s, so it waits 15 s there.
 const WAITING_NOTE_MIN = config.fastEngine ? 0.25 : 1;
@@ -306,7 +311,7 @@ export function importV1Story(v1: V1Story, seen: V1Observations): Story {
         label: `report failure${of ? ` (${of[1]} of ${of[2]})` : ""} → ${r.response.status}${ok ? " recorded" : ""}`,
         text: ok
           ? `The billing system reported the failed charge. Rev Rec recorded it on invoice ${body?.id}.`
-          : "The sandbox refused the report.",
+          : `${Answerer()} refused the report.`,
         status: ok ? "ok" : "refused",
         source: "sandbox",
       });
@@ -796,7 +801,7 @@ async function chargeAndReport(
     text:
       r.status === 200
         ? `The billing system reported the failed charge ${txnId} to Rev Rec. Rev Rec recorded it on invoice ${r.json.id} (payment status ${r.json.intent_status}).`
-        : `The billing system reported the failed charge ${txnId}. The sandbox refused it: ${r.json?.error?.message ?? r.status}.`,
+        : `The billing system reported the failed charge ${txnId}. ${Answerer()} refused it: ${r.json?.error?.message ?? r.status}.`,
     status: r.status === 200 ? "ok" : "refused",
     source: "sandbox",
     why: [
@@ -806,7 +811,7 @@ async function chargeAndReport(
       },
       {
         source: "rule",
-        text: "The sandbox checks the charge with Stripe and records Stripe's own decline.",
+        text: `${Answerer()} checks the charge with Stripe and records Stripe's own decline.`,
       },
       ...(sr !== null && o.total > 1
         ? [
@@ -1137,7 +1142,7 @@ export function paidInApp(storyId: string) {
       text:
         r.status === 200
           ? `The billing system told Rev Rec the invoice is paid. Rev Rec answered: payment status ${r.json.intent_status}.`
-          : `The billing system told Rev Rec the invoice is paid. The sandbox refused it: ${r.json?.error?.message ?? r.status}.`,
+          : `The billing system told Rev Rec the invoice is paid. ${Answerer()} refused it: ${r.json?.error?.message ?? r.status}.`,
       status: r.status === 200 ? "ok" : "refused",
       source: "sandbox",
       why: [
@@ -1177,7 +1182,7 @@ export function cancelStory(storyId: string) {
       text:
         r.status === 200
           ? `The merchant cancelled the invoice. Rev Rec stopped work on it (payment status ${r.json?.intent_status}).`
-          : `The merchant tried to cancel the invoice. The sandbox refused: ${msg || r.status}.`,
+          : `The merchant tried to cancel the invoice. ${Answerer()} refused: ${msg || r.status}.`,
       status: r.status === 200 ? "ok" : "refused",
       source: "sandbox",
       why: [
@@ -1509,10 +1514,12 @@ export async function storyView(storyId: string) {
 
     if (!list || !det || !att)
       warnings.push(
-        "The sandbox did not answer one of the status reads. Showing what arrived.",
+        `${Answerer()} did not answer one of the status reads. Showing what arrived.`,
       );
     if (!row && story.started)
-      warnings.push("The invoice is not in the sandbox invoice list yet.");
+      warnings.push(
+        `The invoice is not in ${isSandbox() ? "the sandbox" : "Rev Rec's"} invoice list yet.`,
+      );
     if (!hasDashboardToken())
       warnings.push(
         'Next retry time needs a dashboard token for the Rev Rec merchant. See /healthz "dashboard".',
@@ -1591,11 +1598,17 @@ export async function storyView(storyId: string) {
       ? {
           minutes: Math.floor(waitingMin),
           seconds: Math.floor(waitingMin * 60),
-          text: `Rev Rec has not booked a retry yet (${config.fastEngine ? "engine" : "sandbox"} scheduler)`,
+          text: `Rev Rec has not booked a retry yet (${isSandbox() ? "sandbox" : "engine"} scheduler)`,
           why: `The start rule is met (${failuresKept} failure${failuresKept === 1 ? "" : "s"} recorded), but Rev Rec has made no retry task for ${
             config.fastEngine
-              ? `${Math.floor(waitingMin * 60)} s. This engine books one within about 10 s.`
-              : `${Math.floor(waitingMin)} min. On 24 Oct the same profile booked one in about 30 s.`
+              ? `${Math.floor(waitingMin * 60)} s.`
+              : `${Math.floor(waitingMin)} min.`
+          }${
+            isSandbox()
+              ? " On 24 Oct the same profile booked one in about 30 s."
+              : config.fastEngine
+                ? " This engine books one within about 10 s."
+                : ""
           }`,
           source: "recomputed" as Source,
         }
@@ -1645,9 +1658,11 @@ export async function storyView(storyId: string) {
         {
           source: "rule",
           text: `Static retries in production wait 1 min, then 3 h, 6 h, 9 h, 12 h and 18 h steps. ${
-            config.fastEngine
-              ? "This self-hosted engine uses a fast test ladder: retries seconds apart."
-              : "The sandbox retries every few minutes."
+            isSandbox()
+              ? "The sandbox retries every few minutes."
+              : config.fastEngine
+                ? "This self-hosted engine uses a fast test ladder: retries seconds apart."
+                : "This self-hosted engine uses the ladder in its configs table."
           }`,
         },
       ],
@@ -1842,7 +1857,7 @@ export async function storyView(storyId: string) {
     add(
       "status",
       "sandbox",
-      `Rev Rec status from the sandbox: ${sandboxStatus ?? "not listed yet"} (${caption}).`,
+      `Rev Rec status${isSandbox() ? " from the sandbox" : ""}: ${sandboxStatus ?? "not listed yet"} (${caption}).`,
     );
     if (nextRetryAt)
       add(
@@ -1854,7 +1869,7 @@ export async function storyView(storyId: string) {
       add(
         "stale-task",
         "sandbox",
-        `A retry task is still booked for ${utc(staleTaskAt)}. The sandbox does not cancel it when the invoice is paid.`,
+        `A retry task is still booked for ${utc(staleTaskAt)}. ${Answerer()} does not cancel it when the invoice is paid.`,
       );
     else if (pt) {
       const plain =
@@ -1918,7 +1933,7 @@ export async function storyView(storyId: string) {
     add(
       "recorded-reason",
       "sandbox",
-      `Decline recorded by the sandbox from Stripe: ${firstFail.errorCode ?? "?"}` +
+      `Decline ${isSandbox() ? "recorded by the sandbox" : "Rev Rec recorded"} from Stripe: ${firstFail.errorCode ?? "?"}` +
         (recorded ? `, ${recorded}` : "") +
         (firstFail.networkDeclineCode
           ? ` (network code ${firstFail.networkDeclineCode})`
@@ -1952,7 +1967,7 @@ export async function storyView(storyId: string) {
     add(
       "start-rule",
       "rule",
-      "Start rule not read from the sandbox (no dashboard token). Demo profiles should use 0: Rev Rec takes over on the first failure.",
+      `Start rule not read from ${isSandbox() ? "the sandbox" : "Rev Rec"} (no dashboard token). Demo profiles should use 0: Rev Rec takes over on the first failure.`,
     );
   if (rrc.retryMode)
     add(

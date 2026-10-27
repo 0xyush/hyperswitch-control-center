@@ -474,3 +474,12 @@ The dashboard has no translation system (no i18n library; all upstream UI text i
   - **Engine:** `config.engine` is `sandbox` or `selfhost`, from `HS_ENGINE`, or else from the base URL (sandbox.hyperswitch.io or none → sandbox; any other → selfhost). It shows in `/healthz` `config.engine` and `contract.engine`.
   - **Contract test:** `KNOWN_ABSENT.selfhost = ["invoice detail: created_at"]`. On the selfhost engine that field is listed in `contract.knownAbsent` and named in the check text, not counted as drift. Any other missing field is still drift, and on the sandbox `created_at` missing is still drift. Offline tests cover both engines.
   - The self-hosted invoice detail also carries `client_secret`; the proxy's redaction already hides it (`/secret/` field rule).
+
+- 2026-10-27 17:20 [A] **Engine wording and a 2 s portfolio refresh.** Cloud Run will run with `HS_ENGINE=selfhost`, `SIM_FAST_ENGINE=1` and `HS_BASE_URL=http://10.128.0.2:8080` (`deploy/proxy.env.yaml`, f1eb231c2).
+  - **Wording:** with `HS_ENGINE=selfhost`, the text a visitor reads says "Rev Rec" (or "engine") instead of "the sandbox". With `HS_ENGINE=sandbox` the sandbox wording is unchanged. The source key `sandbox` stays (C renames the chip to "From Rev Rec").
+    - Story: report and cancel refusals, "checks the charge with Stripe", the status-read and invoice-list warnings, the waiting note ("engine scheduler"; the 24 Oct sentence only on the sandbox), the ladder sentence, and the explain lines (`Rev Rec status: …`, `Decline Rev Rec recorded from Stripe: …`, the stale-task line, start rule not read).
+    - Presets 4 and 7 have `selfhost` texts. They apply on the self-hosted engine at either pace; the fast texts come on top.
+    - Also: the portfolio "same strategy" label, the contract test's "now requires" text, the passthrough "unreachable" error and the startup log line.
+    - A unit test checks that no preset text says "sandbox" on selfhost, fast or not. `.env.vm.example` sets `HS_ENGINE=selfhost`.
+  - **Portfolio refresh:** a fast run (`SIM_FAST_ENGINE`) now ticks every 2 s (was cap × 10 s, so 10 s for a 1 min cap), so the run view is at most 2 s behind the engine. Trend points come every 2 s. Sandbox runs are unchanged.
+  - The story view needs no change: it is rebuilt from the engine on each request, with a 2 s cache. How often the screen asks is the dashboard's poll interval.

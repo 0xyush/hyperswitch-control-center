@@ -404,9 +404,13 @@ async function setup(run: Run) {
 }
 
 // A short run reads more often: about 6 reads per minute of cap, from every 5 s to every 30 s.
-// Runs of 3 min or more (all sandbox runs) keep the 30 s tick.
+// Runs of 3 min or more (all sandbox runs) keep the 30 s tick. A fast run (SIM_FAST_ENGINE, our own
+// engine, no shared rate limit) reads every 2 s, so the run view is at most 2 s behind the engine.
+const FAST_TICK_MS = 2_000;
 const tickMs = (run: Run) =>
-  Math.min(TICK_MS, Math.max(5_000, run.dials.maxMinutes * 10_000));
+  run.fast
+    ? FAST_TICK_MS
+    : Math.min(TICK_MS, Math.max(5_000, run.dials.maxMinutes * 10_000));
 
 // The time cap counts from the end of setup, so the last invoice gets about as long as the first
 // (setup alone can take longer than a 0.5 min cap). It never ends a run during setup.
@@ -897,7 +901,7 @@ export async function portfolioView(runId: string) {
     comparison: {
       sameStrategy,
       label: sameStrategy
-        ? "Same strategy on both sides, differences are sandbox timing noise"
+        ? `Same strategy on both sides, differences are ${config.engine === "sandbox" ? "sandbox " : ""}timing noise`
         : `${modes[0] ?? "static"} vs ${modes[1] ?? "smart"}`,
       source: "recomputed",
     },
