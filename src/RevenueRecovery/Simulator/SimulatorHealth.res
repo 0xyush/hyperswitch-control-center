@@ -60,7 +60,7 @@ let checkRows = (health: Dict.t<JSON.t>) => {
   let expiresAt = scoped->getString("expiresAt", "")
   [
     [
-      text("Sandbox"),
+      text("Hyperswitch engine"),
       statusCell(sandbox->getBool("ok", false)),
       text(
         `HTTP ${sandbox->getInt("status", 0)->Int.toString} in ${sandbox

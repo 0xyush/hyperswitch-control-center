@@ -854,7 +854,7 @@ let make = (~runIdFromUrl: option<string>) => {
     />
     <div className="flex items-start justify-between gap-4">
       <PageUtils.PageHeading
-        title="Portfolio run" subTitle="Same invoices, two strategies, real sandbox."
+        title="Portfolio run" subTitle="Same invoices, two strategies, real Hyperswitch engine."
       />
       <SimulatorGlossary.OpenButton />
     </div>
@@ -880,7 +880,7 @@ let make = (~runIdFromUrl: option<string>) => {
                 slot={{
                   slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
                 }}
-                heading="Fixture data, not a sandbox run"
+                heading="Fixture data, not a run on the demo engine"
                 description="Made-up numbers in the real result shape."
               />
             </RenderIf>
@@ -903,11 +903,9 @@ let make = (~runIdFromUrl: option<string>) => {
                 // sides share a strategy, otherwise which strategies are compared
                 <RenderIf condition={run.comparisonLabel->isNonEmptyString}>
                   <p className={`${body.md.semibold} text-nd_gray-600`}>
-                    {(
-                      run.sameStrategy
-                        ? `${run.comparisonLabel}.`
-                        : `Comparison: ${run.comparisonLabel}`
-                    )->React.string}
+                    {run
+                    ->comparisonText
+                    ->React.string}
                   </p>
                 </RenderIf>
                 <NoRetriesBanners run />

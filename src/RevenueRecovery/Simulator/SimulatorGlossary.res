@@ -81,7 +81,7 @@ let entries: array<entry> = [
   {
     term: "Proxy",
     aliases: ["proxy"],
-    definition: "The small server between the browser and the sandbox that holds the keys.",
+    definition: "The small server between the browser and the Hyperswitch engine that holds the keys.",
   },
 ]
 

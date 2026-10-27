@@ -472,7 +472,7 @@ module ExplainDrawer = {
       | Some(StateHistory) =>
         <Body>
           <p className={`${body.md.medium} text-nd_gray-600`}>
-            {"When the invoice was first seen in each state. Sandbox times are exact. Proxy times can be one poll late."->React.string}
+            {"When the invoice was first seen in each state. Times from Rev Rec are exact. Proxy times can be one poll late."->React.string}
           </p>
           <SimulatorTable
             headers=["State", "First seen", "Source"]

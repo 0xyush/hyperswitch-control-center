@@ -101,7 +101,7 @@ module MoreFeatures = {
             {"More features"->React.string}
           </span>
           <span className={`${body.md.medium} text-nd_gray-500`}>
-            {"Explained here, not run on the sandbox"->React.string}
+            {"Explained here, not run on the demo engine"->React.string}
           </span>
         </div>
         <div
@@ -555,7 +555,7 @@ let make = () => {
         <AlertV2Binding
           alertType=Warning
           slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
-          description="The sandbox settings could not be read right now."
+          description="The demo engine's settings could not be read right now."
         />
       </div>
     </RenderIf>

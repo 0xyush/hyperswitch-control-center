@@ -255,8 +255,8 @@ let bookedNoRetries = (run: portfolioRun, ~card: sideCard, ~other: sideCard) =>
 // The decider reason applies only to a smart profile
 let noRetriesWhy = (~mode) =>
   mode == "smart"
-    ? "Smart mode needs a decider service; this sandbox has none yet."
-    : "The sandbox booked no retry task for these invoices."
+    ? "Smart retries need Rev Rec's trained model, which this demo does not have yet."
+    : "The demo engine booked no retry for these invoices."
 
 // The proxy sends every copy with a setupStage: "pending" (no story id yet: waiting; with one:
 // being charged), "charged" or "reported". Older runs send null for a copy not started yet and
@@ -281,6 +281,17 @@ let durationText = seconds =>
   seconds < 60
     ? `${seconds->Int.toString} s`
     : `${(seconds / 60)->Int.toString} min ${mod(seconds, 60)->Int.toString} s`
+
+// The line above the cards. With the same strategy on both sides any difference is timing noise;
+// with static retries on both, it says why there is no smart side.
+let comparisonText = (run: portfolioRun) =>
+  if run.sameStrategy {
+    run.staticMode == "cascading" && run.smartMode == "cascading"
+      ? "Both sides use static retries. Smart retries need Rev Rec's trained model, which this demo does not have yet."
+      : "Both sides use the same strategy, so any difference is timing noise."
+  } else {
+    `Comparison: ${run.comparisonLabel}`
+  }
 
 let hasFinishedCopy = (run: portfolioRun) =>
   run.staticCard->finishedCopies + run.smartCard->finishedCopies > 0

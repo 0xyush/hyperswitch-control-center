@@ -68,7 +68,7 @@ let steps: array<stepDetails> = [
     title: "Learn Rev Rec",
     description: <div className="flex flex-col gap-4">
       {stepText(
-        "Eight short levels, one per feature. Each shows the real sandbox value and ends with one question.",
+        "Eight short levels, one per feature. Each shows the real value on the demo engine and ends with two questions.",
       )}
     </div>,
     videoPath: None,
@@ -87,7 +87,7 @@ let steps: array<stepDetails> = [
       {stepText(
         "For any attempt, see what Rev Rec used and the time it chose. You also see the limits that applied.",
       )}
-      {stepText("Every line says where it comes from: the sandbox, re-computed, or a rule.")}
+      {stepText("Every line says where it comes from: Rev Rec, re-computed, or a rule.")}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_read_the_maths",

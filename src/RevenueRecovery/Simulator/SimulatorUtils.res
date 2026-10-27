@@ -14,7 +14,7 @@ let getConfig = () => Window.env.simulatorConfig->Option.getOr(Dict.make()->getS
 let getSimUrl = path => `${getConfig().simUrl}${path}`
 
 // Why a smart-mode profile books no retries on the sandbox today (PRD ask 2)
-let smartDeciderNote = "Smart mode needs a decider service. The sandbox lacks it for this merchant (ask 2)."
+let smartDeciderNote = "Smart retries need Rev Rec's trained model, which this demo does not have yet."
 
 // The story polls every 2 s while it runs, so a retry on the fast engine shows within about 2 s
 let pollIntervalMs = 2000
@@ -140,7 +140,7 @@ let actorMapper = str =>
 let actorLabel = actor =>
   switch actor {
   | Billing => ("Billing system", "Simulated")
-  | RevRec => ("Rev Rec", "Sandbox")
+  | RevRec => ("Rev Rec", "Hyperswitch engine")
   | Processor => ("Processor", "Stripe test mode")
   | Customer => ("Customer", "Simulated")
   }
@@ -165,7 +165,7 @@ let sourceMapper = str =>
 
 let sourceLabel = source =>
   switch source {
-  | Sandbox => ("From the sandbox", "bg-nd_green-50 text-nd_green-600 border-nd_green-200")
+  | Sandbox => ("From Rev Rec", "bg-nd_green-50 text-nd_green-600 border-nd_green-200")
   | Recomputed => (
       "Re-computed",
       "bg-nd_primary_blue-50 text-nd_primary_blue-600 border-nd_primary_blue-200",

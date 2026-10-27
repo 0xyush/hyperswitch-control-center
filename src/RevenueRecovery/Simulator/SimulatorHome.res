@@ -14,7 +14,7 @@ let make = () => {
   <div className="w-full gap-8 flex flex-col">
     <PageHeading
       title="Revenue Recovery"
-      subTitle="Watch Rev Rec recover a failed subscription payment on the real sandbox, step by step"
+      subTitle="Watch Rev Rec recover a failed subscription payment, step by step, on a real Hyperswitch engine"
       customTitleStyle={`!${heading.lg.semibold}`}
       customSubTitleStyle={`text-nd_gray-400 !opacity-100 !mt-1 ${body.lg.medium}`}
     />

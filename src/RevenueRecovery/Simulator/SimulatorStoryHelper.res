@@ -533,7 +533,7 @@ module StallPill = {
   @react.component
   let make = (~onWhy) => {
     <div className={`${pillStyle} border bg-nd_orange-50 border-nd_orange-200 text-nd_orange-600`}>
-      <span> {"Rev Rec hasn't booked a retry yet · sandbox"->React.string} </span>
+      <span> {"Rev Rec hasn't booked a retry yet · demo engine"->React.string} </span>
       <HelpButton onClick=onWhy />
     </div>
   }
