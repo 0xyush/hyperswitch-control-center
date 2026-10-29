@@ -12,6 +12,7 @@ const arg = (name, fallback) =>
   args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const phase = arg("--phase", "after");
 const base = arg("--base", "http://localhost:9000");
+const proxyBase = arg("--proxy", "http://localhost:8787");
 const repo = new URL("../..", import.meta.url).pathname;
 const out = `${repo}simulator/screenshots/`;
 const auditFile = `${out}learn-modal-audit.json`;
@@ -227,7 +228,7 @@ await page.goto(`${base}/dashboard/v2/recovery/simulator/tour`, {
 });
 await page.evaluate(() => localStorage.removeItem("simulator_learned_levels"));
 await page.reload({ waitUntil: "domcontentloaded" });
-await page.getByText("Eight short levels").waitFor({ timeout: 30000 });
+await page.getByText("short levels.").first().waitFor({ timeout: 30000 });
 await page.waitForTimeout(2500);
 const paneNames = ["idea", "flow", "number", "check1", "check2"];
 const button = (name) => page.getByRole("button", { name, exact: true });
@@ -424,6 +425,12 @@ const levelTitles = [
   "Invoice queuing",
   "Paid outside Rev Rec",
   "Record back and webhooks",
+  "Webhook after each retry",
+  "Billing failures keep the budget",
+  "Finished invoices stay closed",
+  "Go live: watch first",
+  "Partly paid invoices",
+  "Try another saved card",
 ];
 const sweep = [];
 for (const title of levelTitles) {
@@ -825,7 +832,7 @@ for (const row of sweep) {
   const banned = row.panes.flatMap((p) => p.bannedText);
   const linkOnlyLast = row.panes.every((p, i) =>
     i === row.panes.length - 1
-      ? p.footerLinkText.startsWith("Try it")
+      ? p.footerLinkText.startsWith("Try it") || p.footerLinkText === ""
       : p.footerLinkText === "",
   );
   check(
@@ -853,6 +860,30 @@ for (const row of sweep) {
     "panes fit, footer still, headline <= 2 lines, flow inside + labels clear of nodes + captions fit + zoom >= 0.6, no chips, Try it on pane 5 only",
   );
 }
+// "Try it": levels 1 to 8 always; levels 9 to 14 only once GET /sim/presets tags a preset with
+// that level (learnLevel)
+const presets = await fetch(`${proxyBase}/sim/presets`)
+  .then((r) => r.json())
+  .then((d) => d.presets ?? [])
+  .catch(() => []);
+const taggedLevels = new Set(
+  presets.map((p) => p.learnLevel).filter((l) => l != null),
+);
+const tryShown = sweep.map((row, i) => ({
+  level: i + 1,
+  shown: row.panes.at(-1).footerLinkText.startsWith("Try it"),
+}));
+check(
+  "Try it: always on levels 1-8; on 9-14 only when a preset is tagged",
+  {
+    tagged: [...taggedLevels],
+    shown: tryShown.filter((t) => t.shown).map((t) => t.level),
+  },
+  tryShown.every((t) =>
+    t.level <= 8 ? t.shown : t.shown === taggedLevels.has(t.level),
+  ),
+  "1-8 shown; 9-14 shown iff learnLevel tagged",
+);
 check("no page errors", pageErrors, pageErrors.length === 0, "none");
 
 const result = {

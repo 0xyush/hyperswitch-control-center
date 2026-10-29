@@ -23,9 +23,10 @@ Customer pays by hand in the app? Rev Rec stops, and the invoice is paid.
 
 A copy of the Hyperswitch dashboard with a **play button** on it.
 
-- **You** play the shop: press **Charge customer**.
-- **Rev Rec** is real. It runs on the Hyperswitch test server.
-- **The bank** is Stripe's test mode. Card 4242 always says yes. Card 0341 always says no.
+- **You** play the shop: give the customer's card (4242 is fine), then press **Charge customer**.
+- **Rev Rec** is real. It runs on our own copy of Hyperswitch.
+- **The bank** is Stripe's test mode, with a script. The story decides when the bank says no and when it says yes again.
+- **Pause** stops the story. Rev Rec waits until you press **Resume**.
 - **The screen** shows each step as it happens. Press **Next** to see the next one. Click **Why** to see the reason.
 
 ## The four screens
@@ -37,11 +38,12 @@ A copy of the Hyperswitch dashboard with a **play button** on it.
 | **Feature tour** | One card per Rev Rec feature, with the real settings. |
 | **Glossary** | Any underlined word, explained. |
 
-## Three honest notes
+## Honest notes
 
 - **"Rule-based"** on a step means our simple explanation, not Rev Rec's real brain. We are waiting for access to it.
-- **"Bank: scripted"** in the portfolio means we decide when the pretend bank has money again. Rev Rec's choices are real.
-- **Smart mode shows no retries today.** The test server has no "brain" set up for it yet. Kirthi's team can add one.
+- **"Bank: scripted"** means we decide when the pretend bank has money again. Rev Rec's choices are real.
+- **Smart mode uses made-up numbers.** Rev Rec's real model picks the times, but the success counts it reads are invented for the demo.
+- **"Computed"** next to "the fixed timetable would have needed N tries" means we worked it out. That timetable did not run.
 
 ## Try it
 

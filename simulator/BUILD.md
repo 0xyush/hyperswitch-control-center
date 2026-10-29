@@ -1,7 +1,6 @@
 # Rev Rec Simulator · build plan (M0 → M1)
 
-Source of truth: the PRD at ~/work/revrec-sandbox/prd/prd.md (sections 6, 7, 11, 12, 13).
-Research with file:line refs: ~/work/revrec-sandbox/research/01..05\*.md.
+Source of truth: the PRD (private, sections 6, 7, 11, 12, 13).
 Owner: Aayush Shrestha. Fork: github.com/0xyush/hyperswitch-control-center (this repo), upstream juspay/hyperswitch-control-center.
 
 ## Layout in this repo

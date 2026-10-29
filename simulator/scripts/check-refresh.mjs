@@ -12,15 +12,15 @@ const storyId = arg("--story", null);
 
 // Path, and text the rendered page must show
 const pages = [
-  ["/dashboard/v2/recovery", "Try the simulator"],
-  ["/dashboard/v2/recovery/home", "Try the simulator"],
+  ["/dashboard/v2/recovery", "Explore Recovery"],
+  ["/dashboard/v2/recovery/home", "Explore Recovery"],
   ["/dashboard/v2/recovery/invoices", "List of Invoices"],
   ["/dashboard/v2/recovery/simulator/story", "Billing system"],
   ["/dashboard/v2/recovery/simulator/unknown-page", "Billing system"],
   ["/dashboard/v2/recovery/simulator/tour", "Learn Rev Rec"],
   ["/dashboard/v2/recovery/simulator/portfolio", "Decline mix"],
   ...(storyId
-    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "Show all"]]
+    ? [[`/dashboard/v2/recovery/simulator/story/${storyId}`, "recovered"]]
     : []),
 ];
 

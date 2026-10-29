@@ -63,6 +63,6 @@ _Key steps and decisions, 22 to 27 Oct 2026. Plain words, newest state at the en
 
 ## 7. Still open
 
-- **Smart retries** need Rev Rec's trained model and decider service. Ask Kirthi.
-- **Approved pilot numbers** before any number goes in the app. Ask Kirthi.
+- **Smart retries** need Rev Rec's trained model and decider service. Ask the Rev Rec engine team.
+- **Approved pilot numbers** before any number goes in the app. Ask the Rev Rec engine team.
 - **Cost:** the VM costs about $3 a day while it runs. Stop it when not in use.

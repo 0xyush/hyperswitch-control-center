@@ -1,3 +1,15 @@
+# Rev Rec Simulator (this fork)
+
+This fork of the Hyperswitch control center adds the **Rev Rec Simulator**. With it, you try Revenue Recovery hands-on: charge a customer, watch the payment fail, and see Rev Rec's smart model retry it on a real Hyperswitch v2 engine with real Stripe test charges.
+
+**Start here: [simulator/README.md](simulator/README.md)**
+
+![The Rev Rec Simulator: a story in progress](simulator/docs/readme/story-running.png)
+
+The upstream control center README follows, unchanged.
+
+---
+
 # Hyperswitch Control Center
 
 Hyperswitch control center is an open source dashboard to easily view, manage and control your payments across multiple processors through Hyperswitch - an open source payments switch.

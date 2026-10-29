@@ -57,7 +57,7 @@ Every explanation line carries one of three tags, so nobody mistakes a guess for
 
 - **From the sandbox**: read from the real system (the booked time, the attempt result, Stripe's decline).
 - **Re-computed**: worked out from sandbox data (which ladder step this is, how many retries remain against the network cap).
-- **Rule-based**: the simulator's stand-in explanation for smart timing (for example "insufficient funds: month start, Thursday or Friday", from internal pilot report patterns). This is **not** the real Rev Rec model. The model needs access we have asked Kirthi for.
+- **Rule-based**: the simulator's stand-in explanation for smart timing (for example "insufficient funds: month start, Thursday or Friday", a stand-in pattern). This is **not** the real Rev Rec model. The model needs access we have asked the Rev Rec engine team for.
 
 ## 6. The portfolio run and the scripted bank
 
@@ -69,7 +69,7 @@ We proved the mechanism on 23 Oct: after a decline, a new report carrying the go
 
 **Run 1, 23 Oct (`pf_5f2dcd18`), both sides on one static profile.** 10 invoices. 7 of 10 recovered on each side with 39 Rev Rec attempts each. Generic decline 3 of 3, processing error 2 of 2, insufficient funds 2 of 4, stolen card 0 of 1. The two insufficient-funds misses were the proxy's fault: a heavy local build stalled its loop, the bank flips came 14 to 16 minutes late, and Rev Rec had already used its retries. The stolen card was retried 7 times before terminating: the sandbox has no hard-decline stop for Stripe's code yet.
 
-**Run 2, 24 Oct (`pf_4744661b`), first run on the two real profiles (start rule 0, max retries 15).** Final: the static side recovered 8 of 10 with 55 attempts; the smart side booked **zero retries** on all 10 invoices and they were cancelled at the end. This is the risk the PRD named: smart mode needs a decider service behind it, and the sandbox has none for this merchant. Until Kirthi provides one (ask 2), the portfolio screen shows the smart side as 'no retries booked' and makes no uplift claim.
+**Run 2, 24 Oct (`pf_4744661b`), first run on the two real profiles (start rule 0, max retries 15).** Final: the static side recovered 8 of 10 with 55 attempts; the smart side booked **zero retries** on all 10 invoices and they were cancelled at the end. This is the risk the PRD named: smart mode needs a decider service behind it, and the sandbox has none for this merchant. Until the engine team provides one (ask 2), the portfolio screen shows the smart side as 'no retries booked' and makes no uplift claim.
 
 ## 8. Facts about the sandbox we learned the hard way
 
@@ -124,6 +124,6 @@ Tests: `cd simulator/proxy && npm test` (28 offline tests plus one live story, a
 
 ## 12. What is still open
 
-**With Kirthi (PRD section 14):** the real model and decider (for a real "why this slot" and for smart mode to book retries at all), outgoing webhooks, whether max retries and grace period are enforced, the ladder values, approved pilot numbers, a hard-decline error-catalogue row for Stripe's stolen-card code, a low-rights demo dashboard user, decision-log access, and the card network limit values.
+**With the Rev Rec engine team (PRD section 14):** the real model and decider (for a real "why this slot" and for smart mode to book retries at all), outgoing webhooks, whether max retries and grace period are enforced, the ladder values, approved pilot numbers, a hard-decline error-catalogue row for Stripe's stolen-card code, a low-rights demo dashboard user, decision-log access, and the card network limit values.
 
-**With you:** deploy to GCP when you want a shareable link (commands are ready), share the PRD and one-pager with reviewers, send Kirthi the asks, and refresh the dashboard token before it expires.
+**With you:** deploy to GCP when you want a shareable link (commands are ready), share the PRD and one-pager with reviewers, send the engine team the asks, and refresh the dashboard token before it expires.
