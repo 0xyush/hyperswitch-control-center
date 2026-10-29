@@ -65,6 +65,13 @@ test(
       await sleep(2000);
       first = (await call("GET", `/sim/story/${id}`)).json;
     }
+    // The first charge failed; Rev Rec is not told until the handover.
+    assert.equal(first.status, "awaiting_handover", JSON.stringify(first));
+    assert.equal(first.recoveryId, null);
+    assert.equal(first.actions.handover, true);
+    const handed = await call("POST", `/sim/story/${id}/handover`);
+    assert.equal(handed.status, 200, JSON.stringify(handed.json));
+    first = handed.json;
     assert.ok(
       first.recoveryId,
       `no recovery id from the sandbox: ${first.startError}`,

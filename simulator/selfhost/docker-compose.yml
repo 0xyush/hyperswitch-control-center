@@ -1,6 +1,6 @@
 # Self-hosted Hyperswitch v2 for the Rev Rec simulator, on one VM (simulator/selfhost/README.md).
 # Services: Postgres, Redis, prepare + migrate (one-shot), router (v2), scheduler producer and
-# consumer, and seed (run by hand: docker compose --profile seed run --rm seed).
+# consumer, a stand-in decider, and seed (run by hand: docker compose --profile seed run --rm seed).
 # The router listens on 127.0.0.1:8080 only. The proxy reaches it through an SSH tunnel.
 # Secrets and image names come from .env (copy .env.example).
 name: revrec-hs
@@ -133,6 +133,107 @@ services:
       router:
         condition: service_healthy
 
+  # Stand-in for Rev Rec's retry-time decider (decider/decider.mjs), a narrow test double: every call
+  # gets "retry in DECIDER_RETRY_AFTER_SEC seconds" and threshold 0.5. The engine still picks the card.
+  # config.toml [grpc_client.recovery_decider_client] sends the router and both schedulers to
+  # decider:50051, on the compose network only. Only a smart profile without the model flag calls it
+  # (sim-smart-decider, seed.sh 6c). The proxy reads its call log on 8094 (locally through the tunnel,
+  # -L 8094:127.0.0.1:8094; on Cloud Run on HS_PRIVATE_IP).
+  decider:
+    image: docker.io/node:24-alpine
+    restart: unless-stopped
+    logging: *logging
+    command: ["node", "/decider/decider.mjs"]
+    environment:
+      DECIDER_GRPC_PORT: "50051"
+      DECIDER_HTTP_PORT: "8094"
+      DECIDER_RETRY_AFTER_SEC: ${DECIDER_RETRY_AFTER_SEC:-5}
+      DECIDER_THRESHOLD: "0.5"
+      DECIDER_STORE: /data/decider.json
+    volumes:
+      - ./decider:/decider:ro
+      - decider_data:/data
+    ports:
+      - "127.0.0.1:8094:8094"
+      - "${HS_PRIVATE_IP:-127.0.0.2}:8094:8094"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8094/health || exit 1"]
+      interval: 10s
+      retries: 5
+
+  # Receives the engine's outgoing webhooks, as a billing system would (inbox/inbox.mjs); the proxy
+  # reads them back. The engine refuses webhook URLs on private addresses (its SSRF guard), so it
+  # posts to the VM's external IP (HS_WEBHOOK_URL), which GCP delivers to the private NIC; the
+  # firewall allows 8092 only from the VM's own external IP. Reads need INBOX_READ_TOKEN.
+  # Started on its own: docker compose --profile webhooks up -d webhook-inbox
+  webhook-inbox:
+    image: docker.io/node:24-alpine
+    profiles: ["webhooks"]
+    restart: unless-stopped
+    logging: *logging
+    command: ["node", "/inbox/inbox.mjs"]
+    environment:
+      INBOX_PORT: "8092"
+      INBOX_HASH_KEY: ${HS_WEBHOOK_HASH_KEY:-}
+      INBOX_READ_TOKEN: ${INBOX_READ_TOKEN:-}
+      INBOX_STORE: /data/inbox.json
+    volumes:
+      - ./inbox:/inbox:ro
+      - inbox_data:/data
+    ports:
+      - "127.0.0.1:8092:8092"
+      - "${HS_PRIVATE_IP:-127.0.0.2}:8092:8092"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8092/health || exit 1"]
+      interval: 10s
+      retries: 5
+
+  # Simulated calendar, learning re-file and the bank for Rev Rec's model (sim/sim.mjs, MODEL.md). It
+  # moves the smart profile's model-planned retries to their demo time, keeps the retry stats at the
+  # seed plus each outcome at its real-life slot, and decides Rev Rec's charges for invoices the proxy
+  # marks (the engine's Stripe calls pass through it). The proxy reads it on 8093 (locally through the tunnel,
+  # -L 8093:127.0.0.1:8093; on Cloud Run on HS_PRIVATE_IP). Needs SIM_TOKEN.
+  # Started on its own: docker compose --profile sim up -d --build sim
+  sim:
+    build: ./sim
+    profiles: ["sim"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      SIM_PORT: "8093"
+      SIM_TOKEN: ${SIM_TOKEN:-}
+      SIM_SECONDS_PER_DAY: ${SIM_SECONDS_PER_DAY:-}
+      SIM_REFILE: ${SIM_REFILE:-on}
+      # The bank on 8095 (compose network only; config.toml stripe.base_url). off: pass-through only
+      SIM_BANK: ${SIM_BANK:-on}
+      STRIPE_TEST_KEY: ${STRIPE_TEST_KEY:-}
+      # Processors whose bank stories are proven (GET /bank/processors; the proxy offers the
+      # real-world stories only there). All six go through the bank (config.toml <id>.base_url =
+      # http://sim:8095/<id>/...). Cybersource's keys sign its requests again
+      SIM_BANK_PROCESSORS: ${SIM_BANK_PROCESSORS:-adyen,authorizedotnet,nmi,worldpay,globalpay,cybersource}
+      CYBERSOURCE_API_KEY: ${CYBERSOURCE_API_KEY:-}
+      CYBERSOURCE_API_SECRET: ${CYBERSOURCE_API_SECRET:-}
+      HS_BASE_URL: http://router:8080
+      HS_ADMIN_API_KEY: ${HS_ADMIN_API_KEY:?set HS_ADMIN_API_KEY in .env}
+      PGHOST: pg
+      PGUSER: db_user
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: hyperswitch_db
+    volumes:
+      - ./model:/model:ro
+      - ./state:/state:ro
+      - sim_data:/data
+    ports:
+      - "127.0.0.1:8093:8093"
+      - "${HS_PRIVATE_IP:-127.0.0.2}:8093:8093"
+    depends_on:
+      router:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8093/health || exit 1"]
+      interval: 10s
+      retries: 5
+
   # docker compose --profile seed run --rm seed. Writes state/seed.env and state/proxy.env.
   seed:
     image: docker.io/alpine:3.20
@@ -145,10 +246,15 @@ services:
       STRIPE_TEST_KEY: ${STRIPE_TEST_KEY:?set STRIPE_TEST_KEY in .env}
       RETRY_MODE: ${RETRY_MODE:-cascading}
       LADDER_JSON: ${LADDER_JSON:-}
+      HS_WEBHOOK_URL: ${HS_WEBHOOK_URL:-}
+      HS_WEBHOOK_HASH_KEY: ${HS_WEBHOOK_HASH_KEY:-}
+      INBOX_READ_TOKEN: ${INBOX_READ_TOKEN:-}
       STATE_DIR: /state
     volumes:
       - ./seed.sh:/seed.sh:ro
       - ./state:/state
+      # The seeded retry stats for Rev Rec's model (MODEL.md, seed.sh 8c)
+      - ./model:/model:ro
     depends_on:
       router:
         condition: service_healthy
@@ -162,3 +268,6 @@ services:
 volumes:
   pg_data:
   hs_src:
+  decider_data:
+  inbox_data:
+  sim_data:

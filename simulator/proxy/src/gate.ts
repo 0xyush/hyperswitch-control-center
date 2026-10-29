@@ -1,6 +1,6 @@
 // One shared password in front of everything (simulator/deploy/PASSWORD-GATE.md).
 // On when SIM_PASSWORD is set. A right password sets the cookie sim_gate=<day>.<hmac of the day,
-// keyed by the password>, valid 7 days. /healthz stays open; /api/* and /sim/* without the
+// keyed by the password>, valid 7 days. /healthz and /sim/health stay open; /api/* and /sim/* without the
 // cookie answer 401 JSON; every other path shows the password page with 401.
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";

@@ -1,4 +1,4 @@
-# Deploy · Rev Rec Simulator on Cloud Run (M4 prep, not deployed yet)
+# Deploy · Rev Rec Simulator on Cloud Run
 
 GCP project `hs-selfhost-0928-x825`. Two Cloud Run services: the proxy (this repo's `simulator/proxy`) and the dashboard (the fork's own server). Secrets live in Secret Manager only. Do not run these commands until Aayush says go.
 
@@ -16,11 +16,13 @@ export SA=revrec-sim-proxy@$PROJECT.iam.gserviceaccount.com
 
 ## 2. Secrets (names only; values come from `simulator/proxy/.env` and are never typed or printed)
 
-| Secret Manager name           | Proxy env var      | What it is                                                     |
-| ----------------------------- | ------------------ | -------------------------------------------------------------- |
-| `revrec-sim-hs-api-key`       | `HS_API_KEY`       | Hyperswitch sandbox API key of the Rev Rec merchant            |
-| `revrec-sim-stripe-test-key`  | `STRIPE_TEST_KEY`  | Stripe test-mode secret key (`sk_test_…` only)                 |
-| `revrec-sim-hs-dashboard-jwt` | `HS_DASHBOARD_JWT` | Dashboard token; the proxy switches it to the Rev Rec merchant |
+| Secret Manager name           | Proxy env var      | What it is                                                      |
+| ----------------------------- | ------------------ | --------------------------------------------------------------- |
+| `revrec-sim-hs-api-key`       | `HS_API_KEY`       | Hyperswitch sandbox API key of the Rev Rec merchant             |
+| `revrec-sim-stripe-test-key`  | `STRIPE_TEST_KEY`  | Stripe test-mode secret key (`sk_test_…` only)                  |
+| `revrec-sim-hs-dashboard-jwt` | `HS_DASHBOARD_JWT` | Dashboard token; the proxy switches it to the Rev Rec merchant  |
+| `revrec-sim-inbox-read-token` | `INBOX_READ_TOKEN` | Read token of the VM's webhook inbox (optional; from `.env.vm`) |
+| `revrec-sim-sim-token`        | `SIM_TOKEN`        | Token of the VM's sim service (optional; from `.env.vm`)        |
 
 ```sh
 for pair in HS_API_KEY:revrec-sim-hs-api-key STRIPE_TEST_KEY:revrec-sim-stripe-test-key \
@@ -113,7 +115,7 @@ gcloud run deploy revrec-sim --image $IMAGE --region $REGION \
   --min-instances 1 --max-instances 1 --no-cpu-throttling \
   --concurrency 80 --timeout 60 --port 8080 --memory 1Gi \
   --env-vars-file simulator/deploy/proxy.env.yaml \
-  --set-secrets SIM_PASSWORD=revrec-sim-password:latest,HS_API_KEY=revrec-sim-hs-api-key:latest,STRIPE_TEST_KEY=revrec-sim-stripe-test-key:latest,HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest
+  --set-secrets SIM_PASSWORD=revrec-sim-password:latest,HS_API_KEY=revrec-sim-hs-api-key:latest,STRIPE_TEST_KEY=revrec-sim-stripe-test-key:latest,HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest,INBOX_READ_TOKEN=revrec-sim-inbox-read-token:latest,SIM_TOKEN=revrec-sim-sim-token:latest
 ```
 
 - The image already sets `DASHBOARD_DIST`, `DASHBOARD_SERVER_DIR`, `default__endpoints__api_url=/api`, `default__simulator__sim_url=` (empty = same origin), `TRUST_PROXY=1`, `HOST` and `PORT`.
@@ -123,3 +125,31 @@ gcloud run deploy revrec-sim --image $IMAGE --region $REGION \
 - Add `HS_STATIC_*` and `HS_SMART_*` (the portfolio pair) and `SIM_PORTFOLIO=1` to `proxy.env.yaml` if the portfolio run should be on.
 - To change the password: add a secret version, then make a new revision (`gcloud run services update revrec-sim --region $REGION --update-secrets SIM_PASSWORD=revrec-sim-password:latest`). Old cookies stop working.
 - Optional: set `SIM_OPERATOR_KEY` (a fourth secret) to allow `POST /sim/recordings/:id` with the header `x-sim-operator`. Without it, that call works only from inside the container.
+
+## 5b. What the 27 Oct work adds to the section 5 deploy (processors, webhooks, sim service)
+
+- **VPC egress.** The proxy reaches the self-hosted engine and its helpers on the VM's private IP (`10.128.0.2`: engine 8080, inbox 8092, sim 8093, decider 8094). The live service already uses Direct VPC egress; keep these flags on every deploy: `--network default --subnet default --vpc-egress private-ranges-only`. The rule `default-allow-internal` (10.128.0.0/9) covers the subnet.
+- **Secrets.** `put-secrets.sh` (run with `simulator/proxy/.env.vm`) now also writes the inbox and sim tokens. Map them:
+
+```sh
+SECRETS=SIM_PASSWORD=revrec-sim-password:latest,HS_API_KEY=revrec-sim-hs-api-key:latest,STRIPE_TEST_KEY=revrec-sim-stripe-test-key:latest,HS_DASHBOARD_JWT=revrec-sim-hs-dashboard-jwt:latest,INBOX_READ_TOKEN=revrec-sim-inbox-read-token:latest,SIM_TOKEN=revrec-sim-sim-token:latest
+gcloud run deploy revrec-sim --image $IMAGE --region $REGION --service-account $SA --allow-unauthenticated \
+  --min-instances 1 --max-instances 1 --no-cpu-throttling --concurrency 80 --timeout 60 --port 8080 --memory 1Gi \
+  --network default --subnet default --vpc-egress private-ranges-only \
+  --env-vars-file simulator/deploy/proxy.env.yaml --set-secrets "$SECRETS"
+```
+
+- **Stripe only (28 Oct).** The other six processors are hidden, not deleted: `PROCESSORS_ENABLED` is unset, so the proxy refuses their stories ("Only Stripe is on in this demo for now.") and lists only Stripe. Their engine profiles, connectors and scripts stay. `proxy.env.yaml` keeps their ids (`HS_<PROCESSOR>_*`). To turn them back on later (all optional, none needed now):
+  1. Run `WITH_PROCESSORS=1 put-secrets.sh` to write their 14 keys.
+  2. Add `PROCESSORS_ENABLED: "all"` (or a comma list of ids) to `proxy.env.yaml`.
+  3. Add the key secrets to `SECRETS` before the deploy:
+
+```sh
+for k in ADYEN_API_KEY ADYEN_MERCHANT_ACCOUNT CYBERSOURCE_API_KEY CYBERSOURCE_API_SECRET CYBERSOURCE_MERCHANT_ID \
+         AUTHORIZEDOTNET_LOGIN_ID AUTHORIZEDOTNET_TRANSACTION_KEY WORLDPAY_CREDS_KEY1 WORLDPAY_CREDS_API_KEY \
+         WORLDPAY_CREDS_API_SECRET NMI_SECURITY_KEY NMI_PUBLIC_KEY GLOBALPAY_APP_KEY GLOBALPAY_APP_ID; do
+  SECRETS+=",$k=revrec-sim-$(printf '%s' "$k" | tr 'A-Z_' 'a-z-'):latest"
+done
+```
+
+- **The dashboard token** (`revrec-sim-hs-dashboard-jwt`) is signed by `seed.sh` for 30 days on the self-hosted engine (the live one expires 26 Nov 2026). Before it expires, run the seed again, add the new token as a secret version and make a new revision (section 2).

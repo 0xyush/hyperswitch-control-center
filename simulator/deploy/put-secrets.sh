@@ -30,6 +30,37 @@ for pair in HS_API_KEY:revrec-sim-hs-api-key STRIPE_TEST_KEY:revrec-sim-stripe-t
   printf '%s' "$val" | put "$name"
 done
 
+# Optional: the webhook inbox's read token (simulator/selfhost/inbox), in .env.vm once webhooks are on.
+val=$(grep "^INBOX_READ_TOKEN=" "$ENV_FILE" | cut -d= -f2- | tr -d '\n' || true)
+if [ -n "$val" ]; then
+  printf '%s' "$val" | put revrec-sim-inbox-read-token
+else
+  echo "revrec-sim-inbox-read-token: skipped (no INBOX_READ_TOKEN in $ENV_FILE)"
+fi
+
+# Optional: the sim service's token (simulator/selfhost/sim), in .env.vm once the sim service runs.
+val=$(grep "^SIM_TOKEN=" "$ENV_FILE" | cut -d= -f2- | tr -d '\n' || true)
+if [ -n "$val" ]; then
+  printf '%s' "$val" | put revrec-sim-sim-token
+else
+  echo "revrec-sim-sim-token: skipped (no SIM_TOKEN in $ENV_FILE)"
+fi
+
+# Optional, for later: the six processors' test keys (processors.ts), in .env.vm. Stripe only since 28 Oct
+# (PROCESSORS_ENABLED unset), so they are written only with WITH_PROCESSORS=1. Each becomes
+# revrec-sim-<key in lower case, dashes>; a missing key is skipped and that processor stays off.
+if [ "${WITH_PROCESSORS:-0}" != 1 ]; then
+  echo "processor keys: skipped (Stripe only; WITH_PROCESSORS=1 writes them)"
+else
+  for key in ADYEN_API_KEY ADYEN_MERCHANT_ACCOUNT CYBERSOURCE_API_KEY CYBERSOURCE_API_SECRET CYBERSOURCE_MERCHANT_ID \
+             AUTHORIZEDOTNET_LOGIN_ID AUTHORIZEDOTNET_TRANSACTION_KEY WORLDPAY_CREDS_KEY1 WORLDPAY_CREDS_API_KEY \
+             WORLDPAY_CREDS_API_SECRET NMI_SECURITY_KEY NMI_PUBLIC_KEY GLOBALPAY_APP_KEY GLOBALPAY_APP_ID; do
+    name="revrec-sim-$(printf '%s' "$key" | tr 'A-Z_' 'a-z-')"
+    val=$(grep "^$key=" "$ENV_FILE" | cut -d= -f2- | tr -d '\n' || true)
+    if [ -n "$val" ]; then printf '%s' "$val" | put "$name"; else echo "$name: skipped (no $key in $ENV_FILE)"; fi
+  done
+fi
+
 if [ -z "${SIM_PASSWORD:-}" ] && gcloud secrets describe revrec-sim-password >/dev/null 2>&1; then
   echo "revrec-sim-password: kept (set SIM_PASSWORD to change it)"
 else

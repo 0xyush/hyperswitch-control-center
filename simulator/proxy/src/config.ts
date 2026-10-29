@@ -113,28 +113,60 @@ export const config = {
   // simulator's own waits on that pace: the scripted bank, the waiting note and the preset texts.
   // Unset = sandbox pace (minutes).
   fastEngine: read("SIM_FAST_ENGINE") === "1",
+  // The webhook inbox on the VM (simulator/selfhost/inbox): the engine's outgoing webhooks to the
+  // billing system, read back for the story. Empty = no webhook rows.
+  inboxUrl: read("INBOX_URL").replace(/\/+$/, ""),
+  inboxToken: read("INBOX_READ_TOKEN"),
+  // The sim service on the VM (simulator/selfhost/sim): the simulated calendar, the model's
+  // decisions in plain numbers and the bank. Empty = none.
+  simUrl: read("SIM_URL").replace(/\/+$/, ""),
+  simToken: read("SIM_TOKEN"),
+  // Proof runs only (a private proxy copy): processors to treat as bank-ready before the sim lists
+  // them, so the public proxy unlocks a processor only after its proof. Comma list of ids.
+  bankProof: read("SIM_BANK_PROOF")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // The stand-in decider's call log on the VM (simulator/selfhost/decider): whether the engine asked
+  // it for a retry time. Empty = not read.
+  deciderUrl: read("DECIDER_URL").replace(/\/+$/, ""),
+  // Profiles a story with live settings leases (selfhost/seed.sh 8d): profile:billing:payment, comma
+  // separated. Empty = no live settings.
+  pool: read("HS_POOL"),
+  // Smart on a pool profile runs Rev Rec's model, whose retries plan days ahead; it needs the sim
+  // service's calendar to cover the pool profiles. POOL_SMART=1 once it does.
+  poolSmart: read("POOL_SMART") === "1",
+  // Stories that charge a card other than the one the customer gave for this invoice: the "New
+  // card" event, the "swap" report and preset 9 (the second saved card). Off since 28 Oct (the
+  // user's policy); SIM_OTHER_CARDS=1 turns them back on. The code paths stay.
+  otherCards: read("SIM_OTHER_CARDS") === "1",
 };
 
 // "story" is the existing demo profile (HS_PROFILE_ID): the invoice story runs there.
 // "static" and "smart" are the portfolio run's pair (scripts/setup-profiles.ts). Until they
 // exist, both fall back to the story profile, so both runs use the same retry mode.
-export type ProfileKey = "story" | "static" | "smart";
+// "decider" is smart without the model flag, for preset 9 (selfhost/seed.sh 6c): the engine picks
+// among the customer's saved cards and asks the stand-in decider for the time.
+// "pool" is a profile leased by one story for live settings (pool.ts).
+export type ProfileKey = "story" | "static" | "smart" | "decider" | "pool";
+export type SharedProfileKey = Exclude<ProfileKey, "pool">;
 export type ProfileRef = {
   key: ProfileKey;
   profileId: string;
   billingMcaId: string;
   paymentMcaId: string;
 };
-const profileRef = (key: ProfileKey, prefix: string): ProfileRef => ({
+const profileRef = (key: SharedProfileKey, prefix: string): ProfileRef => ({
   key,
   profileId: read(`${prefix}_PROFILE_ID`) || config.hsProfileId,
   billingMcaId: read(`${prefix}_BILLING_MCA_ID`) || config.hsBillingMcaId,
   paymentMcaId: read(`${prefix}_PAYMENT_MCA_ID`) || config.hsPaymentMcaId,
 });
-export const PROFILES: Record<ProfileKey, ProfileRef> = {
+export const PROFILES: Record<SharedProfileKey, ProfileRef> = {
   story: profileRef("story", "HS_STORY"),
   static: profileRef("static", "HS_STATIC"),
   smart: profileRef("smart", "HS_SMART"),
+  decider: profileRef("decider", "HS_DECIDER"),
 };
 
 // The portfolio form's "stop after" choices, in minutes. PORTFOLIO_STOP_AFTER_MINUTES is a comma
@@ -152,10 +184,17 @@ export function parseStopAfter(raw: string): number[] {
     : [...DEFAULT_STOP_AFTER_MINUTES];
 }
 
+// Invoices per portfolio run: PORTFOLIO_MAX_INVOICES (1 to 100, default 10). The shared sandbox
+// capped a batch at 10; our own engine has no such cap.
+function parseMaxInvoices(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 10;
+}
+
 // The portfolio run is off unless SIM_PORTFOLIO=1.
 export const portfolioConfig = {
   enabled: read("SIM_PORTFOLIO") === "1",
-  maxInvoices: 10,
+  maxInvoices: parseMaxInvoices(read("PORTFOLIO_MAX_INVOICES")),
   runsPerHour: Number(read("RATE_LIMIT_PORTFOLIO_PER_HOUR") || 1),
   stopAfterMinutes: parseStopAfter(read("PORTFOLIO_STOP_AFTER_MINUTES")),
 };
@@ -167,6 +206,16 @@ export const SECRET_VALUES: string[] = [
   config.stripeKey,
   config.hsDashboardJwt,
   config.password,
+  config.inboxToken,
+  config.simToken,
+  // Processor test keys (processors.ts): every value under their env names.
+  ...Object.entries(process.env)
+    .filter(([k]) =>
+      /^(ADYEN|CYBERSOURCE|AUTHORIZEDOTNET|WORLDPAY|NMI|GLOBALPAY|NUVEI|PAYEEZY|MULTISAFEPAY)_/.test(
+        k,
+      ),
+    )
+    .map(([, v]) => (v ?? "").trim()),
   // 8+ characters: a short password such as "test" would blank that word in every text.
 ].filter((v) => v.length >= 8);
 

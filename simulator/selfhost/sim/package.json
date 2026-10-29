@@ -1,0 +1,13 @@
+{
+  "name": "revrec-sim-service",
+  "private": true,
+  "type": "module",
+  "description": "Simulated calendar and learning re-file next to the self-hosted engine (MODEL.md)",
+  "scripts": {
+    "start": "node sim.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "pg": "8.13.1"
+  }
+}

@@ -5,6 +5,15 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { authStatus, refreshDashboardToken } from "./auth.ts";
 import { config, configStatus, portfolioConfig } from "./config.ts";
 import { lastContract, scheduleContractTest } from "./contract.ts";
+import { poolFree, poolOn } from "./pool.ts";
+import {
+  ADAPTERS,
+  adapterOf,
+  BANK_ROUTES,
+  configured as processorConfigured,
+  processorProfile,
+} from "./processors.ts";
+import { connectors, setupSummary } from "./setup.ts";
 import { dashboardOn, logoSvg, serveDashboard } from "./dashboard.ts";
 import { gateOn, handleGate, hasPass, refuse } from "./gate.ts";
 import { passThrough, recentBlocked } from "./passthrough.ts";
@@ -13,22 +22,44 @@ import {
   listPortfolios,
   parsePortfolio,
   portfolioView,
+  SECONDS_PER_REAL_DAY,
   startPortfolio,
   stopPortfolio,
 } from "./portfolio.ts";
 import { scrubText } from "./redact.ts";
-import { publicPresets } from "./scenarios.ts";
+import {
+  presetById,
+  presetProfile,
+  PRESETS,
+  publicPresets,
+} from "./scenarios.ts";
+import { readCalendar, readStats, simOn } from "./simcal.ts";
 import {
   cancelStory,
+  changeSettings,
+  fixedSmartOff,
+  freeStaleGoLive,
+  getStory,
+  goLiveHolder,
+  handover,
   HttpError,
   listStories,
   lastCustomerStory,
+  SETTINGS_OFF,
   ownerOf,
   paidInApp,
+  pauseStory,
+  resumeStory,
   parseStart,
+  readRevRecConfig,
   reportAgain,
   startStory,
   storyView,
+  turnRevRecOn,
+  repostBanks,
+  sweepPool,
+  bankProcessors,
+  worldEvent,
 } from "./story.ts";
 import { hsApiKey, stripe } from "./upstream.ts";
 
@@ -196,6 +227,8 @@ async function healthz() {
       portfolioRunsPerHour: portfolioConfig.runsPerHour,
       portfolioMaxInvoices: portfolioConfig.maxInvoices,
       portfolioStopAfterMinutes: portfolioConfig.stopAfterMinutes,
+      // The simulated calendar's pace, when the sim service is set (SIM_URL)
+      portfolioSecondsPerDay: config.simUrl ? SECONDS_PER_REAL_DAY : null,
       // The self-hosted engine (SIM_FAST_ENGINE=1): seconds-apart retries, so screens can poll faster.
       fastEngine: config.fastEngine,
       portfolioRunsAtOnce: 1,
@@ -221,8 +254,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(204);
     return res.end();
   }
-  // /healthz stays open behind the password gate (uptime checks need it).
-  if (method === "GET" && p === "/healthz")
+  // /healthz stays open behind the password gate (uptime checks need it). /sim/health is the same
+  // answer for the deployed Health page: Cloud Run's front end answers /healthz itself (a Google 404).
+  if (method === "GET" && (p === "/healthz" || p === "/sim/health"))
     return send(res, 200, await healthz());
   if (gateOn()) {
     if (await handleGate(req, res, url, visitor(req).ip, LOGO)) return;
@@ -231,7 +265,55 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (p === "/api" || p.startsWith("/api/")) return passThrough(req, res, url);
   // Presets, card options and currencies for the billing-system form.
   if (method === "GET" && (p === "/sim/presets" || p === "/sim/scenarios"))
-    return send(res, 200, publicPresets());
+    return send(res, 200, {
+      ...publicPresets(),
+      // A story may start in smart mode (a leased pool profile in smart before the handover).
+      limits: {
+        startModes:
+          poolOn() && config.poolSmart ? ["static", "smart"] : ["static"],
+        defaultStartMode: "static",
+        // The processors a story can run on (processors.ts); others than Stripe run preset 2 only.
+        processors: [
+          {
+            id: "stripe",
+            name: "Stripe",
+            presets: "all",
+            // A Stripe story leases a pool profile (startModes above)
+            startModes:
+              poolOn() && config.poolSmart ? ["static", "smart"] : ["static"],
+          },
+          ...(await Promise.all(
+            ADAPTERS.filter(processorConfigured).map(async (a) => {
+              const bank = (await bankProcessors()).has(a.id);
+              const route = BANK_ROUTES[a.id];
+              // Smart when its profile is (selfhost/smart-profiles.sh); the story runs as it does
+              const ref = processorProfile(a.id);
+              const smart =
+                ref &&
+                (await readRevRecConfig(ref).catch(() => null))?.retryMode ===
+                  "smart";
+              return {
+                id: a.id,
+                name: a.name,
+                startModes: smart ? ["smart"] : ["static"],
+                // The Temporary error story, plus the real-world ones once the bank handles it.
+                presets: [
+                  2,
+                  ...(bank
+                    ? PRESETS.filter((p) => p.bank).map((p) => p.id)
+                    : []),
+                ],
+                bank: {
+                  ready: bank,
+                  genericOnly: route?.genericOnly ?? true,
+                  says: route?.says ?? {},
+                },
+              };
+            }),
+          )),
+        ],
+      },
+    });
   if (method === "GET" && p === "/sim/stories")
     return send(res, 200, { stories: listStories() });
   if (method === "GET" && p === "/sim/blocked")
@@ -241,7 +323,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     // Bad input is refused before the rate limit, so it does not use up a start.
     const opts = parseStart(await readJson(req));
     const { ip, owner } = visitor(req);
-    if (opts.customer === "same" && !lastCustomerStory(owner))
+    // A Stripe story makes the returning customer when this browser has none (story.ts
+    // makeReturningHistory); another processor still needs an earlier story.
+    if (opts.customer === "same" && opts.processor && !lastCustomerStory(owner))
       throw new HttpError(
         409,
         'There is no earlier customer to reuse. Start a story with customer "new" first.',
@@ -262,7 +346,72 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }
     noteStart(owner, ipKey);
     // Returns at once with status "starting"; the billing system's steps appear as the dashboard polls.
-    const { story: s } = startStory(opts, owner);
+    // The story stops after the first failed charge (status "awaiting_handover") until the visitor
+    // hands the invoice over with POST /sim/story/:id/handover.
+    // Preset 10 holds the one go-live profile: one go-live story at a time.
+    if (opts.goLivePreset) {
+      await freeStaleGoLive();
+      const holder = goLiveHolder();
+      if (holder)
+        throw new HttpError(
+          409,
+          `The go-live demo is busy (started ${holder.startedAt.slice(11, 16)} UTC). Try again when that story ends.`,
+        );
+    }
+    // A story on a shared profile of its own kind (go-live, decider) keeps it; any other story
+    // leases a pool profile for live settings, when one is free.
+    const shared = presetProfile(presetById(opts.presetId ?? 0));
+    // A real-world story at another processor needs the sim's pass-through for it (C).
+    if (
+      opts.processor &&
+      opts.bank &&
+      !(await bankProcessors()).has(opts.processor)
+    )
+      throw new HttpError(
+        409,
+        `The scripted bank is not ready for ${adapterOf(opts.processor)!.name} yet. Use Stripe for this story.`,
+      );
+    // A story on a profile of its own runs that profile's mode (fixedSmartOff); others lease a pool
+    // profile and set it to smart.
+    const fixedOff =
+      opts.startMode === "smart" ? await fixedSmartOff(opts, shared) : null;
+    if (fixedOff) throw new HttpError(409, fixedOff);
+    if (opts.startMode === "smart" && fixedOff === undefined) {
+      if (opts.queuePreset)
+        throw new HttpError(
+          409,
+          "This story needs the decider profile, which is not set up here.",
+        );
+      if (!poolOn() || !config.poolSmart)
+        throw new HttpError(409, "Smart start is not set up on this engine.");
+      // Its own code, so the dashboard tells it from the other 409s (all "not_available")
+      if (!poolFree())
+        throw new HttpError(
+          409,
+          "Every demo is in use right now. Try again in a few minutes.",
+          undefined,
+          "pool_busy",
+        );
+    }
+    const leasePool =
+      !shared && !opts.goLivePreset && !opts.queuePreset && !opts.processor;
+    // Max tries at the start, as POST /settings: only a leased pool profile takes them
+    if (opts.maxRetries !== undefined) {
+      if (!leasePool) throw new HttpError(409, SETTINGS_OFF.shared);
+      if (!poolOn()) throw new HttpError(409, SETTINGS_OFF.none);
+      if (!poolFree())
+        throw new HttpError(
+          409,
+          "Every demo is in use right now. Try again in a few minutes.",
+          undefined,
+          "pool_busy",
+        );
+    }
+    const { story: s } = startStory(opts, owner, {
+      waitForHandover: true,
+      profile: shared,
+      leasePool,
+    });
     return send(res, 200, await storyView(s.storyId));
   }
 
@@ -313,18 +462,83 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }
   }
 
+  // The "Setup Recovery" walkthrough: the connectors this demo uses (live-checked, masked values
+  // only) and the demo profile's retry settings in plain words.
+  if (method === "GET" && p === "/sim/connectors")
+    return send(res, 200, await connectors());
+  if (method === "GET" && p === "/sim/setup/summary")
+    return send(res, 200, await setupSummary());
+
+  // A story's invoice on the simulated calendar: each retry's real-life slot, the model's decisions
+  // in plain numbers and the bank's answers (the sim service). calendar is null until the invoice
+  // exists, or when the sim service is off.
+  const sm = p.match(/^\/sim\/story\/(st_[a-f0-9]{12})\/model$/);
+  if (method === "GET" && sm) {
+    const story = getStory(sm[1]);
+    const calendar = story.recoveryId
+      ? await readCalendar(story.recoveryId)
+      : null;
+    // The counts behind each plan's decision, by cluster: every weekday, day of the month and hour
+    const clusters = new Set((calendar?.plans ?? []).map((p) => p.cluster));
+    const docs = clusters.size ? await readStats() : null;
+    return send(res, 200, {
+      on: simOn(),
+      calendar,
+      stats: Object.fromEntries(
+        [...clusters].flatMap((c) => {
+          const d = docs?.get(c);
+          return d ? [[c, d]] : [];
+        }),
+      ),
+    });
+  }
+
   const m = p.match(
-    /^\/sim\/story\/(st_[a-f0-9]{12})(?:\/(paid-in-app|report-again|cancel))?$/,
+    /^\/sim\/story\/(st_[a-f0-9]{12})(?:\/(handover|go-live|paid-in-app|report-again|cancel|settings|event|pause|resume))?$/,
   );
   if (m) {
     const [, id, action] = m;
     if (method === "GET" && !action) return send(res, 200, await storyView(id));
+    if (method === "POST" && action === "handover") {
+      await handover(id);
+      return send(res, 200, await storyView(id));
+    }
+    if (method === "POST" && action === "go-live") {
+      await turnRevRecOn(id);
+      return send(res, 200, await storyView(id));
+    }
     if (method === "POST" && action === "paid-in-app") {
       await paidInApp(id);
       return send(res, 200, await storyView(id));
     }
+    if (method === "POST" && action === "pause") {
+      await pauseStory(id);
+      return send(res, 200, await storyView(id));
+    }
+    if (method === "POST" && action === "resume") {
+      await resumeStory(id);
+      return send(res, 200, await storyView(id));
+    }
     if (method === "POST" && action === "cancel") {
-      await cancelStory(id);
+      // {by: "customer"}: the event Customer cancels (the row says the customer ended it)
+      const { by } = await readJson(req);
+      if (by !== undefined && by !== "merchant" && by !== "customer")
+        throw new HttpError(400, 'by must be "merchant" or "customer"');
+      await cancelStory(id, by);
+      return send(res, 200, await storyView(id));
+    }
+    if (method === "POST" && action === "settings") {
+      await changeSettings(id, await readJson(req));
+      return send(res, 200, await storyView(id));
+    }
+    if (method === "POST" && action === "event") {
+      const { type } = await readJson(req);
+      if (!["money_back", "new_card", "stolen", "outage"].includes(type))
+        throw new HttpError(
+          400,
+          'type must be "money_back", "new_card", "stolen" or "outage"',
+        );
+      await worldEvent(id, type);
       return send(res, 200, await storyView(id));
     }
     if (method === "POST" && action === "report-again") {
@@ -351,10 +565,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 export function createServer() {
   return http.createServer(async (req, res) => {
     const t0 = Date.now();
+    // Our own reason for a refusal (4xx), for the log line: "409 0ms not_available: ..."
+    let refusal = "";
     // One line per request. Never headers or bodies.
     res.on("finish", () =>
       console.log(
-        `${new Date().toISOString()} ${req.method} ${(req.url ?? "").split("?")[0]} ${res.statusCode} ${Date.now() - t0}ms`,
+        `${new Date().toISOString()} ${req.method} ${(req.url ?? "").split("?")[0]} ${res.statusCode} ${Date.now() - t0}ms${refusal}`,
       ),
     );
     cors(req, res);
@@ -363,6 +579,8 @@ export function createServer() {
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       const code = e instanceof HttpError ? e.code : "internal";
+      if (status < 500)
+        refusal = ` ${code}: ${scrubText(String((e as Error).message ?? e)).slice(0, 160)}`;
       const body: Record<string, unknown> = {
         error: { code, message: scrubText(String((e as Error).message ?? e)) },
       };
@@ -387,6 +605,10 @@ if (import.meta.main) {
   }
   await refreshDashboardToken();
   if (config.contractTest) scheduleContractTest();
+  // Pool profiles of stories that ended or went stale go back (pool.ts).
+  setInterval(() => void sweepPool().catch(() => {}), 60_000).unref();
+  // Bank rules for open processor stories, again after a sim restart (story.ts).
+  setInterval(() => void repostBanks().catch(() => {}), 15_000).unref();
   const auth = authStatus();
   createServer().listen(config.port, config.host, () => {
     console.log(

@@ -1,7 +1,9 @@
 // The portfolio run (M2): one batch of invoices goes through Rev Rec twice, once per profile.
 // Design: simulator/PORTFOLIO.md. Each copy is an ordinary story with its own Stripe customer and
-// saved card, so a click on a copy opens its story view. The bank is scripted: at an invoice's flip
-// time the billing system reports a new failure that carries the good 4242 card, for both copies.
+// saved card, so a click on a copy opens its story view. The bank is scripted (the sim service): it
+// decides each Rev Rec retry on the invoice's own card, 4242, by the retry's real-life day and hour
+// (one card, the user's policy of 28 Oct). Without the sim service the old way (a flip time, then a
+// report that carries another card) needs SIM_OTHER_CARDS=1.
 // Off unless SIM_PORTFOLIO=1. Until the smart profile exists, both copies use the same profile.
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -12,6 +14,7 @@ import {
   portfolioConfig,
   type ProfileRef,
 } from "./config.ts";
+import { ladderOffsets, REAL_LADDER } from "./reallife.ts";
 import { scrubText } from "./redact.ts";
 import type { FirstChargeId } from "./scenarios.ts";
 import {
@@ -26,7 +29,8 @@ import {
   storyView,
   type Story,
 } from "./story.ts";
-import { hsApiKey } from "./upstream.ts";
+import { readCalendar, realDaysToRecover, simOn } from "./simcal.ts";
+import { hsApiKey, stripe } from "./upstream.ts";
 
 const REASONS = [
   "insufficient_funds",
@@ -82,6 +86,17 @@ const BANK: Record<Reason, Bank> = {
   },
 };
 
+// With the sim service, the bank decides each Rev Rec retry by its real-life slot (simulator/
+// selfhost/sim/bank.mjs): the invoice's fixed draw against the slot's chance from the same pattern
+// as the seeded counts (model/retry-stats.mjs). In words, per reason; hard declines never work.
+const VM_BANK_RULE: Partial<Record<Reason, string>> = {
+  insufficient_funds: "Best right after payday, on Fridays and in the evening.",
+  generic_decline: "Best on weekdays, in business hours.",
+  processing_error: "Works 85% of the time, any day and hour.",
+};
+const VM_BANK_NOTE =
+  "The bank decides each retry by its real-life day and hour.";
+
 // The bank rule in words, at the run's pace.
 export function bankRule(reason: Reason, fast: boolean) {
   const b = BANK[reason];
@@ -113,6 +128,13 @@ export function drawFlip(reason: Reason, fast: boolean, rng: () => number) {
   return f ? f[0] + Math.round(rng() * (f[1] - f[0]) * 2) / 2 : null;
 }
 
+// Demo seconds per real day on the sim service's simulated calendar: the default ladder's 15 retries
+// (about 5.9 days) in about 80 s, as the story's realLife says (simulator/selfhost/sim/calendar.mjs)
+export const SECONDS_PER_REAL_DAY =
+  (80 /
+    ladderOffsets(REAL_LADDER.startAfterSec, REAL_LADDER.frequencies).at(-1)!) *
+  86_400;
+
 // The two sides of a run: a copy of each invoice runs on each.
 type Side = "static" | "smart";
 const SIDES: Side[] = ["static", "smart"];
@@ -129,6 +151,15 @@ type Copy = {
   // The bank's swap report for this copy (runs from 27 Oct; see flipDue).
   swapTries?: number;
   swappedAt?: string | null;
+  // Runs with the sim service's bank: the customer carries the bank rule (sim_bank)
+  bankMarked?: boolean;
+  // Rev Rec still had tries left when the time cap ended the run: not a failure
+  stillTrying?: boolean;
+  // The next pick fell past the grace window on the simulated calendar: Rev Rec stopped (the sim
+  // service ended the engine's task; the proxy then cancels the invoice)
+  graceOver?: boolean;
+  // Real-life days from the failure to the retry that recovered (the simulated calendar)
+  realDays?: number | null;
 };
 
 type PfInvoice = {
@@ -136,6 +167,8 @@ type PfInvoice = {
   reason: Reason;
   amount: number;
   flipAfterMin: number | null;
+  // The sim service's bank: one draw per invoice, the same for both sides. null = no rule.
+  draw?: number | null;
   startedAt: string | null;
   flipAt: string | null;
   flippedAt: string | null;
@@ -171,6 +204,8 @@ type Run = {
   // Swaps tracked per copy (from 27 Oct). Older runs swapped both copies once, at flippedAt.
   perCopySwap?: boolean;
   pauses?: { from: string; to: string; minutes: number }[];
+  // "slot": the sim service's bank decides by each retry's real-life slot (no flips)
+  bank?: "slot";
 };
 
 const pairOf = (run: Run): Record<Side, ProfileRef> =>
@@ -268,8 +303,14 @@ export function parsePortfolio(body: any): Dials {
 }
 
 // Splits n invoices over the reasons by weight (largest remainder), then shuffles with the seed.
-function buildInvoices(d: Dials, fast: boolean): PfInvoice[] {
+function buildInvoices(
+  d: Dials,
+  fast: boolean,
+  slotBank: boolean,
+): PfInvoice[] {
   const rng = mulberry32(d.seed);
+  // Its own stream, so the bank draws do not change the reasons' order
+  const drawRng = mulberry32(d.seed ^ 0x5bd1e995);
   const entries = Object.entries(d.mix) as [Reason, number][];
   const total = entries.reduce((s, [, w]) => s + w, 0);
   const exact = entries.map(([r, w]) => ({ r, x: (w / total) * d.invoices }));
@@ -293,7 +334,11 @@ function buildInvoices(d: Dials, fast: boolean): PfInvoice[] {
       i: idx + 1,
       reason,
       amount: d.amount,
-      flipAfterMin: drawFlip(reason, fast, rng),
+      flipAfterMin: slotBank ? null : drawFlip(reason, fast, rng),
+      draw:
+        slotBank && VM_BANK_RULE[reason]
+          ? Math.round(drawRng() * 1e6) / 1e6
+          : null,
       startedAt: null,
       flipAt: null,
       flippedAt: null,
@@ -305,6 +350,9 @@ function buildInvoices(d: Dials, fast: boolean): PfInvoice[] {
 // ---------- the run ----------
 
 export function startPortfolio(dials: Dials, owner: string): Run {
+  // Without the sim service's bank, a run recovers only by reporting another card
+  if (!simOn() && !config.otherCards)
+    throw new HttpError(409, "The portfolio needs the sim service's bank.");
   const active = [...runs.values()].find(
     (r) => r.status === "setting_up" || r.status === "running",
   );
@@ -332,12 +380,13 @@ export function startPortfolio(dials: Dials, owner: string): Run {
     endedAt: null,
     endReason: null,
     dials,
-    invoices: buildInvoices(dials, config.fastEngine),
+    invoices: buildInvoices(dials, config.fastEngine, simOn()),
     trend: [],
     error: null,
     profiles: { static: PROFILES.static, smart: PROFILES.smart },
     fast: config.fastEngine,
     perCopySwap: true,
+    bank: simOn() ? "slot" : undefined,
   };
   runs.set(run.runId, run);
   save();
@@ -349,6 +398,33 @@ export function startPortfolio(dials: Dials, owner: string): Run {
     save();
   });
   return run;
+}
+
+// Marks a copy's Stripe customer for the sim service's bank: the rule (sim_bank) about the invoice's
+// own saved card, 4242; a win charges that same card. The story saves the card before its first
+// charge; the bank reads the rule again at each Rev Rec charge, so the mark lands before the first.
+async function markForBank(
+  story: { stripeCustomerId: string; savedPm: string; error: string | null },
+  rule: { v: 1; reason: Reason; draw: number },
+) {
+  for (
+    let waited = 0;
+    !story.stripeCustomerId || !story.savedPm;
+    waited += 100
+  ) {
+    if (story.error || waited > 30_000)
+      throw new Error("no saved card to mark for the bank");
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+  const meta = await stripe("POST", `customers/${story.stripeCustomerId}`, {
+    "metadata[sim_bank]": JSON.stringify({
+      ...rule,
+      card: "4242",
+      goodCard: story.savedPm,
+    }),
+  });
+  if (meta.status !== 200)
+    throw new Error(`bank rule not saved (Stripe HTTP ${meta.status})`);
 }
 
 // Creates both copies of each invoice, one invoice at a time. The two copies of an invoice start
@@ -366,11 +442,13 @@ async function setup(run: Run) {
           presetId: null,
           amount: inv.amount,
           currency: "USD",
-          savedCard: "0341",
+          // One card: the invoice's own card works at Stripe; the scripted bank says no until it
+          // decides yes. The first failure is a one-off test card's real decline.
+          savedCard: "4242",
           firstCharge: BANK[inv.reason].card,
           customer: "new",
           sendDuplicateOnStart: false,
-          reportAgainMode: "swap",
+          reportAgainMode: "new",
         },
         run.owner,
         {
@@ -388,10 +466,21 @@ async function setup(run: Run) {
         recoveredAt: null,
         error: null,
       };
-      return done.then(() => {
+      const draw = inv.draw;
+      const marking =
+        draw === null || draw === undefined
+          ? Promise.resolve(null)
+          : markForBank(story, { v: 1, reason: inv.reason, draw }).then(
+              () => {
+                inv.copies[side]!.bankMarked = true;
+                return null;
+              },
+              (e) => scrubText(String((e as Error).message)),
+            );
+      return Promise.all([done, marking]).then(([, markError]) => {
         const c = inv.copies[side]!;
         c.recoveryId = story.recoveryId;
-        c.error = story.error;
+        c.error = story.error ?? markError;
       });
     });
     save();
@@ -619,7 +708,11 @@ async function poll(run: Run) {
       // Open copies, copies that just became final, and a recovered copy whose paying
       // attempt has not shown up yet.
       const read =
-        !isFinalStatus(c.status) || (next === "recovered" && !c.recoveredAt);
+        !isFinalStatus(c.status) ||
+        (next === "recovered" && !c.recoveredAt) ||
+        (next === "recovered" &&
+          run.bank === "slot" &&
+          c.realDays === undefined);
       c.status = next;
       if (read) toRead.push({ c, side });
     }
@@ -639,22 +732,41 @@ async function poll(run: Run) {
     c.revrecAttempts = own.length;
     const paid = own.find((a: any) => a.status === "charged");
     c.recoveredAt = paid ? (paid.modified_at ?? paid.created_at) : null;
+    // Real-life days to recover, from the simulated calendar (left unset to read again); an
+    // open copy whose next pick fell past the grace window has ended there
+    if (run.bank === "slot" && (paid || !isFinalStatus(c.status))) {
+      const cal = await readCalendar(c.recoveryId!);
+      if (cal && paid) c.realDays = realDaysToRecover(cal);
+      if (cal && !paid && cal.plans.some((plan) => plan.stopped === "grace"))
+        c.graceOver = true;
+    }
   });
+  // The engine keeps such an invoice open with nothing planned: cancel it
+  for (const inv of run.invoices)
+    for (const side of SIDES) {
+      const c = inv.copies[side];
+      if (c?.graceOver && !isFinalStatus(c.status)) await cancelCopy(c);
+    }
 }
 
 const openCopies = (run: Run) =>
   run.invoices.flatMap((inv) =>
     SIDES.map((s) => inv.copies[s]).filter(
       (c): c is Copy =>
-        c !== undefined && Boolean(c.recoveryId) && !isFinalStatus(c.status),
+        c !== undefined &&
+        Boolean(c.recoveryId) &&
+        !isFinalStatus(c.status) &&
+        !c.graceOver,
     ),
   );
+
+const FINAL_REASON = "every invoice reached a final status";
 
 // The run ends when every copy is final, or at the time cap. Open copies are cancelled, so
 // nothing keeps retrying on the sandbox.
 async function maybeEnd(run: Run) {
   if (run.status === "running" && openCopies(run).length === 0)
-    return end(run, "every invoice reached a final status");
+    return end(run, FINAL_REASON);
   if (capReached(run))
     return end(run, `time cap of ${run.dials.maxMinutes} min`);
 }
@@ -670,7 +782,7 @@ async function cancelCopy(c: Copy) {
       return;
     } catch (e) {
       const msg = scrubText(String((e as Error).message));
-      if (k < 2 && /processing state/i.test(msg)) {
+      if (k < 2 && /processing state|retry is in progress/i.test(msg)) {
         await new Promise((ok) => setTimeout(ok, 2_000));
         continue;
       }
@@ -681,7 +793,13 @@ async function cancelCopy(c: Copy) {
 }
 
 async function end(run: Run, reason: string) {
-  for (const c of openCopies(run)) await cancelCopy(c);
+  // The time cap or the visitor ended the run while Rev Rec still had tries left: the run ended,
+  // not the invoice. The cancel below is clean-up on the engine; results say "still trying".
+  const cutOff = reason !== FINAL_REASON;
+  for (const c of openCopies(run)) {
+    if (cutOff) c.stillTrying = true;
+    await cancelCopy(c);
+  }
   run.status = "done";
   run.endReason = reason;
   run.endedAt = new Date().toISOString();
@@ -799,13 +917,25 @@ function card(run: Run, side: Side) {
         (Date.parse(x.c.recoveredAt!) - Date.parse(x.inv.startedAt!)) / 60_000,
     )
     .sort((a, b) => a - b);
-  const count = (s: string) => rows.filter((x) => x.c.status === s).length;
+  const count = (s: string) =>
+    rows.filter((x) => x.c.status === s && !x.c.stillTrying && !x.c.graceOver)
+      .length;
+  // Stopped at the end of the grace window (simulated calendar): Rev Rec stopped, like terminated
+  const graceOver = rows.filter((x) => x.c.graceOver).length;
   const attempts = rows.reduce((s, x) => s + x.c.revrecAttempts, 0);
+  // Invoices the time cap cut off count as still trying, not as failures
+  const stillTrying = rows.filter((x) => x.c.stillTrying).length;
+  const decided = rows.length - stillTrying;
+  const days = recovered
+    .map((x) => x.c.realDays)
+    .filter((d): d is number => typeof d === "number")
+    .sort((a, b) => a - b);
   return {
     invoices: rows.length,
     recovered: recovered.length,
-    recoveryRate: rows.length
-      ? Math.round((recovered.length / rows.length) * 1000) / 1000
+    stillTrying,
+    recoveryRate: decided
+      ? Math.round((recovered.length / decided) * 1000) / 1000
       : null,
     recoveredAmount: recovered.reduce((s, x) => s + x.inv.amount, 0),
     revrecAttempts: attempts,
@@ -820,24 +950,30 @@ function card(run: Run, side: Side) {
       median: quantile(minutes, 0.5),
       p90: quantile(minutes, 0.9),
     },
-    terminated: count("terminated"),
+    // Real-life days (the simulated calendar); null without the sim service
+    daysToRecovery: {
+      median: quantile(days, 0.5),
+      p90: quantile(days, 0.9),
+    },
+    terminated: count("terminated") + graceOver,
+    graceOver,
     cancelled: count("cancelled"),
     open:
-      rows.length - recovered.length - count("terminated") - count("cancelled"),
+      decided -
+      recovered.length -
+      count("terminated") -
+      graceOver -
+      count("cancelled"),
   };
 }
 
 export async function portfolioView(runId: string) {
   const run = getRun(runId);
   const pair = pairOf(run);
-  const modes = await Promise.all(
-    SIDES.map((s) =>
-      readRevRecConfig(pair[s]).then(
-        (c) => c.retryMode,
-        () => null,
-      ),
-    ),
+  const configs = await Promise.all(
+    SIDES.map((s) => readRevRecConfig(pair[s]).catch(() => null)),
   );
+  const modes = configs.map((c) => c?.retryMode ?? null);
   const sameProfile = pair.static.profileId === pair.smart.profileId;
   // Same strategy on both sides (one profile, or two profiles in the same mode): the two cards
   // can differ only by sandbox timing. The first run measured about 1.5 min and 2 attempts.
@@ -873,9 +1009,14 @@ export async function portfolioView(runId: string) {
     bankRules: reasons.map((reason) => ({
       reason,
       firstChargeCard: BANK[reason].card,
-      rule: bankRule(reason, Boolean(run.fast)),
+      rule:
+        run.bank === "slot"
+          ? (VM_BANK_RULE[reason] ?? BANK[reason].rule(""))
+          : bankRule(reason, Boolean(run.fast)),
       source: "scripted",
     })),
+    // How the bank decides, in one line (runs with the sim service's bank)
+    bankNote: run.bank === "slot" ? VM_BANK_NOTE : null,
     trend: run.trend,
     pauses: pausesOf(run),
     invoices: run.invoices.map((inv) => ({
@@ -902,19 +1043,34 @@ export async function portfolioView(runId: string) {
       sameStrategy,
       label: sameStrategy
         ? `Same strategy on both sides, differences are ${config.engine === "sandbox" ? "sandbox " : ""}timing noise`
-        : `${modes[0] ?? "static"} vs ${modes[1] ?? "smart"}`,
+        : modes[0] === "cascading" && modes[1] === "smart"
+          ? "Static retries vs Smart retries (Rev Rec model)"
+          : `${modes[0] ?? "static"} vs ${modes[1] ?? "smart"}`,
       source: "recomputed",
     },
     warnings: [
+      // The time cap cut a side short of its grace window: say so, and how to see it all
+      ...SIDES.flatMap((side, k) =>
+        card(run, side).stillTrying && run.endReason?.startsWith("time cap")
+          ? [
+              stoppedAtCap(
+                run,
+                side,
+                modes[k],
+                configs[k]?.gracePeriodDays ?? null,
+              ),
+            ]
+          : [],
+      ),
       ...(sameProfile
         ? [
             // No ids in notes: the profile ids are in `profiles` above.
-            `Both runs use the same profile (retry mode ${modes[0] ?? "unknown"}) until the smart profile exists. A difference between the two cards is noise, not strategy.`,
+            `Both sides use one profile (retry mode ${modes[0] ?? "unknown"}). Differences are noise.`,
           ]
         : []),
       ...pausesOf(run).map(
         (p) =>
-          `The proxy did not run from ${p.from.slice(11, 19)} to ${p.to.slice(11, 19)} UTC (${p.minutes} min; on a laptop, sleep). Bank flips and status reads in that window were late.`,
+          `The proxy paused ${p.from.slice(11, 19)} to ${p.to.slice(11, 19)} UTC (${p.minutes} min). Reads then came late.`,
       ),
       // The scripted bank must be on time to be a fair test. A late flip comes from the proxy
       // (a slow sandbox or a busy machine), not from Rev Rec.
@@ -922,10 +1078,51 @@ export async function portfolioView(runId: string) {
         .filter((inv) => (lateSec(inv) ?? 0) > lateFlipSec(run))
         .map(
           (inv) =>
-            `Invoice ${inv.i}: the bank flip came ${run.fast ? `${lateSec(inv)} s` : `${Math.round(lateSec(inv)! / 60)} min`} late, so its result is not a fair data point.`,
+            `Invoice ${inv.i}: the bank flip came ${run.fast ? `${lateSec(inv)} s` : `${Math.round(lateSec(inv)! / 60)} min`} late. Not a fair data point.`,
         ),
     ],
   };
+}
+
+// "Smart stopped at day 13 of 30 (time cap). Choose 7 min for the full picture." The day is the
+// real-life day the side had reached, the median over its invoices still trying: on the smart
+// side the simulated calendar (13.6 s per real day from the invoice's start), on the static side
+// its last retry's slot on the default timetable.
+function stoppedAtCap(
+  run: Run,
+  side: Side,
+  mode: string | null,
+  graceDays: number | null,
+) {
+  const name = side === "static" ? "Static" : "Smart";
+  const cut = run.invoices.filter((inv) => inv.copies[side]?.stillTrying);
+  const longest = Math.max(...portfolioConfig.stopAfterMinutes);
+  if (run.bank !== "slot" || !run.endedAt)
+    return `${name}: ${cut.length} still trying at the time cap.`;
+  const offsets = ladderOffsets(
+    REAL_LADDER.startAfterSec,
+    REAL_LADDER.frequencies,
+  );
+  const days = cut
+    .map((inv) =>
+      mode === "smart"
+        ? (Date.parse(run.endedAt!) - Date.parse(inv.startedAt!)) /
+          1000 /
+          SECONDS_PER_REAL_DAY
+        : (offsets[Math.max(0, (inv.copies[side]?.revrecAttempts ?? 1) - 1)] ??
+            0) / 86_400,
+    )
+    .sort((a, b) => a - b);
+  // Never past the grace window: a copy there has ended (graceOver), not been cut off
+  const day = Math.min(
+    Math.floor(days[Math.floor(days.length / 2)] ?? 0),
+    (graceDays ?? 30) - 1,
+  );
+  const tail =
+    run.dials.maxMinutes < longest
+      ? ` Choose ${longest} min for the full picture.`
+      : "";
+  return `${name} stopped at day ${day} of ${graceDays ?? 30} (time cap).${tail}`;
 }
 
 export function listPortfolios() {

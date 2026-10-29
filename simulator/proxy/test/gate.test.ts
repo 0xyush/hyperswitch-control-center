@@ -154,6 +154,30 @@ test("config with and without the /dashboard prefix: the real handlers; a wrong 
   }
 });
 
+test("/healthz and /sim/health stay open without the cookie", async () => {
+  // Offline: the engine and Stripe reads inside the health answer get a fake reply.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) =>
+    String(input).startsWith(base)
+      ? realFetch(input, init)
+      : new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch;
+  try {
+    for (const p of ["/healthz", "/sim/health"]) {
+      const r = await realFetch(base + p);
+      assert.equal(r.status, 200, p);
+      assert.ok("limits" in (await r.json()), p);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test("more than 10 tries a minute are refused", async () => {
   let last = 0;
   for (let i = 0; i < 11; i++) last = (await login("wrong")).status;

@@ -250,7 +250,7 @@ function replaySlice(view: any, n: number) {
           {
             id: "status",
             source: "sandbox",
-            text: `Rev Rec status at this step (recorded): ${status} (${caption}).`,
+            text: `Status at this step: ${caption}.`,
           },
           ...(view.explain as any[]).filter((e) => TIMELESS.has(e.id)),
         ],
@@ -258,10 +258,13 @@ function replaySlice(view: any, n: number) {
     warnings: [],
     waiting: null,
     actions: {
+      handover: false,
+      goLive: false,
       paidInApp: false,
       reportAgain: false,
       cancel: false,
       reportAgainMode: view.actions?.reportAgainMode ?? null,
+      reportAgainClosed: null,
     },
   };
 }
