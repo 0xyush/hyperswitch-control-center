@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 0 640 240" fill="none" role="img" aria-label="A failed charge, three retries on a calendar, then recovered">
+  <!-- Rev Rec Home, "Watch the simulation" (28 Oct): the control center Home card style -->
+  <defs>
+    <filter id="tile" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#1F3A68" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="300" fill="#F5F7FB"/>
+
+  <!-- the line: declined, three retries, recovered -->
+  <path d="M232 168 H568" stroke="#8BB8F8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M556 160 L568 168 L556 176" stroke="#8BB8F8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- declined charge -->
+  <g filter="url(#tile)">
+    <rect x="92" y="122" width="140" height="92" rx="16" fill="#FFFFFF"/>
+  </g>
+  <rect x="112" y="142" width="44" height="30" rx="5" fill="#E9EEF7"/>
+  <rect x="112" y="150" width="44" height="6" fill="#C8D3E6"/>
+  <circle cx="190" cy="157" r="16" fill="#FDECEC"/>
+  <path d="M184 151 L196 163 M196 151 L184 163" stroke="#E5484D" stroke-width="3" stroke-linecap="round"/>
+  <text x="112" y="198" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600" fill="#344054">Declined</text>
+
+  <!-- retries: two declined, the third works -->
+  <circle cx="306" cy="168" r="11" fill="#FFFFFF" stroke="#F3A5A8" stroke-width="3"/>
+  <circle cx="392" cy="168" r="11" fill="#FFFFFF" stroke="#F3A5A8" stroke-width="3"/>
+  <circle cx="478" cy="168" r="11" fill="#0069FD"/>
+  <circle cx="478" cy="168" r="17" stroke="#0069FD" stroke-opacity="0.25" stroke-width="4"/>
+  <text x="392" y="208" text-anchor="middle" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#667085">Retries at smart times</text>
+
+  <!-- the calendar: the model picks a day -->
+  <path d="M478 104 V148" stroke="#0069FD" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="4 5"/>
+  <g filter="url(#tile)">
+    <rect x="418" y="30" width="120" height="78" rx="12" fill="#FFFFFF"/>
+  </g>
+  <path d="M418 42 a12 12 0 0 1 12 -12 h96 a12 12 0 0 1 12 12 v10 h-120 z" fill="#0069FD"/>
+  <rect x="446" y="24" width="5" height="14" rx="2.5" fill="#1F3A68"/>
+  <rect x="505" y="24" width="5" height="14" rx="2.5" fill="#1F3A68"/>
+  <g fill="#E4E9F2">
+    <rect x="432" y="62" width="14" height="12" rx="3"/>
+    <rect x="452" y="62" width="14" height="12" rx="3"/>
+    <rect x="472" y="62" width="14" height="12" rx="3"/>
+    <rect x="492" y="62" width="14" height="12" rx="3"/>
+    <rect x="512" y="62" width="14" height="12" rx="3"/>
+    <rect x="432" y="82" width="14" height="12" rx="3"/>
+    <rect x="452" y="82" width="14" height="12" rx="3"/>
+    <rect x="492" y="82" width="14" height="12" rx="3"/>
+    <rect x="512" y="82" width="14" height="12" rx="3"/>
+  </g>
+  <rect x="472" y="82" width="14" height="12" rx="3" fill="#0069FD"/>
+
+  <!-- recovered -->
+  <g filter="url(#tile)">
+    <rect x="568" y="122" width="140" height="92" rx="16" fill="#FFFFFF"/>
+  </g>
+  <circle cx="604" cy="157" r="16" fill="#E7F8EF"/>
+  <path d="M596 157 L602 163 L613 151" stroke="#12B76A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="632" y="148" width="56" height="8" rx="4" fill="#E4E9F2"/>
+  <rect x="632" y="162" width="36" height="8" rx="4" fill="#E4E9F2"/>
+  <text x="588" y="198" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600" fill="#344054">Recovered</text>
+</svg>

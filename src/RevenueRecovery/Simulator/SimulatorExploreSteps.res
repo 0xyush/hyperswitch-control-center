@@ -3,7 +3,7 @@ open ExploreWorkflowsTypes
 open Typography
 
 let drawerHeading = "Revenue Recovery Guide"
-let drawerSubHeading = "Learn how Rev Rec recovers failed subscription payments, one part at a time."
+let drawerSubHeading = "How Rev Rec recovers failed payments, one part at a time."
 
 // Glossary terms in the text are underlined and open the glossary drawer
 let stepText = (text: string) =>
@@ -13,11 +13,10 @@ let steps: array<stepDetails> = [
   {
     title: "What Rev Rec is",
     description: <div className="flex flex-col gap-4">
+      {stepText("A payment fails. The billing system informs Revenue Recovery (Rev Rec).")}
+      {stepText("Rev Rec picks a time and tries the saved card again.")}
       {stepText(
-        "When a subscription payment fails, the billing system tells Revenue Recovery (Rev Rec). Rev Rec picks a time and charges the saved card again. It stops when the invoice is paid or a retry cannot help.",
-      )}
-      {stepText(
-        "A soft decline (for example, no funds) is worth a retry. A hard decline (for example, a stolen card) is not.",
+        "A soft decline (no money now) is worth a retry. A hard decline (stolen card) is not.",
       )}
     </div>,
     videoPath: None,
@@ -30,12 +29,9 @@ let steps: array<stepDetails> = [
   {
     title: "Watch one invoice",
     description: <div className="flex flex-col gap-4">
-      {stepText(
-        "Pick a scenario and charge the customer. A real failed invoice moves through Monitoring, Scheduled and Processing. It ends Recovered or Terminated.",
-      )}
-      {stepText(
-        "Each step says who acted (billing system, Rev Rec, processor or customer) and why.",
-      )}
+      {stepText("Pick a story and charge the customer.")}
+      {stepText("Watch the invoice until Rev Rec recovers it or stops.")}
+      {stepText("Each step says who acted, and why.")}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_watch_one_invoice",
@@ -50,9 +46,8 @@ let steps: array<stepDetails> = [
   {
     title: "Run a portfolio",
     description: <div className="flex flex-col gap-4">
-      {stepText(
-        "Run a batch of invoices twice: once with static retries and once with smart retries. Compare the recovery rate, the recovered amount and the attempts used, side by side.",
-      )}
+      {stepText("Run the same invoices twice: static retries, then smart retries.")}
+      {stepText("Compare how many each recovers, side by side.")}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_run_a_portfolio",
@@ -67,9 +62,7 @@ let steps: array<stepDetails> = [
   {
     title: "Learn Rev Rec",
     description: <div className="flex flex-col gap-4">
-      {stepText(
-        "Eight short levels, one per feature. Each shows the real value on the demo engine and ends with two questions.",
-      )}
+      {stepText("Short levels, one per feature. Each ends with two questions.")}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_tour_the_features",
@@ -84,10 +77,8 @@ let steps: array<stepDetails> = [
   {
     title: "Read the maths",
     description: <div className="flex flex-col gap-4">
-      {stepText(
-        "For any attempt, see what Rev Rec used and the time it chose. You also see the limits that applied.",
-      )}
-      {stepText("Every line says where it comes from: Rev Rec, re-computed, or a rule.")}
+      {stepText("Tap \"?\" on any retry: what Rev Rec used, and why it chose that time.")}
+      {stepText("Each line says where it comes from: Rev Rec, re-computed, or a rule.")}
     </div>,
     videoPath: None,
     sectionTrackingEvent: "explore_revenue_recovery_read_the_maths",

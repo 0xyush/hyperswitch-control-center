@@ -34,3 +34,15 @@ let useSimFetch = () => {
     res->Fetch.Response.ok ? json : Exn.raiseError(json->JSON.stringify)
   }
 }
+
+// The proxy's health and limits: GET /sim/health, or /healthz on a proxy without it (Cloud Run
+// does not let /healthz through from outside)
+let useFetchHealth = () => {
+  let simFetch = useSimFetch()
+  async () =>
+    try {
+      await simFetch(~path="/sim/health", ~method_=Get)
+    } catch {
+    | _ => await simFetch(~path="/healthz", ~method_=Get)
+    }
+}

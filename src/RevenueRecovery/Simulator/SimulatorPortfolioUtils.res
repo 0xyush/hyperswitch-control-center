@@ -43,10 +43,13 @@ let defaultDials: portfolioDials = {
   maxMinutes: 20.0,
 }
 
-// The tiles of the form. The limits come from GET /healthz; these are the values when the proxy
+// The form's limits come from GET /sim/health (or /healthz); these are the values when the proxy
 // does not report them (10 invoices, stop after 10, 20 or 45 min).
-let invoiceCounts = [10, 25]
-let defaultLimits: portfolioLimits = {maxInvoices: 10, stopAfterMinutes: [10.0, 20.0, 45.0]}
+let defaultLimits: portfolioLimits = {
+  maxInvoices: 10,
+  stopAfterMinutes: [10.0, 20.0, 45.0],
+  secondsPerDay: None,
+}
 
 let limitsMapper = (json): portfolioLimits => {
   let limits = json->getDictFromJsonObject->getDictfromDict("limits")
@@ -58,6 +61,7 @@ let limitsMapper = (json): portfolioLimits => {
   {
     maxInvoices: limits->getInt("portfolioMaxInvoices", defaultLimits.maxInvoices),
     stopAfterMinutes: stopAfter->Array.length > 0 ? stopAfter : defaultLimits.stopAfterMinutes,
+    secondsPerDay: limits->getOptionFloat("portfolioSecondsPerDay"),
   }
 }
 
@@ -68,6 +72,19 @@ let stopAfterLabel = minutes =>
   } else {
     `${minutes->Float.toString} min`
   }
+
+// Under the stop-after choices on the simulated calendar: how much real time the longest one covers
+// (the grace window is 30 days)
+let calendarLine = (limits: portfolioLimits) =>
+  limits.secondsPerDay->Option.map(secondsPerDay => {
+    let longest = limits.stopAfterMinutes->Array.reduce(0.0, Math.max)
+    let days = (longest *. 60.0 /. secondsPerDay)->Math.floor->Float.toInt
+    let covers = days >= 30 ? "the full 30 days" : `${days->Int.toString} days`
+    `1 real day = ${secondsPerDay
+      ->Math.round
+      ->Float.toInt
+      ->Int.toString} s here. ${longest->stopAfterLabel} covers ${covers}.`
+  })
 
 let mixTotal = (mix: Dict.t<int>) => mix->Dict.valuesToArray->Array.reduce(0, (sum, w) => sum + w)
 
@@ -168,9 +185,12 @@ let sideCardMapper = (dict): sideCard => {
     attemptsPerRecovery: dict->getOptionFloat("attemptsPerRecovery"),
     medianMinutes: minutes->getOptionFloat("median"),
     p90Minutes: minutes->getOptionFloat("p90"),
+    medianDays: dict->getDictfromDict("daysToRecovery")->getOptionFloat("median"),
+    p90Days: dict->getDictfromDict("daysToRecovery")->getOptionFloat("p90"),
     terminated: dict->getInt("terminated", 0),
     cancelled: dict->getInt("cancelled", 0),
     openCount: dict->getInt("open", 0),
+    stillTrying: dict->getInt("stillTrying", 0),
   }
 }
 
@@ -185,6 +205,9 @@ let invoiceCopyMapper = (dict): option<invoiceCopy> =>
         recoveredAt: dict->getOptionString("recoveredAt"),
         error: dict->getString("error", ""),
         setupStage: dict->getOptionString("setupStage"),
+        stillTrying: dict->getBool("stillTrying", false),
+        graceOver: dict->getBool("graceOver", false),
+        realDays: dict->getOptionFloat("realDays"),
       })
 
 let runMapper = (json, ~isFixture): portfolioRun => {
@@ -218,6 +241,7 @@ let runMapper = (json, ~isFixture): portfolioRun => {
       firstChargeCard: rule->getString("firstChargeCard", ""),
       rule: rule->getString("rule", ""),
     }),
+    bankNote: dict->getString("bankNote", ""),
     trend: arrayOf("trend", point => {
       minute: point->getFloat("minute", 0.0),
       staticSoFar: point->getFloat("static", 0.0),
@@ -233,7 +257,11 @@ let runMapper = (json, ~isFixture): portfolioRun => {
     }),
     warnings: dict->getStrArrayFromDict("warnings", []),
     sameStrategy: comparison->getBool("sameStrategy", false),
-    comparisonLabel: comparison->getString("label", ""),
+    // Smart only: the proxy's 'Static retries vs Smart retries' reads as smart against the baseline
+    comparisonLabel: switch comparison->getString("label", "") {
+    | "Static retries vs Smart retries (Rev Rec model)" => "Smart retries (Rev Rec model) vs today's fixed retries"
+    | label => label
+    },
     isFixture,
   }
 }
@@ -242,7 +270,39 @@ let formatMoney = minor =>
   `$${(minor->Int.toFloat /. 100.0)->Float.toFixedWithPrecision(~digits=2)}`
 
 // Copies that reached an end state, for the progress bar
-let finishedCopies = (card: sideCard) => card.recovered + card.terminated + card.cancelled
+let finishedCopies = (card: sideCard) =>
+  card.recovered + card.terminated + card.cancelled + card.stillTrying
+
+// Recovered of all the failed invoices on one side (the research's definition): an invoice still
+// trying at the time cap counts as not recovered, so both sides share one denominator
+let recoveryShare = (card: sideCard) =>
+  card.invoices == 0 ? None : Some(card.recovered->Int.toFloat /. card.invoices->Int.toFloat)
+
+// "Still trying at the end: 2 on smart retries, 0 on fixed retries. Counted as not recovered."
+let stillTryingText = (run: portfolioRun) =>
+  run.staticCard.stillTrying + run.smartCard.stillTrying > 0
+    ? Some(
+        `Still trying at the end: ${run.smartCard.stillTrying->Int.toString} on smart retries, ${run.staticCard.stillTrying->Int.toString} on fixed retries. Counted as not recovered.`,
+      )
+    : None
+
+// "Smart retries recovered 12 points more." from the two recovery rates
+let upliftText = (run: portfolioRun) =>
+  switch (run.staticCard->recoveryShare, run.smartCard->recoveryShare) {
+  | (Some(staticRate), Some(smartRate)) => {
+      let points = ((smartRate -. staticRate) *. 100.0)->Math.round->Float.toInt
+      Some(
+        points == 0
+          ? "Both sides recovered the same share."
+          : `Smart retries recovered ${Math.Int.abs(points)->Int.toString} ${Math.Int.abs(
+                points,
+              ) == 1
+                ? "point"
+                : "points"} ${points > 0 ? "more" : "fewer"}.`,
+      )
+    }
+  | _ => None
+  }
 
 // A side with invoices but no Rev Rec attempts booked no retries: at the end of the run, or
 // already while running when the other side has attempts
@@ -252,11 +312,11 @@ let bookedNoRetries = (run: portfolioRun, ~card: sideCard, ~other: sideCard) =>
   card.revrecAttempts == 0 &&
   (run.status->isRunOver || other.revrecAttempts > 0)
 
-// The decider reason applies only to a smart profile
+// On a smart profile, Rev Rec's model plans retries days ahead (the simulated calendar)
 let noRetriesWhy = (~mode) =>
   mode == "smart"
-    ? "Smart retries need Rev Rec's trained model, which this demo does not have yet."
-    : "The demo engine booked no retry for these invoices."
+    ? "Rev Rec planned the first retry for a later day."
+    : "Rev Rec booked no retry for these invoices."
 
 // The proxy sends every copy with a setupStage: "pending" (no story id yet: waiting; with one:
 // being charged), "charged" or "reported". Older runs send null for a copy not started yet and
@@ -283,11 +343,11 @@ let durationText = seconds =>
     : `${(seconds / 60)->Int.toString} min ${mod(seconds, 60)->Int.toString} s`
 
 // The line above the cards. With the same strategy on both sides any difference is timing noise;
-// with static retries on both, it says why there is no smart side.
+// with static retries on both, it says there is nothing to compare.
 let comparisonText = (run: portfolioRun) =>
   if run.sameStrategy {
     run.staticMode == "cascading" && run.smartMode == "cascading"
-      ? "Both sides use static retries. Smart retries need Rev Rec's trained model, which this demo does not have yet."
+      ? "Both sides use static retries, so there is nothing to compare."
       : "Both sides use the same strategy, so any difference is timing noise."
   } else {
     `Comparison: ${run.comparisonLabel}`
@@ -299,13 +359,17 @@ let hasFinishedCopy = (run: portfolioRun) =>
 let invoiceStatusLabel = (status: string): Table.cell => {
   let color: Table.labelColor = switch status {
   | "recovered" => LabelGreen
-  | "terminated" => LabelRed
+  | "terminated" | "grace over" => LabelRed
   | "cancelled" => LabelLightGray
+  | "still trying (time cap)" | "still trying (run stopped)" => LabelOrange
   | "" => LabelLightGray
   | _ => LabelOrange
   }
   Label({title: (status->isEmptyString ? "pending" : status)->String.toUpperCase, color})
 }
+
+// Smart only: the fixed timetable stays as the baseline, today's fixed retries
+let baselineName = "Today's fixed retries"
 
 let staticColor = "#8BA3C7"
 let revrecColor = "#006DF9"
@@ -332,8 +396,8 @@ let reasonChartPayload = (rows: array<reasonRow>): ColumnGraphTypes.columnGraphP
   {
     title: {text: ""},
     data: [
-      series(~name="Static retries", ~color=staticColor, ~value=row => row.staticRecovered),
-      series(~name="Rev Rec", ~color=revrecColor, ~value=row => row.smartRecovered),
+      series(~name=baselineName, ~color=staticColor, ~value=row => row.staticRecovered),
+      series(~name="Smart retries", ~color=revrecColor, ~value=row => row.smartRecovered),
     ],
     tooltipFormatter: ColumnGraphUtils.columnGraphTooltipFormatter(
       ~title="Invoices recovered",
@@ -344,40 +408,116 @@ let reasonChartPayload = (rows: array<reasonRow>): ColumnGraphTypes.columnGraphP
 }
 
 // Line chart: invoices recovered so far, by minute of the run
-let trendChartPayload = (points: array<trendPoint>): LineGraphTypes.lineGraphPayload => {
+// "Recovered over the run": recovered so far on each side. On the simulated calendar the x axis
+// is real-life days from the first failure (the run's start), a tick every 2 days; without the
+// calendar it is demo time (0:30, 1:00).
+let trendOptions = (run: portfolioRun, ~secondsPerDay: option<float>) => {
+  let inDays = secondsPerDay->Option.isSome && run.bankNote->isNonEmptyString
+  let x = (point: trendPoint) =>
+    switch secondsPerDay {
+    | Some(perDay) if inDays => point.minute *. 60.0 /. perDay
+    // Demo time as a clock: milliseconds for the datetime axis
+    | _ => point.minute *. 60_000.0
+    }
+  let line = (~name, ~color, ~value) =>
+    {
+      "name": name,
+      "color": color,
+      "data": run.trend->Array.map(point => [point->x, point->value]),
+    }
+  let invoices = Math.Int.max(run.staticCard.invoices, run.smartCard.invoices)
   {
-    chartHeight: Custom(280),
-    chartLeftSpacing: DefaultLeftSpacing,
-    categories: points->Array.map(point => `${point.minute->Float.toString} min`),
-    data: [
-      {
-        showInLegend: true,
-        name: "Static retries",
-        data: points->Array.map(point => point.staticSoFar),
-        color: staticColor,
-      },
-      {
-        showInLegend: true,
-        name: "Rev Rec",
-        data: points->Array.map(point => point.smartSoFar),
-        color: revrecColor,
-      },
-    ],
-    title: {text: ""},
-    yAxisMaxValue: None,
-    yAxisMinValue: Some(0),
-    tooltipFormatter: InsightsUtils.tooltipFormatter(
-      ~secondaryCategories=[],
-      ~title="Recovered so far",
-      ~metricType=Default,
-      ~showNameInTooltip=true,
-    ),
-    yAxisFormatter: LineGraphUtils.lineGraphYAxisFormatter(~statType=Default),
-    legend: {
-      useHTML: true,
-      labelFormatter: LineGraphUtils.valueFormatter,
-      align: "right",
-      verticalAlign: "top",
+    "chart": {
+      "type": "line",
+      // The reason chart beside it is 300 high (ColumnGraphUtils)
+      "height": 300,
+      "backgroundColor": "transparent",
+      "spacing": [8, 4, 4, 4],
+      "style": {"fontFamily": "inherit"},
     },
-  }
+    "title": {"text": Nullable.null},
+    "credits": {"enabled": false},
+    "accessibility": {"enabled": false},
+    "legend": {
+      "enabled": true,
+      "align": "right",
+      "verticalAlign": "top",
+      "itemStyle": {"color": "#667085", "fontSize": "12px", "fontWeight": "500"},
+    },
+    "xAxis": inDays
+      ? {
+          "type": "linear",
+          "min": 0,
+          "tickInterval": 2,
+          "lineColor": "#D0D5DD",
+          "tickLength": 0,
+          // Level labels on one line: on a narrow card Highcharts skips some instead of tilting them
+          "labels": {
+            "format": "Day {value}",
+            "autoRotation": false,
+            "style": {
+              "color": "#667085",
+              "fontSize": "12px",
+              "whiteSpace": "nowrap",
+              "textOverflow": "none",
+            },
+          },
+          "title": {
+            "text": "Real-life days from the first failure",
+            "style": {"color": "#98A2B3", "fontSize": "11px", "fontWeight": "500"},
+          },
+        }
+      : {
+          "type": "datetime",
+          "min": 0,
+          "tickInterval": 30_000,
+          "lineColor": "#D0D5DD",
+          "tickLength": 0,
+          "labels": {
+            "format": "{value:%M:%S}",
+            "autoRotation": false,
+            "style": {
+              "color": "#667085",
+              "fontSize": "12px",
+              "whiteSpace": "nowrap",
+              "textOverflow": "none",
+            },
+          },
+          "title": {
+            "text": "Demo time (min:s)",
+            "style": {"color": "#98A2B3", "fontSize": "11px", "fontWeight": "500"},
+          },
+        },
+    "yAxis": {
+      "min": 0,
+      "max": invoices,
+      "allowDecimals": false,
+      "title": {"text": Nullable.null},
+      "gridLineColor": "#F2F4F7",
+      "labels": {"style": {"color": "#667085", "fontSize": "12px"}},
+    },
+    "tooltip": {
+      "shared": true,
+      "headerFormat": inDays ? "Day {point.key:.1f}<br/>" : "{point.key:%M:%S}<br/>",
+      "pointFormat": "{series.name}: <b>{point.y}</b> recovered<br/>",
+      "backgroundColor": "#FFFFFF",
+      "borderColor": "#E4E7EC",
+      "borderRadius": 8,
+      "shadow": false,
+      "style": {"color": "#344054", "fontSize": "12px"},
+    },
+    "plotOptions": {
+      "line": {
+        // Recovered so far only steps up
+        "step": "left",
+        "lineWidth": 2,
+        "marker": {"enabled": false},
+        "states": {"inactive": {"enabled": false}},
+      },
+    },
+    "series": [
+      line(~name=baselineName, ~color=staticColor, ~value=point => point.staticSoFar),
+      line(~name="Smart retries", ~color=revrecColor, ~value=point => point.smartSoFar),
+    ],
+  }->Identity.genericObjectOrRecordToJson
 }

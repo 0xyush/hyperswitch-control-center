@@ -14,9 +14,14 @@ type sideCard = {
   attemptsPerRecovery: option<float>,
   medianMinutes: option<float>,
   p90Minutes: option<float>,
+  // Real-life days from the failure to the recovery (the simulated calendar), if the proxy has them
+  medianDays: option<float>,
+  p90Days: option<float>,
   terminated: int,
   cancelled: int,
   openCount: int,
+  // Cut off by the time cap while Rev Rec still had tries left: not counted as failures
+  stillTrying: int,
 }
 
 // One copy of an invoice on one profile; storyId opens it in the invoice story
@@ -30,13 +35,24 @@ type invoiceCopy = {
   error: string,
   // Setup progress from the proxy: "pending", "charged" or "reported" (older runs have none)
   setupStage: option<string>,
+  // The time cap ended the run while Rev Rec still had tries left on this copy
+  stillTrying: bool,
+  // Rev Rec stopped: its next pick fell past the grace window on the simulated calendar
+  graceOver: bool,
+  // Real-life days from the failure to the retry that recovered (the simulated calendar), if any
+  realDays: option<float>,
 }
 
 // One copy during setup: not started, being created, charged, reported to Rev Rec, or failed
 type setupState = SetupWaiting | SetupCreating | SetupCharged | SetupReported | SetupFailed
 
-// From GET /healthz "limits"; the defaults when the proxy does not say
-type portfolioLimits = {maxInvoices: int, stopAfterMinutes: array<float>}
+// From GET /sim/health (or /healthz) "limits"; the defaults when the proxy does not say
+// secondsPerDay: demo seconds per real day on the simulated calendar (the sim service), if any
+type portfolioLimits = {
+  maxInvoices: int,
+  stopAfterMinutes: array<float>,
+  secondsPerDay: option<float>,
+}
 
 type portfolioInvoice = {
   index: int,
@@ -85,6 +101,8 @@ type portfolioRun = {
   smartCard: sideCard,
   byReason: array<reasonRow>,
   bankRules: array<bankRule>,
+  // How the bank decides, in one line (runs with the sim service's bank), or ""
+  bankNote: string,
   trend: array<trendPoint>,
   invoices: array<portfolioInvoice>,
   warnings: array<string>,

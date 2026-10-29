@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 0 600 225" fill="none" role="img" aria-label="A small checkout: a test card number and a Pay button">
+  <!-- Rev Rec Home, "Try Rev Rec yourself" (28 Oct): the control center Home card style -->
+  <defs>
+    <filter id="panel" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1F3A68" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="300" fill="#F5F7FB"/>
+
+  <g filter="url(#panel)">
+    <rect x="250" y="16" width="300" height="194" rx="18" fill="#FFFFFF"/>
+  </g>
+
+  <!-- card number -->
+  <text x="274" y="44" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="500" fill="#667085">Card number</text>
+  <rect x="274" y="52" width="252" height="40" rx="9" fill="#FFFFFF" stroke="#0069FD" stroke-width="2"/>
+  <rect x="287" y="63" width="26" height="18" rx="4" fill="#E9EEF7"/>
+  <rect x="287" y="68" width="26" height="4" fill="#C8D3E6"/>
+  <text x="323" y="77" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="#344054" letter-spacing="0.4">4242 4242 4242 4242</text>
+
+  <!-- expiry and code -->
+  <rect x="274" y="102" width="120" height="36" rx="9" fill="#FFFFFF" stroke="#D0D5DD" stroke-width="1.5"/>
+  <text x="289" y="125" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#667085">12 / 34</text>
+  <rect x="406" y="102" width="120" height="36" rx="9" fill="#FFFFFF" stroke="#D0D5DD" stroke-width="1.5"/>
+  <text x="421" y="125" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#667085">123</text>
+
+  <!-- pay -->
+  <rect x="274" y="150" width="252" height="42" rx="9" fill="#0069FD"/>
+  <text x="400" y="176" text-anchor="middle" font-family="Inter, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600" fill="#FFFFFF">Pay $65.40</text>
+</svg>

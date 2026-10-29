@@ -24,14 +24,40 @@ let entries: array<entry> = [
     definition: "Rev Rec records failures but does not retry yet.",
   },
   {
-    term: "Static retries (cascading)",
-    aliases: ["static retries", "cascading"],
-    definition: "A fixed ladder of retry times.",
+    term: "Fixed timetable",
+    aliases: ["fixed timetable", "fixed retries", "static retries", "cascading"],
+    definition: "The same retry times for every invoice. Portfolio uses it as the baseline.",
   },
   {
     term: "Smart retries",
     aliases: ["smart retries"],
     definition: "Rev Rec picks the day and hour per invoice from past outcomes.",
+  },
+  // The smart model's words (simulator/selfhost/MODEL.md), in plain numbers
+  {
+    term: "Success estimate",
+    aliases: ["success estimate", "success estimates"],
+    definition: "How often a retry at this time worked before. For example, 42 of 100.",
+  },
+  {
+    term: "Confidence",
+    aliases: ["confidence"],
+    definition: "How sure Rev Rec is that one time beats another. More past tries, more sure.",
+  },
+  {
+    term: "Exploration floor",
+    aliases: ["exploration floor"],
+    definition: "Every day keeps at least a 1 in 10 chance. So Rev Rec keeps learning.",
+  },
+  {
+    term: "Systematic draw",
+    aliases: ["systematic draw", "systematic-k"],
+    definition: "With 5 tries left, Rev Rec picks 5 days, mostly the best ones. It acts on the soonest.",
+  },
+  {
+    term: "Seeded counts",
+    aliases: ["seeded counts"],
+    definition: "Made-up past results that start the model. Not Juspay's real data.",
   },
   {
     term: "Start rule",
@@ -61,7 +87,7 @@ let entries: array<entry> = [
   {
     term: "Record back",
     aliases: ["record back"],
-    definition: "Rev Rec telling the billing platform that an invoice is paid.",
+    definition: "Rev Rec informing the billing platform that an invoice is paid.",
   },
   {
     term: "Webhook",

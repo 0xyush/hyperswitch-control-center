@@ -27,11 +27,13 @@ type levelNumber =
   | FromConfig(SimulatorTypes.revRecConfig => (string, string))
   | Fixed(string, string)
 
-// Where "Try it" goes: the invoice story with a preset, or the portfolio run
-type tryTarget = StoryPreset(int) | PortfolioRun
+// Where "Try it" goes: the invoice story with a preset, the portfolio run, or the story preset
+// that GET /sim/presets tags with this level (learnLevel), once it exists
+type tryTarget = StoryPreset(int) | PortfolioRun | PresetForLevel
 
-// Panes 4 and 5: one question each; answer is the index of the right choice
-type check = {question: string, choices: array<string>, answer: int}
+// Panes 4 and 5: one question each; answer is the index of the right choice. A pending check
+// waits for the engine's behaviour to be confirmed: it shows "Being checked" and counts as passed.
+type check = {question: string, choices: array<string>, answer: int, pending?: bool}
 
 type level = {
   id: int,
@@ -42,6 +44,11 @@ type level = {
   idea: string,
   flow: lessonFlow,
   number: levelNumber,
+  // A line under the number about what is planned but not on the engine yet (grey "Planned" chip)
+  planned?: string,
+  // A line under the number about how this engine differs (grey "On this engine" chip). Unlike
+  // planned, the level's card shows no chip: the feature works.
+  engineNote?: string,
   checks: (check, check),
   tryTarget: tryTarget,
 }

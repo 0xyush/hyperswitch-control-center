@@ -10,7 +10,7 @@ module ProgressBar = {
   @react.component
   let make = (~learnedCount) => {
     let percent = learnedCount * 100 / totalLevels
-    <div className="flex flex-col gap-2 w-full max-w-2xl">
+    <div className="flex flex-col gap-2 w-full">
       <div className={`flex justify-between ${body.md.semibold} text-nd_gray-700`}>
         <span>
           {`${learnedCount->Int.toString} of ${totalLevels->Int.toString} learned`->React.string}
@@ -34,7 +34,7 @@ type circleState = Learned | Current | Open
 // The level circle, in the stepper look: green with a check once learned, blue ring for the next one
 module LevelCircle = {
   @react.component
-  let make = (~state, ~icon) => {
+  let make = (~state, ~icon, ~size=56) => {
     let (circleClass, iconClass) = switch state {
     | Learned => ("bg-nd_green-400 border-nd_green-400", "text-white")
     | Current => (
@@ -44,41 +44,59 @@ module LevelCircle = {
     | Open => ("bg-white border-nd_gray-200", "text-nd_gray-500")
     }
     <div
-      className={`relative z-10 shrink-0 flex items-center justify-center rounded-full w-14 h-14 border-2 ${circleClass}`}>
-      <Icon name={state == Learned ? "nd-check" : icon} size=22 className=iconClass />
+      className={`relative z-10 shrink-0 flex items-center justify-center rounded-full border-2 ${circleClass}`}
+      style={width: `${size->Int.toString}px`, height: `${size->Int.toString}px`}>
+      <Icon name={state == Learned ? "nd-check" : icon} size={size * 2 / 5} className=iconClass />
     </div>
   }
 }
 
-module LevelRow = {
+// The level sections on the page (the lessons themselves are C's)
+let levelSections = [("The basics", 1, 5), ("Special cases", 6, 8), ("From the workshops", 9, 14)]
+
+// One level as a card in the page's grid: number and icon, title, one-line hook, a status chip
+// (Learned, Next, or Planned while the engine does not do it yet) and one button
+module LevelCard = {
   @react.component
-  let make = (~level: level, ~state, ~isLast, ~onOpen) => {
-    let titleClass = state == Open ? "text-nd_gray-600" : "text-nd_gray-800"
-    <div className="relative flex items-center gap-4">
-      <RenderIf condition={!isLast}>
-        <div
-          className={`absolute top-14 left-7 h-6 border-l-2 z-0 ${state == Learned
-              ? "border-nd_green-400"
-              : "border-nd_gray-150"}`}
-        />
-      </RenderIf>
-      <div
-        className="flex flex-1 items-center gap-4 rounded-xl p-1 pr-4 cursor-pointer hover:bg-nd_gray-25"
-        onClick={_ => onOpen()}>
-        <LevelCircle state icon=level.icon />
-        <div className="flex flex-col flex-1 min-w-0">
-          <span className={`${body.sm.medium} text-nd_gray-400`}>
+  let make = (~level: level, ~state, ~onOpen) => {
+    let chip = switch (state, level.planned) {
+    | (Learned, _) => Some(("Learned", "bg-nd_green-50 text-nd_green-600"))
+    | (Current, _) => Some(("Next", "bg-nd_primary_blue-50 text-nd_primary_blue-600"))
+    | (Open, Some(_)) => Some(("Planned", "bg-nd_gray-150 text-nd_gray-600"))
+    | (Open, None) => None
+    }
+    <div
+      className={`h-full flex flex-col gap-3 rounded-xl border bg-white p-5 cursor-pointer hover:border-nd_gray-300 ${state ==
+          Current
+          ? "border-nd_primary_blue-450 ring-1 ring-nd_primary_blue-450"
+          : "border-nd_gray-200"}`}
+      onClick={_ => onOpen()}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <LevelCircle state icon=level.icon size=40 />
+          <span className={`${body.sm.semibold} text-nd_gray-500`}>
             {`Level ${level.id->Int.toString}`->React.string}
           </span>
-          <span className={`${body.lg.semibold} ${titleClass}`}> {level.title->React.string} </span>
-          <span className={`${body.md.medium} text-nd_gray-500`}> {level.hook->React.string} </span>
         </div>
-        <span
-          className={`${body.md.semibold} ${state == Current
-              ? "text-nd_primary_blue-450"
-              : "text-nd_gray-400"}`}>
-          {(state == Learned ? "Review" : "Start")->React.string}
-        </span>
+        {switch chip {
+        | Some((text, chipClass)) =>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 ${body.xs.semibold} ${chipClass}`}>
+            {text->React.string}
+          </span>
+        | None => React.null
+        }}
+      </div>
+      <div className="flex flex-col gap-1">
+        <p className={`${body.lg.semibold} text-nd_gray-800`}> {level.title->React.string} </p>
+        <p className={`${body.md.medium} text-nd_gray-500`}> {level.hook->React.string} </p>
+      </div>
+      <div className="mt-auto pt-1">
+        <Button
+          text={state == Learned ? "Review" : "Start"}
+          buttonType={state == Current ? Primary : Secondary}
+          buttonSize=Small
+          onClick={_ => onOpen()}
+        />
       </div>
     </div>
   }
@@ -208,9 +226,24 @@ module PaneSteps = {
 }
 
 // Pane 3: the real number in big type and one line of context
+// A grey status chip: "Planned" (not on the engine yet) or "Being checked"
+module StatusChip = {
+  @react.component
+  let make = (~text) =>
+    <span
+      className={`shrink-0 rounded px-1.5 py-0.5 border bg-nd_gray-50 text-nd_gray-600 border-nd_gray-200 ${body.xs.semibold}`}>
+      {text->React.string}
+    </span>
+}
+
 module NumberBlock = {
   @react.component
-  let make = (~number: levelNumber, ~configState) => {
+  let make = (
+    ~number: levelNumber,
+    ~planned: option<string>,
+    ~engineNote: option<string>,
+    ~configState,
+  ) => {
     let (big, line) = switch number {
     | Fixed(big, line) => (big, line)
     | FromConfig(read) =>
@@ -223,13 +256,24 @@ module NumberBlock = {
     <div className="flex flex-col items-center gap-3 text-center">
       <span className={`${display.md.semibold} text-nd_gray-800`}> {big->React.string} </span>
       <span className={`${body.lg.medium} text-nd_gray-600`}> {line->React.string} </span>
+      {[("Planned", planned), ("On this engine", engineNote)]
+      ->Array.filterMap(((chip, line)) => line->Option.map(line => (chip, line)))
+      ->Array.map(((chip, line)) =>
+        <span key=chip className={`flex items-center gap-2 ${body.md.medium} text-nd_gray-500`}>
+          <StatusChip text=chip />
+          {line->React.string}
+        </span>
+      )
+      ->React.array}
     </div>
   }
 }
 
 // One question. A wrong pick allows one more try; after a second wrong pick the right choice is
 // marked. picks are the choices clicked, in order.
-let isCheckRight = (check: check, picks) => picks->Array.includes(check.answer)
+let isCheckPending = (check: check) => check.pending->Option.getOr(false)
+let isCheckRight = (check: check, picks) =>
+  check->isCheckPending || picks->Array.includes(check.answer)
 let isCheckOver = (check: check, picks) => check->isCheckRight(picks) || picks->Array.length >= 2
 
 module CheckChoices = {
@@ -237,63 +281,70 @@ module CheckChoices = {
   let make = (~check: check, ~picks: array<int>, ~onPick) => {
     let isRight = check->isCheckRight(picks)
     let isOver = check->isCheckOver(picks)
-    <div className="w-full flex flex-col gap-2">
-      <p className={`${body.lg.semibold} text-nd_gray-800`}> {check.question->React.string} </p>
-      {check.choices
-      ->Array.mapWithIndex((choice, index) => {
-        let isAnswer = index == check.answer
-        let isWrongPick = picks->Array.includes(index) && !isAnswer
-        let stateClass = if isAnswer && isRight {
-          "border-nd_green-400 bg-nd_green-50 text-nd_green-600"
-        } else if isAnswer && isOver {
-          // Shown after two wrong picks
-          "border-nd_green-400 border-dashed text-nd_green-600"
-        } else if isWrongPick {
-          "border-nd_red-400 bg-nd_red-50 text-nd_red-600"
-        } else {
-          "border-nd_gray-200 text-nd_gray-700 hover:border-nd_primary_blue-450"
-        }
-        let canPick = !isOver && !isWrongPick
-        <div
-          key=choice
-          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${body.md.semibold} ${stateClass} ${canPick
-              ? "cursor-pointer"
-              : "pointer-events-none"}`}
-          onClick={_ => onPick(index)}>
-          <span> {choice->React.string} </span>
-          {if isAnswer && isOver {
-            <Icon name="nd-check-circle" size=18 className="text-nd_green-400" />
-          } else if isWrongPick {
-            <Icon name="nd-cross" size=14 className="text-nd_red-500" />
+    check->isCheckPending
+      ? <div className="w-full flex flex-col items-center gap-3 text-center">
+          <StatusChip text="Being checked" />
+          <p className={`${body.lg.medium} text-nd_gray-600`}>
+            {"This question comes once the engine's behaviour is confirmed."->React.string}
+          </p>
+        </div>
+      : <div className="w-full flex flex-col gap-2">
+          <p className={`${body.lg.semibold} text-nd_gray-800`}> {check.question->React.string} </p>
+          {check.choices
+          ->Array.mapWithIndex((choice, index) => {
+            let isAnswer = index == check.answer
+            let isWrongPick = picks->Array.includes(index) && !isAnswer
+            let stateClass = if isAnswer && isRight {
+              "border-nd_green-400 bg-nd_green-50 text-nd_green-600"
+            } else if isAnswer && isOver {
+              // Shown after two wrong picks
+              "border-nd_green-400 border-dashed text-nd_green-600"
+            } else if isWrongPick {
+              "border-nd_red-400 bg-nd_red-50 text-nd_red-600"
+            } else {
+              "border-nd_gray-200 text-nd_gray-700 hover:border-nd_primary_blue-450"
+            }
+            let canPick = !isOver && !isWrongPick
+            <div
+              key=choice
+              className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${body.md.semibold} ${stateClass} ${canPick
+                  ? "cursor-pointer"
+                  : "pointer-events-none"}`}
+              onClick={_ => onPick(index)}>
+              <span> {choice->React.string} </span>
+              {if isAnswer && isOver {
+                <Icon name="nd-check-circle" size=18 className="text-nd_green-400" />
+              } else if isWrongPick {
+                <Icon name="nd-cross" size=14 className="text-nd_red-500" />
+              } else {
+                React.null
+              }}
+            </div>
+          })
+          ->React.array}
+          // The line keeps its height before an answer, so answering does not move the choices
+          {if isRight {
+            <p className={`h-5 ${body.md.semibold} text-nd_green-600`}>
+              {(picks->Array.length == 1 ? "Right." : "Right on the second try.")->React.string}
+            </p>
+          } else if isOver {
+            <p className={`h-5 ${body.md.medium} text-nd_gray-600`}>
+              {"Not this time. The right answer is marked."->React.string}
+            </p>
+          } else if picks->Array.length == 1 {
+            <p className={`h-5 ${body.md.medium} text-nd_red-600`}>
+              {"Not quite. One more try."->React.string}
+            </p>
           } else {
-            React.null
+            <p className="h-5" />
           }}
         </div>
-      })
-      ->React.array}
-      // The line keeps its height before an answer, so answering does not move the choices
-      {if isRight {
-        <p className={`h-5 ${body.md.semibold} text-nd_green-600`}>
-          {(picks->Array.length == 1 ? "Right." : "Right on the second try.")->React.string}
-        </p>
-      } else if isOver {
-        <p className={`h-5 ${body.md.medium} text-nd_gray-600`}>
-          {"Not this time. The right answer is marked."->React.string}
-        </p>
-      } else if picks->Array.length == 1 {
-        <p className={`h-5 ${body.md.medium} text-nd_red-600`}>
-          {"Not quite. One more try."->React.string}
-        </p>
-      } else {
-        <p className="h-5" />
-      }}
-    </div>
   }
 }
 
 module LevelModal = {
   @react.component
-  let make = (~level: level, ~configState, ~isLearned, ~onLearned, ~onClose) => {
+  let make = (~level: level, ~tryLink, ~configState, ~isLearned, ~onLearned, ~onClose) => {
     let (pane, setPane) = React.useState(_ => IdeaPane)
     let (isFullscreen, setIsFullscreen) = React.useState(_ => false)
 
@@ -312,7 +363,6 @@ module LevelModal = {
     }, [isFullscreen])
     let ((firstPicks, secondPicks), setPicks) = React.useState(_ => ([], []))
     let (firstCheck, secondCheck) = level.checks
-    let (tryText, tryUrl) = level.tryTarget->tryLink
     let paneIndex = lessonPanes->Array.findIndex(((p, _)) => p == pane)
     let paneAt = index => lessonPanes->Array.get(index)->Option.mapOr(pane, ((p, _)) => p)
 
@@ -357,7 +407,9 @@ module LevelModal = {
         </div>
       | NumberPane =>
         <div className="w-full">
-          <NumberBlock number=level.number configState />
+          <NumberBlock
+            number=level.number planned=level.planned engineNote=level.engineNote configState
+          />
         </div>
       // DOM roots, so the audit attribute lands on an element
       | FirstCheck =>
@@ -435,15 +487,18 @@ module LevelModal = {
         </AddDataAttributes>
         <AddDataAttributes attributes=[("data-learn", "footer")]>
           <div className="flex items-center justify-between gap-3 border-t border-nd_gray-150 pt-4">
-            // "Try it" on the last pane only; the empty span keeps the buttons on the right
-            {pane == SecondCheck
-              ? <span
-                  className={`cursor-pointer text-nd_primary_blue-450 hover:underline ${body.md.semibold}`}
-                  onClick={_ =>
-                    RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=tryUrl))}>
-                  {tryText->React.string}
-                </span>
-              : <span />}
+            // "Try it" on the last pane only, when the level has a preset; the empty span keeps
+            // the buttons on the right
+            {switch (pane, tryLink) {
+            | (SecondCheck, Some((tryText, tryUrl))) =>
+              <span
+                className={`cursor-pointer text-nd_primary_blue-450 hover:underline ${body.md.semibold}`}
+                onClick={_ =>
+                  RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=tryUrl))}>
+                {tryText->React.string}
+              </span>
+            | _ => <span />
+            }}
             <div className="flex items-center gap-3">
               <RenderIf condition={pane != IdeaPane}>
                 <Button text="Back" buttonType=Secondary buttonSize=Small onClick={_ => goBack()} />
@@ -481,6 +536,21 @@ let make = () => {
   let (configState, setConfigState) = React.useState(_ => SimulatorTypes.ConfigLoading)
   let (learned, setLearned) = React.useState(_ => readLearned())
   let (openLevel, setOpenLevel) = React.useState(_ => None)
+  let simFetch = SimulatorApi.useSimFetch()
+  // Level id -> story preset, for the levels whose preset is tagged in GET /sim/presets
+  let (levelPresets, setLevelPresets) = React.useState(_ => Dict.make())
+
+  React.useEffect(() => {
+    let read = async () =>
+      try {
+        let json = await simFetch(~path="/sim/presets", ~method_=Get)
+        setLevelPresets(_ => json->levelPresetsMapper)
+      } catch {
+      | _ => ()
+      }
+    read()->ignore
+    None
+  }, [])
 
   // The same reads as Configuration Details: the profile, its billing connector, and that connector
   let fetchConfig = async () => {
@@ -546,12 +616,12 @@ let make = () => {
       currentPageTitle="Learn Rev Rec"
     />
     <div className="flex items-start justify-between gap-4">
-      <PageUtils.PageHeading title="Learn Rev Rec" subTitle="Eight short levels." />
+      <PageUtils.PageHeading title="Learn Rev Rec" subTitle="Fourteen short levels." />
       <SimulatorGlossary.OpenButton />
     </div>
     <ProgressBar learnedCount />
     <RenderIf condition={configState == SimulatorTypes.ConfigFailed}>
-      <div className="max-w-2xl">
+      <div>
         <AlertV2Binding
           alertType=Warning
           slot={{slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />}}
@@ -559,24 +629,35 @@ let make = () => {
         />
       </div>
     </RenderIf>
-    <div className="flex flex-col gap-6 w-full max-w-2xl">
-      {levels
-      ->Array.mapWithIndex((level, index) => {
-        let state = if learned->Array.includes(level.id) {
-          Learned
-        } else if level.id == currentId {
-          Current
-        } else {
-          Open
-        }
-        <LevelRow
-          key={level.id->Int.toString}
-          level
-          state
-          isLast={index == totalLevels - 1}
-          onOpen={() => setOpenLevel(_ => Some(level))}
-        />
-      })
+    <div className="flex flex-col gap-8 w-full">
+      {levelSections
+      ->Array.map(((title, first, last)) =>
+        <section key=title className="flex flex-col gap-3">
+          <p className={`${body.sm.semibold} uppercase tracking-wide text-nd_gray-500`}>
+            {title->React.string}
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {levels
+            ->Array.filter(level => level.id >= first && level.id <= last)
+            ->Array.map(level => {
+              let state = if learned->Array.includes(level.id) {
+                Learned
+              } else if level.id == currentId {
+                Current
+              } else {
+                Open
+              }
+              <LevelCard
+                key={level.id->Int.toString}
+                level
+                state
+                onOpen={() => setOpenLevel(_ => Some(level))}
+              />
+            })
+            ->React.array}
+          </div>
+        </section>
+      )
       ->React.array}
       <div className="border-t border-dashed border-nd_gray-200" />
       <MoreFeatures configState />
@@ -586,6 +667,7 @@ let make = () => {
       <LevelModal
         key={level.id->Int.toString}
         level
+        tryLink={level.tryTarget->tryLink(~levelId=level.id, ~levelPresets)}
         configState
         isLearned={learned->Array.includes(level.id)}
         onLearned

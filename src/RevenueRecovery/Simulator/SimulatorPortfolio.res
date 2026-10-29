@@ -34,8 +34,8 @@ module SourceChip = {
 
 module SectionCard = {
   @react.component
-  let make = (~title, ~subTitle="", ~accessory=React.null, ~children) => {
-    <div className={`${cardStyle} px-6 py-5 flex flex-col gap-4`}>
+  let make = (~title, ~subTitle="", ~accessory=React.null, ~className="", ~children) => {
+    <div className={`${cardStyle} px-6 py-5 flex flex-col gap-4 ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <p className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </p>
@@ -199,39 +199,58 @@ module DialsForm = {
     let total = dials.mix->mixTotal
 
     <div className={`${cardStyle} p-6 flex flex-col gap-5`}>
+      // 1 to the proxy's limit (GET /sim/health limits.portfolioMaxInvoices), one step at a time
       <SimulatorStoryHelper.FormField label="Invoices">
-        <div className="grid grid-cols-2 gap-3">
-          {invoiceCounts
-          ->Array.map(count => {
-            let isAboveLimit = count > limits.maxInvoices
-            <SimulatorFormTiles.Tile
-              key={count->Int.toString}
-              title={`${count->Int.toString} invoices`}
-              isSelected={dials.invoiceCount == count}
-              isDisabled={isLocked || isAboveLimit}
-              tag={isAboveLimit ? "Soon" : ""}
-              hint={isAboveLimit
-                ? `The proxy allows ${limits.maxInvoices->Int.toString} invoices for now.`
-                : ""}
-              onClick={() => setDials(prev => {...prev, invoiceCount: count})}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-4">
+            <input
+              type_="range"
+              min="1"
+              max={limits.maxInvoices->Int.toString}
+              step=1.0
+              value={dials.invoiceCount->Int.toString}
+              disabled=isLocked
+              ariaLabel="Number of invoices"
+              className={`flex-1 accent-primary ${isLocked
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer"}`}
+              onChange={event => {
+                let value: string = ReactEvent.Form.target(event)["value"]
+                setDials(prev => {
+                  ...prev,
+                  invoiceCount: value->Int.fromString->Option.getOr(prev.invoiceCount),
+                })
+              }}
             />
-          })
-          ->React.array}
+            <span className={`w-8 text-right ${heading.sm.semibold} text-nd_gray-800`}>
+              {dials.invoiceCount->Int.toString->React.string}
+            </span>
+          </div>
+          <span className={`${body.sm.medium} text-nd_gray-500`}>
+            {"x2 copies, one per side"->React.string}
+          </span>
         </div>
       </SimulatorStoryHelper.FormField>
       <SimulatorStoryHelper.FormField label="Stop after">
-        <div className="grid grid-cols-3 gap-3">
-          {limits.stopAfterMinutes
-          ->Array.map(minutes =>
-            <SimulatorFormTiles.Tile
-              key={minutes->Float.toString}
-              title={minutes->stopAfterLabel}
-              isSelected={dials.maxMinutes == minutes}
-              isDisabled=isLocked
-              onClick={() => setDials(prev => {...prev, maxMinutes: minutes})}
-            />
-          )
-          ->React.array}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-3">
+            {limits.stopAfterMinutes
+            ->Array.map(minutes =>
+              <SimulatorFormTiles.Tile
+                key={minutes->Float.toString}
+                title={minutes->stopAfterLabel}
+                isSelected={dials.maxMinutes == minutes}
+                isDisabled=isLocked
+                onClick={() => setDials(prev => {...prev, maxMinutes: minutes})}
+              />
+            )
+            ->React.array}
+          </div>
+          {switch limits->calendarLine {
+          | Some(line) =>
+            <span className={`${body.sm.medium} text-nd_gray-500`}> {line->React.string} </span>
+          | None => React.null
+          }}
         </div>
       </SimulatorStoryHelper.FormField>
       <SimulatorStoryHelper.FormField label="Amount per invoice">
@@ -409,8 +428,8 @@ module SetupBoard = {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {column(~title="Static retries", ~isStatic=true)}
-        {column(~title="Rev Rec", ~isStatic=false)}
+        {column(~title=SimulatorPortfolioUtils.baselineName, ~isStatic=true)}
+        {column(~title="Smart retries", ~isStatic=false)}
       </div>
     </div>
   }
@@ -513,207 +532,170 @@ module RunNotes = {
   }
 }
 
-// Static retries vs Rev Rec, one Intelligent Routing simulator card per metric. One column, so
+// Today's fixed retries (the baseline) vs Rev Rec, one Intelligent Routing simulator card per metric. One column, so
 // each card's two values line up with the banners above.
-module ResultCards = {
-  @react.component
-  let make = (~run: portfolioRun) => {
-    let accessory = <SourceChip kind=Recomputed isFixture=run.isFixture />
-    // Before the first copy is final every value is 0, so the cards wait
-    let isReady = run.isFixture || run.status->isRunOver || hasFinishedCopy(run)
-    let metricCard = (
-      ~title,
-      ~staticValue,
-      ~smartValue,
-      ~statType,
-      ~currency="",
-      ~lowerIsBetter=false,
-    ) =>
-      switch (staticValue, smartValue) {
-      | (Some(staticValue), Some(smartValue)) if isReady =>
-        <IntelligentRoutingAnalytics.Card
-          title
-          actualValue=staticValue
-          simulatedValue=smartValue
-          valueFormat=true
-          statType
-          currency
-          baselineLabel="Static retries"
-          modelLabel="Rev Rec"
-          lowerIsBetter
-          colorByDirection=true
-          titleAccessory=accessory
-        />
-      // One side has no value yet (no recoveries): the same card look, with "–" on that side
-      | _ =>
-        let sideValue = (~label, ~value, ~valueClass) =>
-          <div className="w-full flex flex-col gap-2 items-start justify-between">
-            <p className="text-nd_gray-400 text-sm leading-4 font-medium">
-              {label->React.string}
-            </p>
-            <p className={`font-semibold leading-8 text-lg text-nowrap ${valueClass}`}>
-              {(
-                isReady
-                  ? value->Option.mapOr("–", value =>
-                      value->CurrencyFormatUtils.valueFormatter(statType, ~currency)
-                    )
-                  : "–"
-              )->React.string}
-            </p>
-          </div>
-        <div className="flex flex-col gap-6 items-start border rounded-xl border-nd_gray-150 p-4">
-          <div className="w-full flex items-center justify-between">
-            <p className="text-nd_gray-500 text-md leading-4 font-medium">
-              {title->React.string}
-            </p>
-            accessory
-          </div>
-          <div className="w-full flex gap-6">
-            {sideValue(~label="Static retries", ~value=staticValue, ~valueClass="text-nd_gray-500")}
-            {sideValue(~label="Rev Rec", ~value=smartValue, ~valueClass="text-nd_gray-700")}
-          </div>
-        </div>
-      }
-    let percent = rate => rate->Option.map(value => value *. 100.0)
-    let major = minor => Some(minor->Int.toFloat /. 100.0)
-
-    <div className="flex flex-col gap-4">
-      {metricCard(
-        ~title="Recovery rate",
-        ~staticValue=run.staticCard.recoveryRate->percent,
-        ~smartValue=run.smartCard.recoveryRate->percent,
-        ~statType=Rate,
-      )}
-      {metricCard(
-        ~title="Recovered",
-        ~staticValue=run.staticCard.recoveredAmount->major,
-        ~smartValue=run.smartCard.recoveredAmount->major,
-        ~statType=AmountWithSuffix,
-        ~currency="$",
-      )}
-      {metricCard(
-        ~title="Attempts per recovery",
-        ~staticValue=run.staticCard.attemptsPerRecovery,
-        ~smartValue=run.smartCard.attemptsPerRecovery,
-        ~statType=Default,
-        ~lowerIsBetter=true,
-      )}
-      {metricCard(
-        ~title="Minutes to recover",
-        ~staticValue=run.staticCard.medianMinutes,
-        ~smartValue=run.smartCard.medianMinutes,
-        ~statType=Default,
-        ~lowerIsBetter=true,
-      )}
-    </div>
-  }
-}
-
+// The two charts side by side at one height, then the test bank's rules in a row of their own,
+// so no column has a hole
 module Charts = {
   @react.component
-  let make = (~run: portfolioRun) => {
+  let make = (~run: portfolioRun, ~secondsPerDay: option<float>) => {
     <div className="flex flex-col gap-6">
-      <SectionCard
-        title="Recovered by decline reason"
-        accessory={<SourceChip kind=Recomputed isFixture=run.isFixture />}>
-        <ColumnGraph
-          options={run.byReason->reasonChartPayload->ColumnGraphUtils.getColumnGraphOptions}
-        />
-        <div className="flex flex-col divide-y divide-nd_gray-150 border-t border-nd_gray-150">
-          {run.bankRules
-          ->Array.map(rule =>
-            <div key=rule.reason className="flex items-start justify-between gap-3 py-3">
-              <div className="flex flex-col gap-0.5">
-                <span className={`${body.md.semibold} text-nd_gray-700`}>
-                  {`${rule.reason->reasonLabel} · first charge on ${rule.firstChargeCard}`->React.string}
-                </span>
-                <span className={`${body.md.medium} text-nd_gray-500`}>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+        <SectionCard
+          className="h-full"
+          title="Recovered by decline reason"
+          accessory={<SourceChip kind=Recomputed isFixture=run.isFixture />}>
+          <ColumnGraph
+            options={run.byReason->reasonChartPayload->ColumnGraphUtils.getColumnGraphOptions}
+          />
+        </SectionCard>
+        <SectionCard
+          className="h-full"
+          title="Recovered over the run"
+          accessory={<SourceChip kind=Recomputed isFixture=run.isFixture />}>
+          <HighchartsHorizontalBarChart.Chart
+            highcharts=HighchartsHorizontalBarChart.highchartsModule
+            options={run->trendOptions(~secondsPerDay)}
+          />
+        </SectionCard>
+      </div>
+      <RenderIf condition={run.bankRules->Array.length > 0}>
+        <SectionCard title="How the test bank decides" subTitle=run.bankNote>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            {run.bankRules
+            ->Array.map(rule =>
+              <div
+                key=rule.reason
+                className="min-w-0 rounded-lg border border-nd_gray-150 bg-nd_gray-25 px-3 py-2.5 flex flex-col gap-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`${body.md.semibold} text-nd_gray-700`}>
+                    {rule.reason->reasonLabel->React.string}
+                  </span>
+                  <SourceChip kind=ScriptedBank isFixture=run.isFixture />
+                </div>
+                <span className={`${body.sm.medium} text-nd_gray-500`}>
                   {rule.rule->SimulatorGlossary.linkTerms}
                 </span>
               </div>
-              <SourceChip kind=ScriptedBank isFixture=run.isFixture />
-            </div>
-          )
-          ->React.array}
-        </div>
-      </SectionCard>
-      <SectionCard
-        title="Recovered over the run"
-        accessory={<SourceChip kind=Recomputed isFixture=run.isFixture />}>
-        <LineGraph options={run.trend->trendChartPayload->LineGraphUtils.getLineGraphOptions} />
-      </SectionCard>
+            )
+            ->React.array}
+          </div>
+        </SectionCard>
+      </RenderIf>
     </div>
   }
 }
 
+// One row per invoice, both sides in calm words. The whole row opens the invoice's smart story; a
+// side's chip opens that side's story.
 module InvoiceTable = {
+  let storyLink = storyId =>
+    GlobalVars.appendDashboardPath(
+      ~url=`${RevenueRecoverySidebarValues.simulatorStoryPath}/${storyId}`,
+    )
+
+  // "Recovered · 1 attempt", "Still trying · 15 attempts"
+  let outcome = (copy: invoiceCopy) => {
+    let (word, colors) = if copy.graceOver {
+      ("Stopped at the grace end", "bg-nd_red-50 text-nd_red-600")
+    } else if copy.stillTrying {
+      ("Still trying", "bg-nd_orange-50 text-nd_orange-600")
+    } else {
+      switch copy.status {
+      | "recovered" => ("Recovered", "bg-nd_green-50 text-nd_green-600")
+      | "terminated" => ("Stopped", "bg-nd_red-50 text-nd_red-600")
+      | "cancelled" => ("Cancelled", "bg-nd_gray-100 text-nd_gray-600")
+      | "" => ("Pending", "bg-nd_gray-100 text-nd_gray-600")
+      | other => (
+          `${other->String.charAt(0)->String.toUpperCase}${other->String.sliceToEnd(~start=1)}`,
+          "bg-nd_orange-50 text-nd_orange-600",
+        )
+      }
+    }
+    let tries = `${copy.revrecAttempts->Int.toString} ${copy.revrecAttempts == 1
+        ? "attempt"
+        : "attempts"}`
+    (`${word} · ${tries}`, colors)
+  }
+
   @react.component
   let make = (~run: portfolioRun) => {
-    let headerClass = `px-3 py-3 text-left ${body.sm.semibold} text-nd_gray-500 whitespace-nowrap`
-    let cellClass = `px-3 py-3 ${body.md.medium} text-nd_gray-700 whitespace-nowrap`
-    let copyCells = (copy: option<invoiceCopy>) =>
+    let canOpen = (copy: option<invoiceCopy>) =>
+      !run.isFixture && copy->Option.mapOr(false, copy => copy.storyId->LogicUtils.isNonEmptyString)
+    let headerClass = `px-4 py-3 text-left ${body.sm.semibold} text-nd_gray-500 whitespace-nowrap`
+    let cellClass = `px-4 py-3 ${body.md.medium} text-nd_gray-700`
+    let sideCell = (copy: option<invoiceCopy>) =>
       switch copy {
       | Some(copy) =>
-        let canOpen = !run.isFixture && copy.storyId->LogicUtils.isNonEmptyString
-        let attemptsText = `${copy.revrecAttempts->Int.toString} ${copy.revrecAttempts == 1
-            ? "attempt"
-            : "attempts"}`
-        // Status and Rev Rec attempts share one cell, so the table fits next to the dials
+        let (text, colors) = copy->outcome
         <td className=cellClass>
-          <div className="flex flex-col items-start gap-1">
-            <div
-              className={canOpen ? "cursor-pointer w-fit" : "w-fit"}
-              title={canOpen ? "Open in the invoice story" : ""}
-              onClick={_ =>
-                if canOpen {
-                  RescriptReactRouter.push(
-                    GlobalVars.appendDashboardPath(
-                      ~url=`${RevenueRecoverySidebarValues.simulatorStoryPath}/${copy.storyId}`,
-                    ),
-                  )
+          {canOpen(Some(copy))
+            ? <button
+                type_="button"
+                title="Open this side's story"
+                className={`rounded-md px-2 py-0.5 whitespace-nowrap hover:underline ${body.sm.semibold} ${colors}`}
+                onClick={event => {
+                  event->ReactEvent.Mouse.stopPropagation
+                  RescriptReactRouter.push(copy.storyId->storyLink)
                 }}>
-              <Table.TableCell cell={copy.status->invoiceStatusLabel} />
-            </div>
-            <span className={`${body.sm.medium} text-nd_gray-500`}>
-              {attemptsText->React.string}
-            </span>
-          </div>
+                {text->React.string}
+              </button>
+            : <span
+                className={`rounded-md px-2 py-0.5 whitespace-nowrap ${body.sm.semibold} ${colors}`}>
+                {text->React.string}
+              </span>}
         </td>
       | None => <td className=cellClass> {"–"->React.string} </td>
       }
+    // How the test bank decides, once, behind the "?" (it was a column)
+    let bankWhy =
+      run.bankNote->LogicUtils.isNonEmptyString
+        ? run.bankNote
+        : "The test bank's rule for each reason is under How the test bank decides."
 
     <SectionCard
       title="Invoices"
-      subTitle={run.isFixture ? "Fixture rows." : "Click a status to open its story."}
+      subTitle={run.isFixture
+        ? "Fixture rows."
+        : "A row opens its smart story; a status opens that side's story."}
       accessory={<SourceChip kind=FromSandbox isFixture=run.isFixture />}>
       <div className="overflow-x-auto border border-nd_gray-150 rounded-lg">
         <table className="w-full">
           <thead className="bg-nd_gray-25 border-b border-nd_gray-150">
             <tr>
               <th className=headerClass> {"#"->React.string} </th>
-              <th className=headerClass> {"Decline reason"->React.string} </th>
+              <th className=headerClass>
+                <span className="flex items-center gap-1.5">
+                  {"Decline reason"->React.string}
+                  <WhyButton why=bankWhy />
+                </span>
+              </th>
               <th className=headerClass> {"Amount"->React.string} </th>
-              <th className=headerClass> {"Bank flip"->React.string} </th>
-              <th className=headerClass> {"Static retries"->React.string} </th>
-              <th className=headerClass> {"Rev Rec"->React.string} </th>
+              <th className=headerClass> {SimulatorPortfolioUtils.baselineName->React.string} </th>
+              <th className=headerClass> {"Smart retries"->React.string} </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-nd_gray-150">
             {run.invoices
-            ->Array.map(invoice =>
-              <tr key={invoice.index->Int.toString}>
+            ->Array.map(invoice => {
+              let isLink = canOpen(invoice.smartCopy)
+              <tr
+                key={invoice.index->Int.toString}
+                className={isLink ? "cursor-pointer hover:bg-nd_gray-25 transition-colors" : ""}
+                title={isLink ? "Open the smart story" : ""}
+                onClick={_ =>
+                  invoice.smartCopy->Option.forEach(copy =>
+                    if isLink {
+                      RescriptReactRouter.push(copy.storyId->storyLink)
+                    }
+                  )}>
                 <td className=cellClass> {invoice.index->Int.toString->React.string} </td>
                 <td className=cellClass> {invoice.reason->reasonLabel->React.string} </td>
                 <td className=cellClass> {invoice.amount->formatMoney->React.string} </td>
-                <td className=cellClass>
-                  {invoice.flipAfterMin
-                  ->Option.mapOr("never", minutes => `${minutes->Float.toString} min`)
-                  ->React.string}
-                </td>
-                {copyCells(invoice.staticCopy)}
-                {copyCells(invoice.smartCopy)}
+                {sideCell(invoice.staticCopy)}
+                {sideCell(invoice.smartCopy)}
               </tr>
-            )
+            })
             ->React.array}
           </tbody>
         </table>
@@ -722,10 +704,37 @@ module InvoiceTable = {
   }
 }
 
+// A run is open: the dials fold into one line with what the run was started with
+module RunBar = {
+  @react.component
+  let make = (~dials: portfolioDials, ~isRunning, ~onStop, ~onNewRun) => {
+    // The mix's weights as shares of 100, as the dials show them
+    let shares = dials.mix->mixShares
+    let mix =
+      reasons
+      ->Array.mapWithIndex((reason, index) => (reason, shares->Array.get(index)->Option.getOr(0)))
+      ->Array.filter(((_, share)) => share > 0)
+      ->Array.map(((reason, share)) => `${reason->reasonLabel} ${share->Int.toString}%`)
+      ->Array.joinWith(" · ")
+    <div className={`${cardStyle} px-5 py-3 flex flex-wrap items-center justify-between gap-3`}>
+      <div className="flex min-w-0 flex-col">
+        <span className={`${body.md.semibold} text-nd_gray-800`}>
+          {`${dials.invoiceCount->Int.toString} invoices · $${dials.amount} each · stop after ${dials.maxMinutes->stopAfterLabel}`->React.string}
+        </span>
+        <span className={`truncate ${body.sm.medium} text-nd_gray-500`}> {mix->React.string} </span>
+      </div>
+      {isRunning
+        ? <Button text="Stop run" buttonType=Secondary buttonSize=Small onClick={_ => onStop()} />
+        : <Button text="New run" buttonType=Primary buttonSize=Small onClick={_ => onNewRun()} />}
+    </div>
+  }
+}
+
 @react.component
 let make = (~runIdFromUrl: option<string>) => {
   open LogicUtils
   let simFetch = SimulatorApi.useSimFetch()
+  let fetchHealth = SimulatorApi.useFetchHealth()
   let showToast = ToastAdapter.useShowToast()
   let mixpanelEvent = MixpanelHook.useSendEvent()
 
@@ -744,11 +753,16 @@ let make = (~runIdFromUrl: option<string>) => {
   React.useEffect(() => {
     let read = async () => {
       try {
-        let proxyLimits = (await simFetch(~path="/healthz", ~method_=Get))->limitsMapper
+        let proxyLimits = (await fetchHealth())->limitsMapper
         setLimits(_ => proxyLimits)
 
-        // A fresh form picks the middle choice when its default is not offered
+        // A fresh form keeps the invoice count inside the limit, and picks the middle stop-after
+        // choice when its default is not offered
         if dialsRunId.current->isEmptyString {
+          setDials(prev => {
+            ...prev,
+            invoiceCount: Math.Int.min(prev.invoiceCount, proxyLimits.maxInvoices),
+          })
           setDials(prev =>
             proxyLimits.stopAfterMinutes->Array.includes(prev.maxMinutes)
               ? prev
@@ -847,6 +861,77 @@ let make = (~runIdFromUrl: option<string>) => {
     }
   }
 
+  // Back to the dials for a new run; they keep this run's values
+  let onNewRun = () => {
+    setRun(_ => None)
+    RescriptReactRouter.push(GlobalVars.appendDashboardPath(~url=portfolioPath))
+  }
+
+  let results =
+    <div className="w-full min-w-0 flex flex-col gap-6">
+      {switch run {
+      | Some(run) =>
+        <>
+          <RenderIf condition=run.isFixture>
+            <AlertV2Binding
+              alertType=Warning
+              slot={{
+                slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
+              }}
+              heading="Fixture data, not a run on the demo engine"
+              description="Made-up numbers in the real result shape."
+            />
+          </RenderIf>
+          <RenderIf condition={pollError->isNonEmptyString}>
+            <AlertV2Binding
+              alertType=Warning
+              slot={{
+                slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
+              }}
+              description=pollError
+            />
+          </RenderIf>
+          <RunNotes notes={run.warnings->Array.filter(isNonEmptyString)} />
+          {switch run.status {
+          | SettingUp => <SetupBoard run />
+          | _ =>
+            <>
+              <RunStatus run />
+              // The proxy's comparison label, next to the numbers: the noise note when both
+              // sides share a strategy, otherwise which strategies are compared
+              <RenderIf condition={run.comparisonLabel->isNonEmptyString}>
+                <p className={`flex items-center gap-2 ${body.md.semibold} text-nd_gray-600`}>
+                  {run
+                  ->comparisonText
+                  ->React.string}
+                  <SourceChip kind=FromSandbox isFixture=run.isFixture />
+                </p>
+              </RenderIf>
+              <NoRetriesBanners run />
+              // The four system metrics and the math, then the charts and the invoices
+              <RenderIf condition={run.isFixture || run.status->isRunOver || hasFinishedCopy(run)}>
+                <SimulatorPortfolioMetrics run />
+              </RenderIf>
+              <RenderIf condition={run.isFixture || run.status->isRunOver || hasFinishedCopy(run)}>
+                <Charts run secondsPerDay=limits.secondsPerDay />
+              </RenderIf>
+              <InvoiceTable run />
+            </>
+          }}
+        </>
+      | None =>
+        <div className={`${cardStyle} px-6 py-10`}>
+          <p className={`${body.md.medium} text-nd_gray-500 text-center`}>
+            {(
+              runIdFromUrl->Option.isSome
+                ? "Loading the run."
+                : "Press Run to compare the two strategies."
+            )->React.string}
+          </p>
+        </div>
+      }}
+    </div>
+
   <div className="flex flex-col gap-6">
     <BreadCrumbNavigation
       path=[{title: "Home", link: RevenueRecoverySidebarValues.homePath}]
@@ -858,89 +943,28 @@ let make = (~runIdFromUrl: option<string>) => {
       />
       <SimulatorGlossary.OpenButton />
     </div>
-    <div className="flex flex-col xl:flex-row gap-10 items-start">
-      <div className="w-full xl:w-1/3 shrink-0 xl:sticky xl:top-6">
-        <DialsForm
-          dials
-          setDials
-          limits
-          isBusy
-          isRunning
-          onRun={() => onRun()->ignore}
-          onStop={() => onStop()->ignore}
-        />
+    {switch runIdFromUrl {
+    | Some(_) =>
+      // A run is open: one line for its dials, the results across the full width (as the story page)
+      <div className="flex flex-col gap-6">
+        <RunBar dials isRunning onStop={() => onStop()->ignore} onNewRun />
+        results
       </div>
-      <div className="w-full min-w-0 flex flex-col gap-6">
-        {switch run {
-        | Some(run) =>
-          <>
-            <RenderIf condition=run.isFixture>
-              <AlertV2Binding
-                alertType=Warning
-                slot={{
-                  slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
-                }}
-                heading="Fixture data, not a run on the demo engine"
-                description="Made-up numbers in the real result shape."
-              />
-            </RenderIf>
-            <RenderIf condition={pollError->isNonEmptyString}>
-              <AlertV2Binding
-                alertType=Warning
-                slot={{
-                  slot: <Icon name="nd-toast-warning" size=20 className="text-nd_yellow-500" />,
-                }}
-                description=pollError
-              />
-            </RenderIf>
-            <RunNotes notes={run.warnings->Array.filter(isNonEmptyString)} />
-            {switch run.status {
-            | SettingUp => <SetupBoard run />
-            | _ =>
-              <>
-                <RunStatus run />
-                // The proxy's comparison label, next to the numbers: the noise note when both
-                // sides share a strategy, otherwise which strategies are compared
-                <RenderIf condition={run.comparisonLabel->isNonEmptyString}>
-                  <p className={`${body.md.semibold} text-nd_gray-600`}>
-                    {run
-                    ->comparisonText
-                    ->React.string}
-                  </p>
-                </RenderIf>
-                <NoRetriesBanners run />
-                <ResultCards run />
-                <div
-                  className={`flex flex-wrap gap-x-6 gap-y-2 ${body.md.medium} text-nd_gray-500`}>
-                  <span className="flex items-center gap-2">
-                    {`Static side: ${run.staticMode->SimulatorTourUtils.retryModeText}`->React.string}
-                    <SourceChip kind=FromSandbox isFixture=run.isFixture />
-                  </span>
-                  <span className="flex items-center gap-2">
-                    {`Rev Rec side: ${run.smartMode->SimulatorTourUtils.retryModeText}`->React.string}
-                    <SourceChip kind=FromSandbox isFixture=run.isFixture />
-                  </span>
-                </div>
-                <RenderIf
-                  condition={run.isFixture || run.status->isRunOver || hasFinishedCopy(run)}>
-                  <Charts run />
-                </RenderIf>
-                <InvoiceTable run />
-              </>
-            }}
-          </>
-        | None =>
-          <div className={`${cardStyle} px-6 py-10`}>
-            <p className={`${body.md.medium} text-nd_gray-500 text-center`}>
-              {(
-                runIdFromUrl->Option.isSome
-                  ? "Loading the run."
-                  : "Press Run to compare the two strategies."
-              )->React.string}
-            </p>
-          </div>
-        }}
+    | None =>
+      <div className="flex flex-col xl:flex-row gap-10 items-start">
+        <div className="w-full xl:w-1/3 shrink-0 xl:sticky xl:top-6">
+          <DialsForm
+            dials
+            setDials
+            limits
+            isBusy
+            isRunning
+            onRun={() => onRun()->ignore}
+            onStop={() => onStop()->ignore}
+          />
+        </div>
+        {results}
       </div>
-    </div>
+    }}
   </div>
 }

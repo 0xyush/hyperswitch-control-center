@@ -76,9 +76,9 @@ let meaning = (row: diagramRow) =>
     row->isApproved
       ? "The billing system charged the card. The bank approved it."
       : "The billing system charged the card. The bank declined it."
-  | ReportFailure => "The billing system told Rev Rec the payment failed. Rev Rec now tracks the invoice."
+  | ReportFailure => "The billing system informed Rev Rec the payment failed. Rev Rec now tracks the invoice."
   | ReportAgain => "The billing system sent the same failure twice. Rev Rec keeps one copy."
-  | ReportPaid => "The billing system told Rev Rec the invoice is paid. Rev Rec stops retrying."
+  | ReportPaid => "The billing system informed Rev Rec the invoice is paid. Rev Rec stops retrying."
   | CancelInvoice => "The merchant cancelled the invoice. Rev Rec stops retrying."
   | PickTime => "Rev Rec chose when to charge the saved card again."
   | BookedRetry => "Rev Rec will charge the saved card at the booked time."
@@ -86,7 +86,7 @@ let meaning = (row: diagramRow) =>
     row->isApproved
       ? "Rev Rec charged the saved card by itself. The bank approved it."
       : "Rev Rec charged the saved card by itself. The bank declined it."
-  | MarkPaid => "Rev Rec's retry collected the money. The billing system marks the invoice paid."
+  | MarkPaid => "Rev Rec's retry worked. The billing system marks the invoice paid."
   | PaidOutside => "The invoice was paid outside Rev Rec, so Rev Rec stops."
   | AddCard => "The customer added a new card in the app."
   | CustomerPaid =>
@@ -347,9 +347,12 @@ module ExplainDrawer = {
               <p className={`${body.md.medium} text-nd_gray-700`}> {row->meaning->React.string} </p>
             </Section>
           </RenderIf>
-          <RenderIf condition={row.why->Array.length > 0}>
+          // A decline's plain meaning comes first among the reasons
+          <RenderIf condition={row.meaning->Option.isSome || row.why->Array.length > 0}>
             <Section title="Why">
-              <WhyLines lines=row.why />
+              <WhyLines
+                lines={row.meaning->Option.mapOr([], line => [line])->Array.concat(row.why)}
+              />
             </Section>
           </RenderIf>
           <RenderIf condition={requests->Array.length > 0}>
@@ -379,14 +382,21 @@ module ExplainDrawer = {
             "Booked",
             `For ${row->SimulatorStorySteps.bookedTimeOf}, picked at ${row.at->toClockTime}`->React.string,
           )),
-          charge->Option.map(row => (
-            "Charged",
-            <Table.DateCell
-              textStyle={`${body.md.medium} text-nd_gray-800`}
-              timestamp={row.at->toUtcIso->String.replaceRegExp(%re("/\.\d+(?=Z$)/"), "")}
-              isCard=true
-            />,
+          // Real life, with the recovery day: the plan's slot (it knows the failure's moment)
+          SimulatorStorySteps.slotFor(story->Option.flatMap(s => s.realLife), number)
+          ->Option.orElse(charge->Option.flatMap(row => row.realLife))
+          ->Option.orElse(booking->Option.flatMap(row => row.realLife))
+          ->Option.map(slot => (
+            "Real life",
+            `${slot.at->SimulatorStorySteps.realLifeDateTime} · Day ${slot
+              ->SimulatorStorySteps.slotDayNumber
+              ->Int.toString} of the recovery, ${slot.dayText
+              ->String.split(", ")
+              ->Array.at(-1)
+              ->Option.getOr("")}`->React.string,
           )),
+          // The demo's own clock
+          charge->Option.map(row => ("Happened here", `at ${row.at->toClockTime}`->React.string)),
           main->Option.flatMap(row =>
             history
             ->stageAt(row.at)
@@ -414,7 +424,9 @@ module ExplainDrawer = {
         // The same reason can come with both events
         let why =
           rows
-          ->Array.flatMap(row => row.why)
+          ->Array.flatMap(row =>
+            row.meaning->Option.mapOr([], line => [line])->Array.concat(row.why)
+          )
           ->Array.reduce([], (kept, line: explainLine) =>
             kept->Array.some((other: explainLine) => other.text == line.text)
               ? kept
@@ -472,7 +484,7 @@ module ExplainDrawer = {
       | Some(StateHistory) =>
         <Body>
           <p className={`${body.md.medium} text-nd_gray-600`}>
-            {"When the invoice was first seen in each state. Times from Rev Rec are exact. Proxy times can be one poll late."->React.string}
+            {"When the invoice reached each state. Proxy times can be a few seconds late."->React.string}
           </p>
           <SimulatorTable
             headers=["State", "First seen", "Source"]

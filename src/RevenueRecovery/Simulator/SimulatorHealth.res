@@ -1,4 +1,4 @@
-// Operator page: is the demo ready? Reads the proxy's /healthz and its lists.
+// Operator page: is the demo ready? Reads the proxy's /sim/health (or /healthz) and its lists.
 // In M4 it moves behind sign-in (PRD section 13); for now it is behind the simulator flag only.
 open Typography
 open LogicUtils
@@ -148,6 +148,7 @@ let limitRows = (health: Dict.t<JSON.t>) =>
 @react.component
 let make = () => {
   let simFetch = SimulatorApi.useSimFetch()
+  let fetchHealth = SimulatorApi.useFetchHealth()
   let (health, setHealth) = React.useState(_ => None)
   let (healthError, setHealthError) = React.useState(_ => "")
   let (blocked, setBlocked) = React.useState(_ => [])
@@ -166,7 +167,7 @@ let make = () => {
       }
     }
     try {
-      let json = await simFetch(~path="/healthz", ~method_=Get)
+      let json = await fetchHealth()
       setHealth(_ => Some(json->getDictFromJsonObject))
       setHealthError(_ => "")
     } catch {

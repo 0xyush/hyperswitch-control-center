@@ -34,6 +34,8 @@ let homePath = "/v2/recovery/home"
 let simulatorStoryPath = "/v2/recovery/simulator/story"
 let simulatorTourPath = "/v2/recovery/simulator/tour"
 let simulatorPortfolioPath = "/v2/recovery/simulator/portfolio"
+// The Setup Recovery walkthrough, from Home's Explore Recovery (not in the sidebar)
+let simulatorSetupPath = "/v2/recovery/simulator/setup"
 
 let revenueRecoverySimulatorHome = {
   Link({
