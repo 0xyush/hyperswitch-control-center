@@ -165,7 +165,7 @@ module Preview = {
     | Test(card, _) if card->isVisitorCard => None
     | Test(card, _) if card.processors == ["stripe"] =>
       Some("This test card declines. Use one that pays, like 4242.")
-    | _ => Some("Use a Stripe test card. Real cards are never charged here.")
+    | _ => Some("Use a test card. Real cards are never charged here.")
     }
 
     let card = switch tab {

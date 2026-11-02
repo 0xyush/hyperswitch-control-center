@@ -62,15 +62,17 @@ import {
   worldEvent,
 } from "./story.ts";
 import { hsApiKey, stripe } from "./upstream.ts";
+import { neutralize, neutralOn } from "./neutral.ts";
 
 // ---------- helpers ----------
 
+// Every answer to the browser names no processor (neutral.ts)
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
   });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(neutralOn ? neutralize(body) : body));
 }
 
 const MAX_BODY = 64 * 1024;

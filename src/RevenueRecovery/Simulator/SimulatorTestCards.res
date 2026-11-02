@@ -19,7 +19,7 @@ type testCard = {
 
 let stripeDecline = (last4, declineCode, does) => {
   pan: `400000000000${last4}`,
-  owner: "Stripe test card",
+  owner: "Test card",
   processors: ["stripe"],
   chargeId: Some(last4),
   declineCode: Some(declineCode),
@@ -30,7 +30,7 @@ let stripeDecline = (last4, declineCode, does) => {
 
 let stripePays = (pan, does) => {
   pan,
-  owner: "Stripe test card",
+  owner: "Test card",
   processors: ["stripe"],
   chargeId: None,
   declineCode: None,

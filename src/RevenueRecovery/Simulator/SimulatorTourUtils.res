@@ -490,7 +490,11 @@ let levels: array<level> = [
     checks: (
       {
         question: "Who sets the limit on retries per card?",
-        choices: ["The merchant", "Stripe", "The card networks, Visa and Mastercard"],
+        choices: [
+          "The merchant",
+          "The payment processor",
+          "The card networks, Visa and Mastercard",
+        ],
         answer: 2,
       },
       {

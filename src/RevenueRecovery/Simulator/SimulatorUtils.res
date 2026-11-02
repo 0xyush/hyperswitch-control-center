@@ -65,13 +65,13 @@ let presetMapper = (dict): preset => {
 // Used when the proxy sends no card list. The label says what happens in plain words; the
 // Stripe test card behind it shows on hover.
 let defaultCardOptions: array<SelectBox.dropdownOption> = [
-  {label: "It works", value: "4242", description: "Stripe test card 4242"},
-  {label: "Declined, no reason given", value: "0341", description: "Stripe test card 0341"},
-  {label: "Bank says no", value: "0002", description: "Stripe test card 0002"},
-  {label: "Not enough money", value: "9995", description: "Stripe test card 9995"},
-  {label: "Card reported stolen", value: "9979", description: "Stripe test card 9979"},
-  {label: "Bank system error", value: "0119", description: "Stripe test card 0119"},
-  {label: "Card expired", value: "0069", description: "Stripe test card 0069"},
+  {label: "It works", value: "4242", description: "Test card 4242"},
+  {label: "Declined, no reason given", value: "0341", description: "Test card 0341"},
+  {label: "Bank says no", value: "0002", description: "Test card 0002"},
+  {label: "Not enough money", value: "9995", description: "Test card 9995"},
+  {label: "Card reported stolen", value: "9979", description: "Test card 9979"},
+  {label: "Bank system error", value: "0119", description: "Test card 0119"},
+  {label: "Card expired", value: "0069", description: "Test card 0069"},
 ]
 
 // Stories the simulator does not offer. Preset 9 (Rev Rec switches to another saved card) is off:
@@ -201,7 +201,7 @@ let actorLabel = actor =>
   switch actor {
   | Billing => ("Billing system", "Simulated")
   | RevRec => ("Rev Rec", "Hyperswitch")
-  | Processor => ("Processor", "Stripe test mode")
+  | Processor => ("Processor", "Test mode")
   | Customer => ("Customer", "Simulated")
   }
 

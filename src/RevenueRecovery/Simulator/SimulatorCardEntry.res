@@ -82,12 +82,6 @@ module Field = {
           <span className={`${body.sm.semibold} text-nd_gray-700`}>
             {card.owner->React.string}
           </span>
-          {card.processors
-          ->Array.filter(working)
-          ->Array.map(p =>
-            <GatewayIcon key=p gateway={p->String.toUpperCase} className="w-4 h-4" />
-          )
-          ->React.array}
         </div>
         <p className={`${body.sm.medium} text-nd_gray-500`}>
           {[card.does, card.cardType, card.country]

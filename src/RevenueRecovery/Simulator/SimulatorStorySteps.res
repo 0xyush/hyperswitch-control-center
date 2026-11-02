@@ -3230,19 +3230,8 @@ module InvoiceHeaderBar = {
       <div className="min-w-0 flex-1 flex items-center gap-3 overflow-hidden">
         <StatePill stage />
         // The processor the story charges through, by its logo (its name on hover)
-        {switch story {
-        | Some(s) if s.processorId->LogicUtils.isNonEmptyString =>
-          <AddDataAttributes attributes=[("data-sim", "story-processor")]>
-            <span
-              className="shrink-0 flex items-center"
-              title={s.processorName->LogicUtils.isNonEmptyString
-                ? s.processorName
-                : s.processorId}>
-              <GatewayIcon gateway={s.processorId->String.toUpperCase} className="w-5 h-5" />
-            </span>
-          </AddDataAttributes>
-        | _ => React.null
-        }}
+        // The run names no processor (the visitor picks any on Setup Recovery)
+
         <span className="min-w-0 truncate">
           <span className={`${body.md.semibold} text-nd_gray-800`}>
             {order.amount_captured->money->React.string}

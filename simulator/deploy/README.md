@@ -139,7 +139,7 @@ gcloud run deploy revrec-sim --image $IMAGE --region $REGION --service-account $
   --env-vars-file simulator/deploy/proxy.env.yaml --set-secrets "$SECRETS"
 ```
 
-- **Stripe only (28 Oct).** The other six processors are hidden, not deleted: `PROCESSORS_ENABLED` is unset, so the proxy refuses their stories ("Only Stripe is on in this demo for now.") and lists only Stripe. Their engine profiles, connectors and scripts stay. `proxy.env.yaml` keeps their ids (`HS_<PROCESSOR>_*`). To turn them back on later (all optional, none needed now):
+- **Stripe only (28 Oct).** The other six processors are hidden, not deleted: `PROCESSORS_ENABLED` is unset, so the proxy refuses their stories ("This processor is not on in this demo.") and lists only Stripe. Their engine profiles, connectors and scripts stay. `proxy.env.yaml` keeps their ids (`HS_<PROCESSOR>_*`). To turn them back on later (all optional, none needed now):
   1. Run `WITH_PROCESSORS=1 put-secrets.sh` to write their 14 keys.
   2. Add `PROCESSORS_ENABLED: "all"` (or a comma list of ids) to `proxy.env.yaml`.
   3. Add the key secrets to `SECRETS` before the deploy:
@@ -153,3 +153,4 @@ done
 ```
 
 - **The dashboard token** (`revrec-sim-hs-dashboard-jwt`) is signed by `seed.sh` for 30 days on the self-hosted engine (the live one expires 26 Nov 2026). Before it expires, run the seed again, add the new token as a secret version and make a new revision (section 2).
+- **Any processor on Setup Recovery (2 Nov).** The processor step lists every processor the real Rev Rec supports (`RecoveryConnectorUtils.recoverySupportedConnectors`, 48 cards, with a search). Any pick is shown as set up for the demo; the stories still run in Stripe test mode. The run names no processor: every proxy answer passes through `proxy/src/neutral.ts` ("Stripe declined" reads "The processor declined", Stripe object ids are dropped or shortened). `SIM_NEUTRAL_PROCESSOR=0` turns that off. The control center's own invoice and payment pages read the engine directly and still show the real connector.

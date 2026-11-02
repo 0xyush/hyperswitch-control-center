@@ -1,12 +1,14 @@
 // Setup Recovery (Home → Explore Recovery): the real Rev Rec onboarding steps
 // (RevenueRecoveryOnboarding: Connect Processor, Add a Platform, Review Details), shown with the
 // connectors this demo already runs on. Nothing is created here:
-//   - Select steps show only the connectors that work right now (GET /sim/connectors, live-checked).
+//   - The processor step lists every processor the real Rev Rec supports (RecoveryConnectorUtils
+//     .recoverySupportedConnectors), with a search. Any pick is set up for the demo; every story runs
+//     in test mode on the demo's own processor, and the run never names a processor.
+//   - The platform step shows only the billing systems that work right now (GET /sim/connectors).
 //   - Each Authenticate step opens a popup: the connector is already configured; its values are
 //     masked and blurred.
 //   - Review Details reads the demo profile's settings (GET /sim/setup/summary).
-//   - Start simulation opens the Invoice story, on the processor picked here (kept in this browser).
-//     "Skip to the simulator" opens it too, from any step.
+//   - Start simulation opens the Invoice story. "Skip to the simulator" opens it too, from any step.
 open Typography
 open LogicUtils
 
@@ -143,7 +145,7 @@ module ConfiguredPopup = {
                   {connector.name->React.string}
                 </span>
                 <span className={`${body.md.medium} text-nd_gray-500`}>
-                  {"This demo already uses it. Nothing to enter."->React.string}
+                  {"Set up for this demo. Nothing to enter."->React.string}
                 </span>
               </div>
             </div>
@@ -196,7 +198,7 @@ module AuthenticateStep = {
 
 module ReviewStep = {
   @react.component
-  let make = (~summary: option<summary>, ~connectors: array<demoConnector>) => {
+  let make = (~summary: option<summary>, ~connectors: array<demoConnector>, ~processor=?) => {
     let row = (~label, ~value, ~working) =>
       <div key=label className="flex items-center justify-between gap-6 py-3">
         <span className={`${body.md.medium} text-nd_gray-500 whitespace-nowrap shrink-0`}>
@@ -218,7 +220,7 @@ module ReviewStep = {
           className="flex flex-col divide-y divide-nd_gray-150 rounded-xl border border-nd_gray-200 bg-white px-5">
           {row(
             ~label="Processor",
-            ~value=summary->Option.mapOr("Stripe (test mode)", s => s.processor),
+            ~value=processor->Option.getOr("Test mode"),
             ~working=works("processor"),
           )}
           {row(
@@ -252,11 +254,36 @@ module ReviewStep = {
 // the demo's user does not manage connectors, and picking here creates nothing
 module ConnectorCards = {
   @react.component
-  let make = (~connectors, ~connectorType, ~heading, ~onPick) =>
+  let make = (~connectors, ~connectorType, ~heading, ~onPick, ~searchable=false) => {
+    let (query, setQuery) = React.useState(_ => "")
+    let shown = connectors->Array.filter((connector: ConnectorTypes.connectorTypes) =>
+      query->String.trim == "" ||
+        connector
+        ->ConnectorUtils.getConnectorNameString
+        ->ConnectorUtils.getDisplayNameForConnector(~connectorType)
+        ->String.toLowerCase
+        ->String.includes(query->String.trim->String.toLowerCase)
+    )
     <div className="flex flex-col gap-4">
-      <h2 className={`${body.lg.semibold} text-nd_gray-600`}> {heading->React.string} </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className={`${body.lg.semibold} text-nd_gray-600`}> {heading->React.string} </h2>
+        <RenderIf condition=searchable>
+          <input
+            type_="search"
+            value=query
+            placeholder="Search processors"
+            onChange={e => setQuery(_ => ReactEvent.Form.target(e)["value"])}
+            className={`w-64 rounded-lg border border-nd_gray-200 px-3 py-2 ${body.md.medium} text-nd_gray-800 outline-none focus:border-primary`}
+          />
+        </RenderIf>
+      </div>
+      <RenderIf condition={shown->Array.length == 0}>
+        <span className={`${body.md.medium} text-nd_gray-500`}>
+          {"No processor matches that name."->React.string}
+        </span>
+      </RenderIf>
       <div className="grid gap-x-5 gap-y-6 lg:grid-cols-3 md:grid-cols-2 grid-cols-1 mb-5">
-        {connectors
+        {shown
         ->Array.map((connector: ConnectorTypes.connectorTypes) => {
           let name = connector->ConnectorUtils.getConnectorNameString
           <AddDataAttributes key=name attributes=[("data-sim", `connector-${name}`)]>
@@ -279,6 +306,7 @@ module ConnectorCards = {
         ->React.array}
       </div>
     </div>
+  }
 }
 
 module NoneWorking = {
@@ -334,6 +362,26 @@ let make = () => {
 
   let next = () => onNextClick(currentStep, setCurrentStep, ~isLiveMode, ~billingConnector)
   let find = id => connectors->Array.find(c => c.id == id)
+  // The processor picked here, as the Authenticate step and the popup show it: set up for the demo,
+  // its key masked. No live checks: the demo's stories run on its own test processor.
+  let processorName = id =>
+    id->ConnectorUtils.getDisplayNameForConnector(~connectorType=ConnectorTypes.Processor)
+  let pickedProcessor = id =>
+    id == ""
+      ? None
+      : Some({
+          id,
+          name: id->processorName,
+          kind: "processor",
+          working: true,
+          checks: [{what: "Connected to Rev Rec's demo profile", ok: true}],
+          fields: [
+            {
+              fieldLabel: "API key",
+              value: "••••••••••••••••••••",
+            },
+          ],
+        })
   // Only connectors that work right now can be picked
   // Processors the simulator offers now (SimulatorUtils.processorsEnabled: Stripe only)
   let working = (kind, ~connectorType) =>
@@ -350,30 +398,30 @@ let make = () => {
 
   let content = switch currentStep->getSectionVariant {
   | (#connectProcessor, #selectProcessor) =>
-    let processors = working("processor", ~connectorType=ConnectorTypes.Processor)
     <PageWrapper
       title="Where do you process your payments"
-      subTitle={processors->Array.length == 1
-        ? "This demo runs on one processor, in test mode."
-        : "Only processors that work in this demo are shown."}>
-      {processors->Array.length == 0
-        ? <NoneWorking what="processor" />
-        : <ConnectorCards
-            connectors=processors
-            connectorType=ConnectorTypes.Processor
-            heading="Choose a processor"
-            onPick={id => {
-              // The story form starts on this processor
-              SimulatorUtils.saveProcessor(id)
-              pick(id, setProcessorId)
-            }}
-          />}
+      subTitle="Pick the processor you use. Every story runs in test mode.">
+      <ConnectorCards
+        connectors=RecoveryConnectorUtils.recoverySupportedConnectors
+        connectorType=ConnectorTypes.Processor
+        heading="Choose a processor"
+        searchable=true
+        onPick={id => {
+          // The stories run on the demo's own test processor, whatever is picked here
+          SimulatorUtils.saveProcessor("stripe")
+          setProcessorId(_ => id)
+          next()
+          setPopupFor(_ => pickedProcessor(id))
+        }}
+      />
     </PageWrapper>
   | (#connectProcessor, #authenticateProcessor) =>
     <PageWrapper
       title="Authenticate Processor" subTitle="Rev Rec already holds this processor's keys.">
       <AuthenticateStep
-        connector={find(processorId)} onOpen={() => setPopupFor(_ => find(processorId))} onNext=next
+        connector={pickedProcessor(processorId)}
+        onOpen={() => setPopupFor(_ => pickedProcessor(processorId))}
+        onNext=next
       />
     </PageWrapper>
   | (#addAPlatform, #selectAPlatform) =>
@@ -399,7 +447,11 @@ let make = () => {
     </PageWrapper>
   | (#reviewDetails, _) =>
     <PageWrapper title="Review Details" subTitle="Rev Rec is ready to recover failed payments.">
-      <ReviewStep summary connectors />
+      <ReviewStep
+        summary
+        connectors
+        processor=?{processorId == "" ? None : Some(`${processorId->processorName} (test mode)`)}
+      />
     </PageWrapper>
   | _ => React.null
   }

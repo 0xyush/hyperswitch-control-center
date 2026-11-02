@@ -922,7 +922,8 @@ describe("server (in process, no upstream calls)", () => {
       processors: [
         {
           id: "stripe",
-          name: "Stripe",
+          // The run names no processor (neutral.ts)
+          name: "The processor",
           presets: "all",
           startModes: ["static"],
         },
@@ -933,7 +934,7 @@ describe("server (in process, no upstream calls)", () => {
     assert.equal(adyen.status, 409);
     assert.equal(
       (await adyen.json()).error.message,
-      "Only Stripe is on in this demo for now.",
+      "This processor is not on in this demo.",
     );
   });
 
@@ -1022,5 +1023,34 @@ describe("real-world stories (presets 11-20)", () => {
       bankWorksFrom(PRESETS.find((p) => p.id === 15)!.bank!, failureAt),
       "2026-11-01T09:00:00.000Z",
     );
+  });
+});
+
+// The run names no processor (neutral.ts)
+describe("neutral processor words", async () => {
+  const { neutralText, neutralize } = await import("../src/neutral.ts");
+  test("sentences say the processor", () => {
+    assert.equal(
+      neutralText('The billing system charged the card. Stripe declined it: "Your card was declined.".'),
+      'The billing system charged the card. The processor declined it: "Your card was declined.".',
+    );
+    assert.equal(
+      neutralText("Card ending 0341 is saved for the customer at Stripe. Rev Rec retries the saved card."),
+      "Card ending 0341 is saved for the customer at the processor. Rev Rec retries the saved card.",
+    );
+    assert.equal(neutralText("Stripe test card 9995 declines with insufficient_funds."), "Test card 9995 declines with insufficient_funds.");
+    assert.equal(neutralText("waiting for Stripe's final answer"), "waiting for the processor's final answer");
+    assert.equal(neutralText("Stripe charge did not run: x"), "Charge did not run: x");
+  });
+  test("ids are dropped or shortened", () => {
+    assert.equal(
+      neutralText("The customer paid $65.40 in the merchant's app. Stripe approved it (pi_3QabcDEF123456)."),
+      "The customer paid $65.40 in the merchant's app. The processor approved it.",
+    );
+    assert.equal(neutralText("pm_1AbCdEfGhIjK"), "…fGhIjK");
+  });
+  test("keys, lowercase ids and other text stay", () => {
+    const body = { processorId: "stripe", label: "Rev Rec retried", nested: [{ Stripe: "Stripe" }] };
+    assert.deepEqual(neutralize(body), { processorId: "stripe", label: "Rev Rec retried", nested: [{ Stripe: "The processor" }] });
   });
 });

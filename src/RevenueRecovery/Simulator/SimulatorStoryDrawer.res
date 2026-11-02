@@ -125,7 +125,7 @@ let chargeIdOf = (row: diagramRow, ~story: option<story>) =>
 
 let actorName = actor =>
   switch actor {
-  | Processor => "Stripe"
+  | Processor => "Processor"
   | other => other->actorLabel->fst
   }
 
@@ -377,7 +377,7 @@ module ExplainDrawer = {
         | None => `Retry ${number->Int.toString} · Booked`
         }
         let facts = [
-          Some(("Who", "Rev Rec to Stripe"->React.string)),
+          Some(("Who", "Rev Rec to the processor"->React.string)),
           booking->Option.map(row => (
             "Booked",
             `For ${row->SimulatorStorySteps.bookedTimeOf}, picked at ${row.at->toClockTime}`->React.string,

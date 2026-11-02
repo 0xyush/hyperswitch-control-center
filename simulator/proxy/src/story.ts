@@ -1319,7 +1319,7 @@ export function parseStart(body: any): StartOptions {
   if (body.processor !== undefined && body.processor !== "stripe") {
     const a = adapterOf(String(body.processor));
     if (a && !processorOn(a))
-      throw new HttpError(409, "Only Stripe is on in this demo for now.");
+      throw new HttpError(409, "This processor is not on in this demo.");
     if (!a || !processorConfigured(a))
       throw new HttpError(
         400,
