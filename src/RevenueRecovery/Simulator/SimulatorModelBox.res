@@ -77,9 +77,14 @@ let liveSummary = (
     "Saturdays",
     "Sundays",
   ]
+  // A long list of near-tied slots says nothing: more than 3 days of the month, 5 weekdays or 2
+  // runs of hours read as "any"
   let (domIdx, daysRate, domFlat) = best(counts.dom)
+  let domFlat = domFlat || domIdx->Array.length > 3
   let (dowIdx, weekdaysRate, dowFlat) = best(counts.dow)
+  let dowFlat = dowFlat || dowIdx->Array.length > 5
   let (hodIdx, hoursRate, hodFlat) = best(counts.hod)
+  let hodFlat = hodFlat || hodIdx->runs->Array.length > 2
   {
     cluster,
     tries: counts.dow->Array.reduce(0, (t, c) => t + c.tries),

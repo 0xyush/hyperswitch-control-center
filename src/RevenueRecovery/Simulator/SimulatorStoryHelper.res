@@ -522,6 +522,8 @@ module BillingSystemForm = {
     // After a FinnstaAI signup (SimulatorSignup): step 2 charges this month's renewal on the card
     // saved at signup, for the plan's amount
     ~renewal: option<SimulatorSignup.result>=?,
+    // A renewal runs as soon as a story is picked
+    ~onStoryPicked=() => (),
   ) => {
     let (showAdvanced, setShowAdvanced) = React.useState(_ => false)
     // No story is picked at first (a ?preset link has one). Continue then opens step 2, the
@@ -610,6 +612,9 @@ module BillingSystemForm = {
     let pickStory = preset => {
       setForm(prev => prev->withPreset(preset))
       setHasPicked(_ => true)
+      if renewal->Option.isSome {
+        onStoryPicked()
+      }
     }
     let isStripe = form.processor == "stripe"
     let processorName =
@@ -785,7 +790,7 @@ module BillingSystemForm = {
               </FormField>
             </div>
             // Like Setup Checkout's Show Preview: opens step 2 with the story as it is
-            <RenderIf condition={!isUnlocked}>
+            <RenderIf condition={!isUnlocked && renewal->Option.isNone}>
               <Button
                 text="Continue"
                 buttonType=Primary
@@ -884,8 +889,8 @@ module BillingSystemForm = {
         <div className="min-w-0 flex flex-col gap-3">
           <StepLabel
             number=2
-            text={renewal->Option.isSome ? "Run the renewal charge" : "Enter the card"}
-            isActive=isUnlocked
+            text={renewal->Option.isSome ? "This month's renewal" : "Enter the card"}
+            isActive={isUnlocked || renewal->Option.isSome}
           />
           <RenderIf condition=startFailed>
             <AddDataAttributes attributes=[("data-sim", "start-failed")]>
@@ -909,13 +914,17 @@ module BillingSystemForm = {
             ref={ReactDOM.Ref.domRef(checkoutRef)}
             className={isUnlocked ? "" : "flex-1 flex flex-col [&>*]:flex-1"}>
             {switch (renewal, declined) {
-            // A renewal: the card saved at signup, until the charge declines
-            | (Some(result), None) =>
-              <div className={isUnlocked ? "" : "pointer-events-none opacity-50"}>
-                <SimulatorSignup.RenewalCharge
-                  result isBusy={isBusy || isLocked} isLocked={!isUnlocked} onCharge
-                />
-              </div>
+            // A renewal: the card saved at signup; a picked story charges it and hands it to Rev
+            // Rec by itself
+            | (Some(result), _) =>
+              <SimulatorSignup.RenewalCharge
+                result
+                working=?{declined->Option.isSome
+                  ? Some("Passing it to Rev Rec…")
+                  : isBusy || isLocked
+                  ? Some("Running the renewal charge…")
+                  : None}
+              />
             | _ =>
               <SimulatorCheckout.Preview
                 locked={!isUnlocked}

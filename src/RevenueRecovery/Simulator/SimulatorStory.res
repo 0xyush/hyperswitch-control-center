@@ -397,13 +397,23 @@ let make = (~storyIdFromUrl: option<string>) => {
       ~eventName="recovery_simulator_handover",
       ~failText="The invoice did not reach Rev Rec. Try again.",
     )->ignore
-  // Auto-play hands over by itself
+  // Auto-play hands over by itself, and so does a renewal: the signup already showed the decline
+  let isRenewal = signup->Option.isSome
   React.useEffect(() => {
-    if autoPlay && canHandover && !isBusy {
+    if (autoPlay || isRenewal) && canHandover && !isBusy {
       onNext()
     }
     None
-  }, (autoPlay, canHandover, isBusy))
+  }, (autoPlay, isRenewal, canHandover, isBusy))
+  // A renewal starts as soon as its story is picked: the form has the story by the next render
+  let (pendingRun, setPendingRun) = React.useState(_ => false)
+  React.useEffect(() => {
+    if pendingRun {
+      setPendingRun(_ => false)
+      onCharge()->ignore
+    }
+    None
+  }, [pendingRun])
 
   // Which steps fade in: those added in this tab, not those known when the story was opened
   let itemCount = Math.Int.max(visibleCount, 1)
@@ -574,6 +584,7 @@ let make = (~storyIdFromUrl: option<string>) => {
         // Until the handover the form is the page, across the full content width
         <BillingSystemForm
           renewal=?signup
+          onStoryPicked={() => setPendingRun(_ => true)}
           options
           form
           setForm

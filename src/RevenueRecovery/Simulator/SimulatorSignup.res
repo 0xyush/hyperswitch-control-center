@@ -139,10 +139,11 @@ let plusDays = (d, n) =>
 
 let brandLine = last4 => last4 == "4444" ? `Mastercard ••${last4}` : `Visa ••${last4}`
 
-// The story form's step 2 in renewal mode: this month's renewal on the card saved at signup
+// The story form's step 2 in renewal mode: this month's renewal on the card saved at signup. A
+// picked story runs it; working says what is going on until Rev Rec has it.
 module RenewalCharge = {
   @react.component
-  let make = (~result: result, ~isBusy, ~isLocked, ~onCharge) =>
+  let make = (~result: result, ~working: option<string>=?) =>
     <AddDataAttributes attributes=[("data-sim", "renewal-charge")]>
       <div className="rounded-xl border border-nd_gray-200 bg-white p-6 flex flex-col gap-5">
         <img src=logo alt=brandName className="h-8 w-fit" />
@@ -154,24 +155,23 @@ module RenewalCharge = {
             {`${brandName} ${result.plan} · ${result.amount->dollars}`->React.string}
           </span>
           <span className={`${body.md.medium} text-nd_gray-600`}>
-            {`On ${result.last4->brandLine}, saved at signup.`->React.string}
+            {`On ${result.last4->brandLine}, saved at signup. The bank declined it.`->React.string}
           </span>
         </div>
-        <p className={`${body.md.medium} text-nd_gray-500`}>
-          {"The billing system charges the saved card. The story you picked decides what the bank says."->React.string}
-        </p>
-        <button
-          type_="button"
-          disabled={isLocked || isBusy}
-          onClick={_ => onCharge()}
-          className={`h-11 rounded-lg ${body.md.semibold} tracking-wide text-white transition-colors ${isLocked ||
-            isBusy
-              ? "bg-nd_gray-400 cursor-not-allowed"
-              : "bg-[#1F2430] hover:bg-black"}`}>
-          {(
-            isBusy ? "Processing…" : `Run the renewal charge · ${result.amount->dollars}`
-          )->React.string}
-        </button>
+        {switch working {
+        | Some(text) =>
+          <div
+            className={`flex items-center gap-3 rounded-lg bg-nd_gray-50 border border-nd_gray-150 px-4 py-3 ${body.md.semibold} text-nd_gray-700`}>
+            <span
+              className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-nd_gray-300 border-t-[#1F2430]"
+            />
+            {text->React.string}
+          </div>
+        | None =>
+          <p className={`${body.md.medium} text-nd_gray-500`}>
+            {"Pick the customer's situation on the left. Rev Rec then takes over the failed renewal."->React.string}
+          </p>
+        }}
       </div>
     </AddDataAttributes>
 }
