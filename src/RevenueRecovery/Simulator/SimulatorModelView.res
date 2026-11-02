@@ -240,12 +240,49 @@ module MathDetails = {
 // footerRight: the story page's controls, right-aligned in the card's action row (with "Show the
 // math" on the left). Before the model decides, the row holds only them.
 @react.component
-let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
+let // pause: whether Rev Rec is paused, and how to pause or resume it (None when the story cannot)
+make = (
+  ~storyId,
+  ~isLive,
+  ~pause: option<(bool, bool => unit)>=?,
+  ~footerRight: React.element=React.null,
+) => {
   let simFetch = SimulatorApi.useSimFetch()
   let (state, setState) = React.useState(_ => None)
   let (showMath, setShowMath) = React.useState(_ => false)
   // The pick the walk-through was opened on. It stays fixed while the story books newer retries.
   let (walk, setWalk) = React.useState(_ => None)
+  // Opening the walk-through pauses Rev Rec, so the math holds still; closing it resumes Rev Rec
+  // only when the walk-through was what paused it. Refs, because the modal's close (Escape) can
+  // hold an older render's callback
+  let pauseRef = React.useRef(pause)
+  pauseRef.current = pause
+  let pausedByWalkRef = React.useRef(false)
+  let setByWalk = value => pausedByWalkRef.current = value
+  let openWalk = shown => {
+    switch pause {
+    | Some((false, onPause)) =>
+      onPause(true)
+      setByWalk(true)
+    | _ => ()
+    }
+    setWalk(_ => Some(shown))
+  }
+  let closeWalk = () => {
+    switch pauseRef.current {
+    | Some((true, onPause)) if pausedByWalkRef.current => onPause(false)
+    | _ => ()
+    }
+    setByWalk(false)
+    setWalk(_ => None)
+  }
+  let togglePause = paused =>
+    switch pause {
+    | Some((_, onPause)) =>
+      onPause(paused)
+      setByWalk(paused)
+    | None => ()
+    }
 
   // Read now, then every 3 s while the story runs
   React.useEffect(() => {
@@ -428,7 +465,7 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
                   text="Step through it"
                   buttonType=Secondary
                   buttonSize=Small
-                  onClick={_ => setWalk(_ => Some((decision, counts, day)))}
+                  onClick={_ => openWalk((decision, counts, day))}
                 />
                 {switch walk {
                 | Some((shown: decision, shownCounts, shownDay: modelDay)) =>
@@ -444,7 +481,9 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
                     retry=shown.n
                     newer={decision.n != shown.n ? Some(decision.n) : None}
                     onShowNewer={() => setWalk(_ => Some((decision, counts, day)))}
-                    onClose={() => setWalk(_ => None)}
+                    paused={pause->Option.map(((paused, _)) => paused)}
+                    onPauseChange=togglePause
+                    onClose=closeWalk
                   />
                 | None => React.null
                 }}

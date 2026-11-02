@@ -3481,6 +3481,12 @@ module StoryView = {
       story
       ->Option.flatMap(s => s.settings)
       ->Option.mapOr(false, settings => settings.currentPaused)
+    // The model view's walk-through pauses Rev Rec while the visitor steps through
+    let pauseControl = switch (onPause, story->Option.flatMap(s => s.settings)) {
+    | (Some(onPause), Some(settings)) if !isFinished && (settings.paused.allowed || isPaused) =>
+      Some((isPaused, onPause))
+    | _ => None
+    }
     let visibleItems = items->Array.slice(~start=0, ~end=visibleCount)
     // Until the first charge lands, step 1 is the billing system creating the invoice
     let isCreating = visibleItems->Array.length == 0 && !isFinished
@@ -3609,6 +3615,7 @@ module StoryView = {
               <SimulatorModelView
                 storyId=s.storyId
                 isLive={!(s->storyHasEnded)}
+                pause=?pauseControl
                 footerRight={<>
                   <RenderIf condition={s.realLife->Option.isSome}>
                     <p className={`${body.xs.medium} text-nd_gray-400`}>

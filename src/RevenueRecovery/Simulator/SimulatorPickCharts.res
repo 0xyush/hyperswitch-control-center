@@ -101,6 +101,9 @@ let options = (~categories, ~tickPositions, ~points, ~average, ~yMax) =>
   {
     "chart": {
       "type": "column",
+      // The bars grow once; while the story runs, new counts and picks redraw them in place
+      // (an animated update every few seconds read as the chart reloading)
+      "animation": false,
       "height": plotHeight + marginTop + marginBottom,
       "marginTop": marginTop,
       "marginBottom": marginBottom,

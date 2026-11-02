@@ -236,7 +236,9 @@ module Explain = {
         switch dim {
         | Hour =>
           <>
-            {line("The engine draws the hour with these chances.")}
+            {line(
+              "The engine draws one hour, like a raffle: each hour gets tickets by its chance. The best hour wins most often, not every time, so Rev Rec keeps learning about the other hours.",
+            )}
             <Formula text="P(hour) = share" />
             <Formula text={`It drew ${pick.name}: ${pick.share->pct(~digits=1)} chance.`} />
           </>
@@ -272,6 +274,8 @@ let make = (
   ~retry,
   ~newer: option<int>,
   ~onShowNewer,
+  ~paused: option<bool>,
+  ~onPauseChange: bool => unit,
   ~onClose,
 ) => {
   let picked = Date.fromString(slot)
@@ -377,6 +381,29 @@ let make = (
                 {"Show it"->React.string}
               </button>
             </span>
+          | None => React.null
+          }}
+          // Rev Rec holds still while the walk-through is open; the visitor can let it go on
+          {switch paused {
+          | Some(isPaused) =>
+            <div
+              className={`ml-auto flex items-center gap-3 rounded-lg border px-3 py-1.5 ${isPaused
+                  ? "bg-nd_gray-50 border-nd_gray-150"
+                  : "bg-white border-nd_gray-150"}`}>
+              <span className={`${body.sm.medium} text-nd_gray-600`}>
+                {(
+                  isPaused
+                    ? "Rev Rec is paused while you step through."
+                    : "Rev Rec is running: new retries may be booked."
+                )->React.string}
+              </span>
+              <Button
+                text={isPaused ? "Resume" : "Pause"}
+                buttonType=Secondary
+                buttonSize=XSmall
+                onClick={_ => onPauseChange(!isPaused)}
+              />
+            </div>
           | None => React.null
           }}
         </div>
