@@ -244,6 +244,7 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
   let simFetch = SimulatorApi.useSimFetch()
   let (state, setState) = React.useState(_ => None)
   let (showMath, setShowMath) = React.useState(_ => false)
+  let (showWalk, setShowWalk) = React.useState(_ => false)
 
   // Read now, then every 3 s while the story runs
   React.useEffect(() => {
@@ -418,6 +419,31 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
               buttonSize=Small
               onClick={_ => setShowMath(prev => !prev)}
             />
+            // The scoring one step at a time on these counts (SimulatorSlotWalk)
+            {switch (counts, chosenDay) {
+            | (Some(counts), Some(day)) =>
+              <>
+                <Button
+                  text="Step through it"
+                  buttonType=Secondary
+                  buttonSize=Small
+                  onClick={_ => setShowWalk(_ => true)}
+                />
+                <SimulatorSlotWalk
+                  counts
+                  cluster=decision.cluster
+                  slot=decision.slot
+                  dayBy=day.by
+                  pickChance=day.chance
+                  budget=decision.budget
+                  windowDays=decision.windowDays
+                  floor=decision.explorationFloor
+                  isOpen=showWalk
+                  onClose={() => setShowWalk(_ => false)}
+                />
+              </>
+            | _ => React.null
+            }}
             footer
           </div>
         </AddDataAttributes>

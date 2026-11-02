@@ -10,6 +10,7 @@ Try Hyperswitch **Revenue Recovery (Rev Rec)** hands-on. You charge a customer, 
 | --- | --- |
 | **Invoice story** | Pick a customer situation and pay with a test card. The payment fails, and you pass the invoice to Rev Rec. Then you watch each retry, step by step. |
 | **Smart model** | The decline group and how often retries worked before. Also the best hour and days, the next retry with a countdown, and charts that show why the model picked that time. |
+| **Step through it** | The model's math one step at a time, on the story's own counts: success rate, how sure, head to head, score, share, the pick. Adapted from Anand's Retry Slot Playground, used with permission. |
 | **Result** | Rev Rec's retries against today's fixed timetable, "with the same N tries", and declined charges the customer avoided. A timeline shows both sides. |
 | **Portfolio run** | The same invoices with two strategies, smart and fixed. It shows recovery rate, attempts per recovered invoice and time to recover. |
 | **Learn Rev Rec** | Short lessons with flow diagrams and a check at the end of each. |
