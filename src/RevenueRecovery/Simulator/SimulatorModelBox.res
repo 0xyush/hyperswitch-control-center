@@ -33,17 +33,99 @@ let shortHours = hours =>
 
 let pickingText = "Rev Rec is picking a time"
 
+// The group's counts as the engine reads them now (seeded, plus every outcome the demo has added),
+// put in the same words as SimulatorSeedStats with the rules of seed-summary.mjs. Live rates never
+// tie exactly, so slots within 2 points of the best count as tied.
+let tieTolerance = 0.02
+let liveSummary = (
+  counts: SimulatorPickCharts.counts,
+  ~cluster,
+): SimulatorSeedStats.clusterSeed => {
+  let best = (slots: array<SimulatorPickCharts.slotCount>) => {
+    let rates = slots->Array.map(SimulatorPickCharts.rate)
+    let top = rates->Array.reduce(0.0, Math.max)
+    let idx =
+      rates->Array.reduceWithIndex([], (acc, r, i) =>
+        r >= top -. tieTolerance && (slots->Array.getUnsafe(i)).tries > 0
+          ? acc->Array.concat([i])
+          : acc
+      )
+    let first = slots->Array.getUnsafe(idx->Array.get(0)->Option.getOr(0))
+    (idx, percent(first.worked, first.tries), idx->Array.length == slots->Array.length)
+  }
+  // Runs of consecutive indexes: [9, 10, 11] -> [(9, 11)]
+  let runs = idx =>
+    idx->Array.reduce([], (acc, i) =>
+      switch acc->Array.at(-1) {
+      | Some((a, b)) if b == i - 1 => acc->Array.slice(~start=0, ~end=-1)->Array.concat([(a, i)])
+      | _ => acc->Array.concat([(i, i)])
+      }
+    )
+  let hour = h =>
+    switch h {
+    | 0 | 24 => "midnight"
+    | 12 => "noon"
+    | h if h < 12 => `${h->Int.toString} AM`
+    | h => `${(h - 12)->Int.toString} PM`
+    }
+  let weekdayNames = [
+    "Mondays",
+    "Tuesdays",
+    "Wednesdays",
+    "Thursdays",
+    "Fridays",
+    "Saturdays",
+    "Sundays",
+  ]
+  let (domIdx, daysRate, domFlat) = best(counts.dom)
+  let (dowIdx, weekdaysRate, dowFlat) = best(counts.dow)
+  let (hodIdx, hoursRate, hodFlat) = best(counts.hod)
+  {
+    cluster,
+    tries: counts.dow->Array.reduce(0, (t, c) => t + c.tries),
+    worked: counts.dow->Array.reduce(0, (t, c) => t + c.worked),
+    days: domFlat
+      ? "any day of the month"
+      : `the ${domIdx
+          ->Array.map(i => SimulatorPickCharts.ordinal(i + 1))
+          ->Array.joinWith(" and ")}`,
+    daysRate,
+    weekdays: dowFlat
+      ? "any weekday"
+      : dowIdx
+        ->runs
+        ->Array.map(((a, b)) =>
+          a == b
+            ? weekdayNames->Array.getUnsafe(a)
+            : `${weekdayNames->Array.getUnsafe(a)} to ${weekdayNames->Array.getUnsafe(b)}`
+        )
+        ->Array.joinWith(", "),
+    weekdaysRate,
+    hours: hodFlat
+      ? "any hour"
+      : hodIdx->runs->Array.map(((a, b)) => `${hour(a)} to ${hour(b + 1)}`)->Array.joinWith(", "),
+    hoursRate,
+  }
+}
+
 // The engine's group is the decline reason only (MODEL.md): the card's brand is not part of it
 let reasonWhy = "Rev Rec groups retries by the decline reason. Visa and Mastercard with the same reason share one group."
 
 let seededWhy = "These counts are made up for the demo, shaped like published retry patterns. The engine adds real outcomes as stories run."
 
 // The four stat boxes, whether the decline is hard, and whether seeded counts are behind them
-let facts = firstCharge => {
+// live: the story's model answer (GET /sim/story/:id/model); its counts replace the seeded ones
+let facts = (~live=?, firstCharge) => {
   let decline = firstCharge->declineOf
   let group = decline->groupOf
   let seed = switch group {
-  | Group(cluster, _) => SimulatorSeedStats.seeds->Array.find(s => s.cluster == cluster)
+  | Group(cluster, _) =>
+    switch live->Option.flatMap(json =>
+      json->SimulatorPickCharts.countsOf(~cluster=`v1|${cluster}/UNK/UNK`)
+    ) {
+    | Some(counts) => Some(counts->liveSummary(~cluster))
+    | None => SimulatorSeedStats.seeds->Array.find(s => s.cluster == cluster)
+    }
   | Hard | NoGroup => None
   }
   let reason = switch group {
@@ -229,6 +311,33 @@ module Ring = {
   }
 }
 
+// The story's model answer, read now and every 3 s while the story runs
+let useLiveCounts = (~storyId, ~isLive) => {
+  let simFetch = SimulatorApi.useSimFetch()
+  let (json, setJson) = React.useState(_ => None)
+  React.useEffect(() => {
+    switch storyId {
+    | None => None
+    | Some(id) =>
+      let read = async () =>
+        try {
+          let answer = await simFetch(~path=`/sim/story/${id}/model`, ~method_=Get)
+          setJson(_ => Some(answer))
+        } catch {
+        | _ => ()
+        }
+      read()->ignore
+      if isLive {
+        let intervalId = setInterval(() => read()->ignore, 3000)
+        Some(() => clearInterval(intervalId))
+      } else {
+        None
+      }
+    }
+  }, (storyId, isLive))
+  json
+}
+
 @react.component
 let make = (
   // The billing system's first charge (form.firstCharge): its decline sets the group
@@ -241,7 +350,11 @@ let make = (
   // Rev Rec's retries so far (the retries block's): a new charge flips in its result
   ~retries: array<SimulatorStorySteps.retry>=[],
 ) => {
-  let (stats, isHard, isSeeded) = facts(firstCharge)
+  let live = useLiveCounts(
+    ~storyId=story->Option.map(s => s.storyId),
+    ~isLive=story->Option.mapOr(false, s => !(s->SimulatorUtils.storyHasEnded)),
+  )
+  let (stats, isHard, isSeeded) = facts(~live?, firstCharge)
   let hero = heroOf(~next, ~isHard)
 
   // The same rule as the story's waiting line: no time while a smart pick moves to the demo clock
