@@ -752,7 +752,7 @@ let savedProcessor = () =>
   }
 
 // POST /sim/story/start body: the preset fills defaults on the proxy, explicit fields win
-// signup: a ChotuAI signup (SimulatorSignup): the story's customer, card and amount
+// signup: a FinnstaAI signup (SimulatorSignup): the story's customer, card and amount
 let startBody = (~signup=?, form: billingForm) => {
   // Stripe is the proxy's default; another (enabled) processor is sent by its connector name
   let otherProcessor = form.processor != "stripe" && form.processor->processorEnabled

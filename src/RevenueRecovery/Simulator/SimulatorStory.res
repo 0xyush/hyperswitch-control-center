@@ -40,7 +40,7 @@ let make = (~storyIdFromUrl: option<string>) => {
   // the default card, hands over by itself, and a narration bar says each step
   let isWatch = url.search->getDictFromUrlSearchParams->Dict.get("mode") == Some("watch")
   let mixpanelEvent = MixpanelHook.useSendEvent()
-  // Before the story the visitor signs up as ChotuAI's customer (SimulatorSignup), unless the page
+  // Before the story the visitor signs up as FinnstaAI's customer (SimulatorSignup), unless the page
   // was opened on a story, a ?preset link or in watch mode
   let skipSignup =
     isWatch ||
@@ -529,11 +529,8 @@ let make = (~storyIdFromUrl: option<string>) => {
         title="Watch the simulation"
         subTitle="Rev Rec handles a failed invoice on its own. Pause at any step."
       />
-    | (false, false) if showForm && !signupDone =>
-      <PageUtils.PageHeading
-        title="Sign up as the customer"
-        subTitle="Sign up for ChotuAI, see next month's renewal fail, then watch Rev Rec recover it."
-      />
+    // The signup is the merchant's own checkout: no page heading over it
+    | (false, false) if showForm && !signupDone => React.null
     | (false, false) =>
       <PageUtils.PageHeading
         title="Invoice story"

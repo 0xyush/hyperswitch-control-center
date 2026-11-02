@@ -178,6 +178,45 @@ const noteStart = (...keys: string[]) => {
   for (const k of keys) starts.get(k)?.push(Date.now());
 };
 
+// ---------- address suggestions ----------
+
+const US_STATES: Record<string, string> = {
+  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR", California: "CA", Colorado: "CO",
+  Connecticut: "CT", Delaware: "DE", "District of Columbia": "DC", Florida: "FL", Georgia: "GA",
+  Hawaii: "HI", Idaho: "ID", Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
+  Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD", Massachusetts: "MA",
+  Michigan: "MI", Minnesota: "MN", Mississippi: "MS", Missouri: "MO", Montana: "MT",
+  Nebraska: "NE", Nevada: "NV", "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM",
+  "New York": "NY", "North Carolina": "NC", "North Dakota": "ND", Ohio: "OH", Oklahoma: "OK",
+  Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
+  "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT", Vermont: "VT",
+  Virginia: "VA", Washington: "WA", "West Virginia": "WV", Wisconsin: "WI", Wyoming: "WY",
+};
+
+async function addressSuggestions(q: string) {
+  const r = await fetch(
+    `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=en&bbox=-170,18,-66,72`,
+    {
+      headers: { "User-Agent": "RevRecSimulator/1.0 (demo)" },
+      signal: AbortSignal.timeout(3000),
+    },
+  ).catch(() => null);
+  const j: any = r && r.ok ? await r.json().catch(() => null) : null;
+  const seen = new Set<string>();
+  return (j?.features ?? [])
+    .map((f: any) => f?.properties ?? {})
+    .filter((a: any) => a.countrycode === "US")
+    .map((a: any) => {
+      const line = [a.housenumber, a.street ?? a.name].filter(Boolean).join(" ");
+      const city = a.city ?? a.town ?? a.village ?? a.county ?? "";
+      const state = US_STATES[a.state] ?? "";
+      const postcode = String(a.postcode ?? "").slice(0, 10);
+      return { line, city, state, postcode, label: [line, city, state, postcode].filter(Boolean).join(", ") };
+    })
+    .filter((a: any) => a.line && a.city && a.state && !seen.has(a.label) && seen.add(a.label))
+    .slice(0, 5);
+}
+
 // ---------- health ----------
 
 let health: { at: number; body: unknown } | null = null;
@@ -323,8 +362,20 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (method === "GET" && p === "/sim/blocked")
     return send(res, 200, { blocked: recentBlocked() });
 
-  // ChotuAI signup: the customer's first month (or a $0 card check), before a story. Real test
+  // FinnstaAI signup: the customer's first month (or a $0 card check), before a story. Real test
   // charges, so limited like story starts.
+  // Address suggestions for the signup form: Photon (OpenStreetMap, no key), US addresses only.
+  // Only what the visitor types in Address goes out; nothing is stored.
+  if (method === "GET" && p === "/sim/address") {
+    const q = (url.searchParams.get("q") ?? "").trim().slice(0, 120);
+    if (q.length < 3) return send(res, 200, { suggestions: [] });
+    const { owner } = visitor(req);
+    const gate = allowStart(`address:${owner}`, 600);
+    if (!gate.ok) return send(res, 200, { suggestions: [] });
+    noteStart(`address:${owner}`);
+    return send(res, 200, { suggestions: await addressSuggestions(q) });
+  }
+
   if (method === "POST" && p === "/sim/signup") {
     const { ip, owner } = visitor(req);
     const keys = [`signup:${owner}`, `signup:ip:${ip}`] as const;
@@ -348,7 +399,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (method === "POST" && p === "/sim/story/start") {
     // Bad input is refused before the rate limit, so it does not use up a start.
     const { ip, owner } = visitor(req);
-    // A ChotuAI signup gives the story its customer, card and amount
+    // A FinnstaAI signup gives the story its customer, card and amount
     const opts = withSignup(parseStart(await readJson(req)), owner);
     // A Stripe story makes the returning customer when this browser has none (story.ts
     // makeReturningHistory); another processor still needs an earlier story.

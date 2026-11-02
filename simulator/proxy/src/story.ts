@@ -141,7 +141,7 @@ export type StartOptions = {
   declines?: string;
   // The visitor's max tries from the story form (1-15): set on the leased profile at the start
   maxRetries?: number;
-  // A ChotuAI signup (su_…, POST /sim/signup): the story's customer and card, and its first charge
+  // A FinnstaAI signup (su_…, POST /sim/signup): the story's customer and card, and its first charge
   // is this month's renewal
   signup?: string;
 };
@@ -2284,12 +2284,12 @@ async function runStart(story: Story) {
       to: "billing",
       label:
         su.mode === "charge"
-          ? `signed up for ChotuAI ${su.plan}: first month ${first} paid on ••${last4}`
-          : `signed up for ChotuAI ${su.plan}: $0 card check on ••${last4}`,
+          ? `signed up for FinnstaAI ${su.plan}: first month ${first} paid on ••${last4}`
+          : `signed up for FinnstaAI ${su.plan}: $0 card check on ••${last4}`,
       text:
         su.mode === "charge"
-          ? `The customer signed up for ChotuAI ${su.plan} and paid the first month, ${first}, on card ••${last4}. The card is saved for renewals.`
-          : `The customer signed up for ChotuAI ${su.plan}. A $0 check approved card ••${last4} and saved it for renewals.`,
+          ? `The customer signed up for FinnstaAI ${su.plan} and paid the first month, ${first}, on card ••${last4}. The card is saved for renewals.`
+          : `The customer signed up for FinnstaAI ${su.plan}. A $0 check approved card ••${last4} and saved it for renewals.`,
       status: "ok",
       source: "sandbox",
       why: [
@@ -2304,7 +2304,7 @@ async function runStart(story: Story) {
       from: "billing",
       to: "billing",
       label: `new invoice ${amount} (this month's renewal)`,
-      text: `Invoice ${story.invoiceId} for ${amount} is due: this month's ChotuAI ${su.plan} renewal.`,
+      text: `Invoice ${story.invoiceId} for ${amount} is due: this month's FinnstaAI ${su.plan} renewal.`,
       status: "info",
       source: "simulator",
       why: [],
@@ -2840,8 +2840,8 @@ async function registerSecondCard(story: Story) {
 
 // "Returning customer" with no earlier customer in this browser (28 Oct): the customer's history,
 // made for the demo: a saved Visa ••4242 that paid last month's invoice. Returns its payment method.
-// ---------- ChotuAI signup (2 Nov) ----------
-// Before a story, the visitor signs up as the customer of ChotuAI, a made-up AI subscription. The
+// ---------- FinnstaAI signup (2 Nov) ----------
+// Before a story, the visitor signs up as the customer of FinnstaAI, a made-up AI subscription. The
 // first month is a real test charge, or a $0 card check that saves the card for renewals. A story
 // then charges this month's renewal to the same customer and card. Signups live in memory, one
 // story each; only the card's last four come in.
@@ -2880,8 +2880,8 @@ export async function signup(owner: string, body: any) {
   if (!mode) throw new HttpError(400, 'mode must be "charge" or "zero_auth"');
   const id = `su_${crypto.randomBytes(6).toString("hex")}`;
   const cus = await stripe("POST", "customers", {
-    name: "ChotuAI customer (test)",
-    description: "Rev Rec simulator: ChotuAI signup (test)",
+    name: "FinnstaAI customer (test)",
+    description: "Rev Rec simulator: FinnstaAI signup (test)",
     "metadata[sim_signup]": id,
   });
   if (!cus.json?.id)
@@ -2900,7 +2900,7 @@ export async function signup(owner: string, body: any) {
           payment_method: pm.json.id,
           off_session: "true",
           confirm: "true",
-          description: `ChotuAI ${plan.name}: first month (Rev Rec simulator)`,
+          description: `FinnstaAI ${plan.name}: first month (Rev Rec simulator)`,
           "metadata[sim_signup]": id,
         })
       : await stripe("POST", "setup_intents", {

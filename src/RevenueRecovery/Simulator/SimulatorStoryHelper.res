@@ -519,7 +519,7 @@ module BillingSystemForm = {
     ~onStartOver=() => (),
     // The story failed before Rev Rec got it (a start error, the proxy restarted)
     ~startFailed=false,
-    // After a ChotuAI signup (SimulatorSignup): step 2 charges this month's renewal on the card
+    // After a FinnstaAI signup (SimulatorSignup): step 2 charges this month's renewal on the card
     // saved at signup, for the plan's amount
     ~renewal: option<SimulatorSignup.result>=?,
   ) => {
@@ -666,7 +666,7 @@ module BillingSystemForm = {
               <p className={`${body.md.medium} text-nd_gray-500`}>
                 {(
                   renewal->Option.isSome
-                    ? "You are ChotuAI's billing system. Pick why the renewal fails."
+                    ? "You are FinnstaAI's billing system. Pick why the renewal fails."
                     : "You are the merchant's billing system."
                 )->React.string}
               </p>
