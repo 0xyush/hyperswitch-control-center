@@ -437,7 +437,6 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
                     counts=shownCounts
                     cluster=shown.cluster
                     slot=shown.slot
-                    dayBy=shownDay.by
                     pickChance=shownDay.chance
                     budget=shown.budget
                     windowDays=shown.windowDays

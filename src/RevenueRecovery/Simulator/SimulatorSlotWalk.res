@@ -258,14 +258,13 @@ module Explain = {
   }
 }
 
-// slot: the picked real-life moment (ISO); dayBy: what the model ranked the day by; pickChance:
+// slot: the picked real-life moment (ISO); pickChance:
 // the picked day's chance to be in the plan
 @react.component
 let make = (
   ~counts: SimulatorPickCharts.counts,
   ~cluster,
   ~slot,
-  ~dayBy,
   ~pickChance,
   ~budget,
   ~windowDays,
@@ -282,7 +281,7 @@ let make = (
     | MonthDay => picked->Date.getUTCDate - 1
     | Hour => picked->Date.getUTCHours
     }
-  let firstDim = dayBy == "day of month" ? MonthDay : Weekday
+  let firstDim = Hour
   let (dim, setDim) = React.useState(_ => firstDim)
   let (step, setStep) = React.useState(_ => 0)
   let (focusAt, setFocusAt) = React.useState(_ => pickIndex(firstDim))
@@ -353,6 +352,9 @@ let make = (
     childClass="flex flex-col min-h-0 overflow-y-auto">
     <AddDataAttributes attributes=[("data-sim", "slot-walk")]>
       <div className="flex flex-col gap-4 px-6 pt-3 pb-6">
+        <style>
+          {"@keyframes slotwalk-glow{0%,100%{box-shadow:0 0 0 0 rgba(0,105,253,.45)}50%{box-shadow:0 0 0 6px rgba(0,105,253,0)}}.slotwalk-pick{animation:slotwalk-glow 1.6s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.slotwalk-pick{animation:none}}"->React.string}
+        </style>
         <div className="flex flex-col gap-0.5">
           <p className={`${body.md.medium} text-nd_gray-600`}>
             {`The engine's own formulas, on the counts it read for ${cluster->reasonOf}. Click a cell to follow it.`->React.string}
@@ -379,9 +381,9 @@ let make = (
           }}
         </div>
         <div className="flex items-center gap-1 self-start rounded-lg bg-nd_gray-100 p-1">
+          {tab(Hour, "Hour (UTC)")}
           {tab(Weekday, "Weekday")}
           {tab(MonthDay, "Day of month")}
-          {tab(Hour, "Hour (UTC)")}
         </div>
         <div className="flex flex-col lg:flex-row gap-5 lg:items-stretch lg:min-h-[360px]">
           <div className="flex flex-col gap-3 w-full lg:flex-[1.2] min-w-0">
@@ -400,10 +402,11 @@ let make = (
                 | None => (c.scored ? "#F1F5F9" : "#F8FAFC", c.scored ? "#1F2937" : "#98A2B3")
                 }
                 let colour = ReactDOM.Style.make(~background=bg, ~color=fg, ())
+                let isPick = c.index == pick.index
                 <button
                   key={c.name}
                   ariaLabel={`${c.name}: ${value} ${sub}`}
-                  className={`relative ${big
+                  className={`relative ${isPick ? "z-10" : ""} ${big
                       ? "rounded-lg gap-1"
                       : "rounded-md"} flex flex-col items-center justify-center leading-tight transition-colors ${c.index ==
                       focus.index
@@ -426,12 +429,16 @@ let make = (
                       {sub->React.string}
                     </span>
                   </RenderIf>
-                  <RenderIf condition={c.index == pick.index}>
+                  <RenderIf condition=isPick>
                     <span
-                      className={`absolute ${big
-                          ? "top-2 right-2 w-2.5 h-2.5"
-                          : "top-1 right-1 w-2 h-2"} rounded-full bg-primary ring-2 ring-white`}
+                      className={`slotwalk-pick absolute -inset-[3px] ${big
+                          ? "rounded-[11px]"
+                          : "rounded-[9px]"} border-2 border-dashed border-primary pointer-events-none`}
                     />
+                    <span
+                      className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary text-white text-[10px] font-semibold leading-4 px-2 whitespace-nowrap pointer-events-none">
+                      {"Picked"->React.string}
+                    </span>
                   </RenderIf>
                 </button>
               })
@@ -458,7 +465,7 @@ let make = (
                 {"Better"->React.string}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-primary" />
+                <span className="w-3 h-3 rounded-sm border-2 border-dashed border-primary" />
                 {"Rev Rec's pick"->React.string}
               </span>
               <span> {"Outlined: the cell you follow"->React.string} </span>
