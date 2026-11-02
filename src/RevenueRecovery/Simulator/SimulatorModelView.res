@@ -244,7 +244,8 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
   let simFetch = SimulatorApi.useSimFetch()
   let (state, setState) = React.useState(_ => None)
   let (showMath, setShowMath) = React.useState(_ => false)
-  let (showWalk, setShowWalk) = React.useState(_ => false)
+  // The pick the walk-through was opened on. It stays fixed while the story books newer retries.
+  let (walk, setWalk) = React.useState(_ => None)
 
   // Read now, then every 3 s while the story runs
   React.useEffect(() => {
@@ -427,20 +428,27 @@ let make = (~storyId, ~isLive, ~footerRight: React.element=React.null) => {
                   text="Step through it"
                   buttonType=Secondary
                   buttonSize=Small
-                  onClick={_ => setShowWalk(_ => true)}
+                  onClick={_ => setWalk(_ => Some((decision, counts, day)))}
                 />
-                <SimulatorSlotWalk
-                  counts
-                  cluster=decision.cluster
-                  slot=decision.slot
-                  dayBy=day.by
-                  pickChance=day.chance
-                  budget=decision.budget
-                  windowDays=decision.windowDays
-                  floor=decision.explorationFloor
-                  isOpen=showWalk
-                  onClose={() => setShowWalk(_ => false)}
-                />
+                {switch walk {
+                | Some((shown: decision, shownCounts, shownDay: modelDay)) =>
+                  <SimulatorSlotWalk
+                    key={shown.n->Int.toString}
+                    counts=shownCounts
+                    cluster=shown.cluster
+                    slot=shown.slot
+                    dayBy=shownDay.by
+                    pickChance=shownDay.chance
+                    budget=shown.budget
+                    windowDays=shown.windowDays
+                    floor=shown.explorationFloor
+                    retry=shown.n
+                    newer={decision.n != shown.n ? Some(decision.n) : None}
+                    onShowNewer={() => setWalk(_ => Some((decision, counts, day)))}
+                    onClose={() => setWalk(_ => None)}
+                  />
+                | None => React.null
+                }}
               </>
             | _ => React.null
             }}

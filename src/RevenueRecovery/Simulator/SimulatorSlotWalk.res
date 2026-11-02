@@ -270,7 +270,9 @@ let make = (
   ~budget,
   ~windowDays,
   ~floor,
-  ~isOpen,
+  ~retry,
+  ~newer: option<int>,
+  ~onShowNewer,
   ~onClose,
 ) => {
   let picked = Date.fromString(slot)
@@ -343,7 +345,7 @@ let make = (
     </button>
 
   <Modal
-    showModal=isOpen
+    showModal=true
     setShowModal={_ => onClose()}
     closeOnOutsideClick=true
     modalHeading="Step through the pick"
@@ -358,6 +360,23 @@ let make = (
           <p className={`${body.sm.medium} text-nd_gray-500`}>
             {"This engine groups the counts by decline code only. Card type, country, network and issuer are not used."->React.string}
           </p>
+        </div>
+        // The pick this walk-through is about; a newer one does not move it
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className={`${body.md.semibold} text-nd_gray-800`}>
+            {`Retry ${retry->Int.toString}'s pick: ${pickLabel}`->React.string}
+          </span>
+          {switch newer {
+          | Some(n) =>
+            <span
+              className={`flex items-center gap-2 rounded-md bg-nd_gray-50 border border-nd_gray-150 px-2.5 py-1 ${body.sm.medium} text-nd_gray-600`}>
+              {`Rev Rec has booked retry ${n->Int.toString} since.`->React.string}
+              <button className="text-primary font-semibold" onClick={_ => onShowNewer()}>
+                {"Show it"->React.string}
+              </button>
+            </span>
+          | None => React.null
+          }}
         </div>
         <div className="flex items-center gap-1 self-start rounded-lg bg-nd_gray-100 p-1">
           {tab(Weekday, "Weekday")}
