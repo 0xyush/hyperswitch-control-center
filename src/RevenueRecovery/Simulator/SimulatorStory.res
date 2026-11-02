@@ -405,15 +405,6 @@ let make = (~storyIdFromUrl: option<string>) => {
     }
     None
   }, (autoPlay, isRenewal, canHandover, isBusy))
-  // A renewal starts as soon as its story is picked: the form has the story by the next render
-  let (pendingRun, setPendingRun) = React.useState(_ => false)
-  React.useEffect(() => {
-    if pendingRun {
-      setPendingRun(_ => false)
-      onCharge()->ignore
-    }
-    None
-  }, [pendingRun])
 
   // Which steps fade in: those added in this tab, not those known when the story was opened
   let itemCount = Math.Int.max(visibleCount, 1)
@@ -540,7 +531,7 @@ let make = (~storyIdFromUrl: option<string>) => {
         subTitle="Rev Rec handles a failed invoice on its own. Pause at any step."
       />
     // The signup is the merchant's own checkout: no page heading over it
-    | (false, false) if showForm && !signupDone => React.null
+    | (false, false) if showForm && (!signupDone || signup->Option.isSome) => React.null
     | (false, false) =>
       <PageUtils.PageHeading
         title="Invoice story"
@@ -580,11 +571,24 @@ let make = (~storyIdFromUrl: option<string>) => {
           }}
           onSkip={() => setSignupDone(_ => true)}
         />
+      } else if showForm && signup->Option.isSome {
+        // After a signup: pick why the renewal failed, then hand it to Rev Rec
+        switch signup {
+        | Some(renewal) =>
+          <RenewalPicker
+            options
+            form
+            setForm
+            renewal
+            isBusy={isBusy || isStarting || isBeforeHandover}
+            onRun={() => onCharge()->ignore}
+          />
+        | None => React.null
+        }
       } else if showForm {
         // Until the handover the form is the page, across the full content width
         <BillingSystemForm
           renewal=?signup
-          onStoryPicked={() => setPendingRun(_ => true)}
           options
           form
           setForm

@@ -500,6 +500,152 @@ module StepLabel = {
 // Before the first charge the form is the page, step by step: 1 pick a story on the left (the
 // billing system), 2 enter the card in the customer's checkout on the right (as the control
 // center's Setup Checkout: locked and blurred until a story is picked), the chain under both
+// After a FinnstaAI signup: one wide step to pick why the renewal failed (big story cards), then
+// step 2 hands the failed renewal to Rev Rec. The decline is not shown again: the signup showed it.
+module RenewalPicker = {
+  @react.component
+  let make = (
+    ~options: formOptions,
+    ~form: billingForm,
+    ~setForm,
+    ~renewal: SimulatorSignup.result,
+    // From Hand it to Rev Rec until the running view opens
+    ~isBusy,
+    ~onRun,
+  ) => {
+    let (picked, setPicked) = React.useState(_ => false)
+    let (showMore, setShowMore) = React.useState(_ => false)
+    let presetById = id => options.presets->Array.find(preset => preset.id == id)
+    let moreStories = options.presets->Array.filter(preset => !(preset.id->isMainStory))
+    let pick = (preset: preset) => {
+      setForm((prev: billingForm) => {
+        ...preset.fields,
+        card: prev.card,
+        maxRetries: prev.maxRetries,
+        retryMode: prev.retryMode,
+        processor: "stripe",
+        amount: renewal.amount->SimulatorSignup.major,
+        currency: renewal.currency,
+        customer: "new",
+      })
+      setPicked(_ => true)
+    }
+    let tile = (~key, ~title, ~icon, ~line, ~isOn, ~onClick) =>
+      <button
+        key
+        type_="button"
+        disabled=isBusy
+        onClick={_ => onClick()}
+        className={`flex min-h-[148px] flex-col gap-3 rounded-2xl border-2 p-5 text-left transition-colors ${isOn
+            ? "border-nd_primary_blue-450 bg-nd_primary_blue-50"
+            : "border-nd_gray-200 bg-white hover:border-nd_gray-400"} ${isBusy
+            ? "cursor-not-allowed opacity-70"
+            : ""}`}>
+        <span className="flex items-center justify-between">
+          <span
+            className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOn
+                ? "bg-white text-nd_primary_blue-450"
+                : "bg-nd_gray-50 text-nd_gray-600"}`}>
+            <Icon name=icon size=18 />
+          </span>
+          <RenderIf condition=isOn>
+            <span
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-nd_primary_blue-450 text-white">
+              <Icon name="nd-check" size=12 />
+            </span>
+          </RenderIf>
+        </span>
+        <span className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </span>
+        <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
+      </button>
+    let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
+    <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <StepLabel number=1 text="Pick the customer's story" isDone=picked />
+          <h2 className={`${heading.lg.semibold} text-nd_gray-800`}>
+            {"Why was the card declined?"->React.string}
+          </h2>
+          <p className={`${body.lg.medium} text-nd_gray-600`}>
+            {`${SimulatorSignup.brandName}'s ${renewal.amount->SimulatorSignup.dollars} renewal on ${renewal.last4->SimulatorSignup.brandLine} did not go through. Pick what is going on with the customer: it decides what the bank says on each retry, and when the money is there again.`->React.string}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {scenarioTiles
+          ->Array.filterMap(((id, title, icon, line)) =>
+            presetById(id)->Option.map(preset =>
+              tile(
+                ~key=id->Int.toString,
+                ~title,
+                ~icon,
+                ~line,
+                ~isOn={picked && form.preset == id},
+                ~onClick=() => pick(preset),
+              )
+            )
+          )
+          ->React.array}
+          {tile(
+            ~key="more",
+            ~title=pickedMore->Option.mapOr(
+              `More stories (${moreStories->Array.length->Int.toString})`,
+              preset => preset.title,
+            ),
+            ~icon=pickedMore->Option.mapOr("nd-plus", storyIconOf),
+            ~line=pickedMore->Option.mapOr("Every other situation", preset => preset.summary),
+            ~isOn=pickedMore->Option.isSome,
+            ~onClick=() => setShowMore(_ => true),
+          )}
+        </div>
+        <MoreStoriesModal
+          isOpen=showMore
+          onClose={() => setShowMore(_ => false)}
+          stories=moreStories
+          picked=form.preset
+          isLocked=isBusy
+          onPick={preset => {
+            pick(preset)
+            setShowMore(_ => false)
+          }}
+        />
+        // Step 2, once a story is picked: Rev Rec takes over the failed renewal
+        <RenderIf condition=picked>
+          <AddDataAttributes attributes=[("data-sim", "renewal-handover")]>
+            <div className="flex flex-col gap-4 rounded-2xl border border-nd_gray-200 bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <StepLabel number=2 text="Rev Rec takes over" />
+                  <span className={`${body.md.medium} text-nd_gray-600`}>
+                    {"The billing system informs Rev Rec of the failed renewal. Rev Rec's smart model then picks when to retry it."->React.string}
+                  </span>
+                </div>
+                <Button
+                  text={isBusy ? "Handing it to Rev Rec…" : "Hand it to Rev Rec"}
+                  buttonType=Primary
+                  buttonSize=Large
+                  buttonState={isBusy ? Disabled : Normal}
+                  rightIcon=?{isBusy ? None : Some(FontAwesome("arrow-right"))}
+                  onClick={_ => onRun()}
+                />
+              </div>
+              <RenderIf condition=isBusy>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-nd_gray-100">
+                  <div
+                    className="sim-handover-bar h-full w-1/3 rounded-full bg-nd_primary_blue-450"
+                  />
+                </div>
+                <style>
+                  {"@keyframes sim-handover { from { transform: translateX(-100%); } to { transform: translateX(300%); } } .sim-handover-bar { animation: sim-handover 1.2s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .sim-handover-bar { animation: none; } }"->React.string}
+                </style>
+              </RenderIf>
+            </div>
+          </AddDataAttributes>
+        </RenderIf>
+      </div>
+    </AddDataAttributes>
+  }
+}
+
 module BillingSystemForm = {
   @react.component
   let make = (

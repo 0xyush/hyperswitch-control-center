@@ -503,7 +503,7 @@ module ChargeFlow = {
       <div className="sgn-pop flex flex-col items-center gap-8 py-12">
         <style> {flowCss->React.string} </style>
         <span className={`${body.lg.semibold} text-nd_gray-500`}>
-          {`Renewal day, ${Date.make()->shortDate}: ${brandName} charges the saved card`->React.string}
+          {`Renewal day, ${Date.make()->shortDate} · one month after signup: ${brandName} charges the saved card`->React.string}
         </span>
         <div className="relative w-full max-w-[640px] flex items-center justify-between">
           // The wire between the three, and the charge moving along it
@@ -818,7 +818,12 @@ let make = (~onDone: result => unit, ~onSkip) => {
                 </span>
                 <div className={`flex justify-between ${body.md.medium} text-nd_gray-800`}>
                   <span> {"First Payment Date"->React.string} </span>
-                  <span> {monthAgo()->usDate->React.string} </span>
+                  <span className="flex flex-col items-end">
+                    {monthAgo()->usDate->React.string}
+                    <span className={`${body.xs.medium} text-nd_gray-500`}>
+                      {"One month ago, in this story"->React.string}
+                    </span>
+                  </span>
                 </div>
                 <div className={`flex justify-between ${body.md.medium} text-nd_gray-800`}>
                   <span> {"First Payment"->React.string} </span>
