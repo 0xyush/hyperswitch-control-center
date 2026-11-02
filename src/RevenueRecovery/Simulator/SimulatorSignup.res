@@ -847,34 +847,18 @@ let make = (~onDone: result => unit, ~onSkip) => {
                   className={`flex flex-col gap-3 transition-[filter,opacity] duration-300 ${planPicked
                       ? ""
                       : "blur-[2px] opacity-50 pointer-events-none select-none"}`}>
-                  // Card, or a US bank account (ACH, not in this demo)
-                  <div className="grid grid-cols-2 border-b border-nd_gray-200">
-                    <div
-                      className="flex items-center justify-center gap-2 border-b-2 border-[#2D5BD7] pb-2.5">
-                      {["visa-light", "mastercard", "amex-light", "discover"]
-                      ->Array.map(name =>
-                        <React.Fragment key=name>
-                          {SimulatorCheckout.icon(~name, ~size=20, ~width=30)}
-                        </React.Fragment>
-                      )
-                      ->React.array}
-                    </div>
-                    <ToolTip
-                      description="Not in this demo: Rev Rec retries cards here."
-                      toolTipPosition=ToolTip.Top
-                      toolTipFor={<div
-                        className={`flex items-center justify-center gap-2 pb-2.5 ${body.md.semibold} text-nd_gray-400 cursor-not-allowed`}>
-                        <svg width="20" height="18" viewBox="0 0 20 18" ariaHidden=true>
-                          <path d="M10 1 L19 5.5 L1 5.5 Z" fill="currentColor" />
-                          <rect x="3" y="7" width="2.2" height="7" fill="currentColor" />
-                          <rect x="7.3" y="7" width="2.2" height="7" fill="currentColor" />
-                          <rect x="11.6" y="7" width="2.2" height="7" fill="currentColor" />
-                          <rect x="15.8" y="7" width="2.2" height="7" fill="currentColor" />
-                          <rect x="1.5" y="15.2" width="17" height="2" fill="currentColor" />
-                        </svg>
-                        {"US bank account (ACH)"->React.string}
-                      </div>}
-                    />
+                  // Cards only
+                  <div className="flex items-center gap-2 border-b-2 border-[#2D5BD7] pb-2.5">
+                    {["visa-light", "mastercard", "amex-light", "discover"]
+                    ->Array.map(name =>
+                      <React.Fragment key=name>
+                        {SimulatorCheckout.icon(~name, ~size=20, ~width=30)}
+                      </React.Fragment>
+                    )
+                    ->React.array}
+                    <span className={`ml-1 ${body.md.semibold} text-nd_gray-700`}>
+                      {"Credit or debit card"->React.string}
+                    </span>
                   </div>
                   // Fill buttons, in one row: test cards on the left, sample details on the right
                   <div className="flex flex-wrap items-center gap-2">
