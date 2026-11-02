@@ -519,6 +519,9 @@ module BillingSystemForm = {
     ~onStartOver=() => (),
     // The story failed before Rev Rec got it (a start error, the proxy restarted)
     ~startFailed=false,
+    // After a ChotuAI signup (SimulatorSignup): step 2 charges this month's renewal on the card
+    // saved at signup, for the plan's amount
+    ~renewal: option<SimulatorSignup.result>=?,
   ) => {
     let (showAdvanced, setShowAdvanced) = React.useState(_ => false)
     // No story is picked at first (a ?preset link has one). Continue then opens step 2, the
@@ -582,13 +585,26 @@ module BillingSystemForm = {
     // A story fills the form; the chosen retry mode and processor stay, except that a story the
     // processor cannot run runs on Stripe
     let withPreset = (prev: billingForm, preset: preset) => {
-      ...preset.fields,
-      card: prev.card,
-      maxRetries: prev.maxRetries,
-      retryMode: prev.retryMode,
-      processor: presetRunsOn(~options, ~processor=prev.processor, ~preset)
-        ? prev.processor
-        : "stripe",
+      let filled = {
+        ...preset.fields,
+        card: prev.card,
+        maxRetries: prev.maxRetries,
+        retryMode: prev.retryMode,
+        processor: presetRunsOn(~options, ~processor=prev.processor, ~preset)
+          ? prev.processor
+          : "stripe",
+      }
+      // A renewal keeps the plan's amount and the new customer the signup made
+      switch renewal {
+      | Some(r) => {
+          ...filled,
+          amount: r.amount->SimulatorSignup.major,
+          currency: r.currency,
+          customer: "new",
+          processor: "stripe",
+        }
+      | None => filled
+      }
     }
     // Picking a story is step 1: it fills the form; Continue opens the checkout
     let pickStory = preset => {
@@ -648,7 +664,11 @@ module BillingSystemForm = {
                 {"Billing system"->React.string}
               </p>
               <p className={`${body.md.medium} text-nd_gray-500`}>
-                {"You are the merchant's billing system."->React.string}
+                {(
+                  renewal->Option.isSome
+                    ? "You are ChotuAI's billing system. Pick why the renewal fails."
+                    : "You are the merchant's billing system."
+                )->React.string}
               </p>
             </div>
             // The story decides what the bank says; two compact cards per row
@@ -710,43 +730,46 @@ module BillingSystemForm = {
                 setShowMore(_ => false)
               }}
             />
-            // New or returning, as one slim segmented control (what each means on hover)
-            <FormField label="Customer">
-              <div
-                role="tablist"
-                className="grid grid-cols-2 gap-1 rounded-lg border border-nd_gray-200 bg-white p-1">
-                {customerTiles
-                ->Array.map(((value, title, subtitle, _)) => {
-                  let isOn = form.customer == value
-                  <ToolTip
-                    key=value
-                    description=subtitle
-                    toolTipPosition=ToolTip.Top
-                    fullWidth=true
-                    toolTipFor={<button
-                      type_="button"
-                      role="tab"
-                      ariaSelected=isOn
-                      disabled=isLocked
-                      className={`w-full h-9 rounded-md transition-colors ${body.sm.semibold} ${isOn
-                          ? "bg-nd_primary_blue-450 text-white shadow-sm"
-                          : "text-nd_gray-600 hover:bg-nd_gray-100 hover:text-nd_gray-800"} ${isLocked
-                          ? "cursor-not-allowed"
-                          : "cursor-pointer"}`}
-                      onClick={_ => setForm(prev => {...prev, customer: value})}>
-                      {`${title} customer`->React.string}
-                    </button>}
-                  />
-                })
-                ->React.array}
-              </div>
-            </FormField>
-            // Currency and Amount as on Setup Checkout
+            // New or returning, as one slim segmented control (what each means on hover). A
+            // renewal's customer is the one who signed up.
+            <RenderIf condition={renewal->Option.isNone}>
+              <FormField label="Customer">
+                <div
+                  role="tablist"
+                  className="grid grid-cols-2 gap-1 rounded-lg border border-nd_gray-200 bg-white p-1">
+                  {customerTiles
+                  ->Array.map(((value, title, subtitle, _)) => {
+                    let isOn = form.customer == value
+                    <ToolTip
+                      key=value
+                      description=subtitle
+                      toolTipPosition=ToolTip.Top
+                      fullWidth=true
+                      toolTipFor={<button
+                        type_="button"
+                        role="tab"
+                        ariaSelected=isOn
+                        disabled=isLocked
+                        className={`w-full h-9 rounded-md transition-colors ${body.sm.semibold} ${isOn
+                            ? "bg-nd_primary_blue-450 text-white shadow-sm"
+                            : "text-nd_gray-600 hover:bg-nd_gray-100 hover:text-nd_gray-800"} ${isLocked
+                            ? "cursor-not-allowed"
+                            : "cursor-pointer"}`}
+                        onClick={_ => setForm(prev => {...prev, customer: value})}>
+                        {`${title} customer`->React.string}
+                      </button>}
+                    />
+                  })
+                  ->React.array}
+                </div>
+              </FormField>
+            </RenderIf>
+            // Currency and Amount as on Setup Checkout (a renewal's are the plan's)
             <div className="grid grid-cols-2 gap-3 items-start">
               <SelectField
                 label="Currency"
                 name="currency"
-                isDisabled=isLocked
+                isDisabled={isLocked || renewal->Option.isSome}
                 options=options.currencies
                 value=form.currency
                 onChange={currency => setForm(prev => {...prev, currency})}
@@ -757,7 +780,7 @@ module BillingSystemForm = {
                   setAmount={amount => setForm(prev => {...prev, amount})}
                   currency=form.currency
                   quickAmounts=[]
-                  isDisabled=isLocked
+                  isDisabled={isLocked || renewal->Option.isSome}
                 />
               </FormField>
             </div>
@@ -859,7 +882,11 @@ module BillingSystemForm = {
         // Step 2, the customer's checkout (C's preview, like the Web SDK): blurred and locked until
         // Continue. Its card's last four go to the proxy as the start field card, never the number.
         <div className="min-w-0 flex flex-col gap-3">
-          <StepLabel number=2 text="Enter the card" isActive=isUnlocked />
+          <StepLabel
+            number=2
+            text={renewal->Option.isSome ? "Run the renewal charge" : "Enter the card"}
+            isActive=isUnlocked
+          />
           <RenderIf condition=startFailed>
             <AddDataAttributes attributes=[("data-sim", "start-failed")]>
               <div
@@ -881,28 +908,38 @@ module BillingSystemForm = {
           <div
             ref={ReactDOM.Ref.domRef(checkoutRef)}
             className={isUnlocked ? "" : "flex-1 flex flex-col [&>*]:flex-1"}>
-            <SimulatorCheckout.Preview
-              locked={!isUnlocked}
-              lockText={hasPicked ? "Press Continue" : "Pick a story first"}
-              amount=form.amount
-              currency=form.currency
-              customer=form.customer
-              isBusy={isBusy || isLocked}
-              // The card is set as it changes, so a charge never reads an old one
-              onCard={pan =>
-                if pan != "" {
-                  setForm(prev => {...prev, card: pan->String.sliceToEnd(~start=-4)})
-                }}
-              onPay={_ => onCharge()}
-              // The first charge's decline: C's failed page, the dunning email and the handover
-              declined=?{declined->Option.map(((reason, last4)): SimulatorCheckout.declined => {
-                reason,
-                last4: last4->LogicUtils.isNonEmptyString ? last4 : form.card,
-              })}
-              onHandover
-              isHandingOver
-              onStartOver
-            />
+            {switch (renewal, declined) {
+            // A renewal: the card saved at signup, until the charge declines
+            | (Some(result), None) =>
+              <div className={isUnlocked ? "" : "pointer-events-none opacity-50"}>
+                <SimulatorSignup.RenewalCharge
+                  result isBusy={isBusy || isLocked} isLocked={!isUnlocked} onCharge
+                />
+              </div>
+            | _ =>
+              <SimulatorCheckout.Preview
+                locked={!isUnlocked}
+                lockText={hasPicked ? "Press Continue" : "Pick a story first"}
+                amount=form.amount
+                currency=form.currency
+                customer=form.customer
+                isBusy={isBusy || isLocked}
+                // The card is set as it changes, so a charge never reads an old one
+                onCard={pan =>
+                  if pan != "" {
+                    setForm(prev => {...prev, card: pan->String.sliceToEnd(~start=-4)})
+                  }}
+                onPay={_ => onCharge()}
+                // The first charge's decline: C's failed page, the dunning email and the handover
+                declined=?{declined->Option.map(((reason, last4)): SimulatorCheckout.declined => {
+                  reason,
+                  last4: last4->LogicUtils.isNonEmptyString ? last4 : form.card,
+                })}
+                onHandover
+                isHandingOver
+                onStartOver
+              />
+            }}
           </div>
           // The story's decline and what the model knows about it; it stays under C's preview
           <RenderIf condition=isUnlocked>

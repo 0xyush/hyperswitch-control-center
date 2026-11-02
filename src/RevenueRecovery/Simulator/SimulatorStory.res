@@ -40,6 +40,14 @@ let make = (~storyIdFromUrl: option<string>) => {
   // the default card, hands over by itself, and a narration bar says each step
   let isWatch = url.search->getDictFromUrlSearchParams->Dict.get("mode") == Some("watch")
   let mixpanelEvent = MixpanelHook.useSendEvent()
+  // Before the story the visitor signs up as ChotuAI's customer (SimulatorSignup), unless the page
+  // was opened on a story, a ?preset link or in watch mode
+  let skipSignup =
+    isWatch ||
+    storyIdFromUrl->Option.isSome ||
+    url.search->getDictFromUrlSearchParams->Dict.get("preset")->Option.isSome
+  let (signup, setSignup) = React.useState(_ => None)
+  let (signupDone, setSignupDone) = React.useState(_ => skipSignup)
 
   let (screenState, setScreenState) = React.useState(_ => PageLoaderWrapper.Loading)
   let (options, setOptions) = React.useState(_ => {
@@ -204,7 +212,14 @@ let make = (~storyIdFromUrl: option<string>) => {
     setIsBusy(_ => true)
     mixpanelEvent(~eventName="recovery_simulator_charge_customer")
     try {
-      let json = await simFetch(~path="/sim/story/start", ~method_=Post, ~body=form->startBody)
+      let json = await simFetch(
+        ~path="/sim/story/start",
+        ~method_=Post,
+        ~body=startBody(
+          ~signup=?signup->Option.map((s: SimulatorSignup.result) => s.signupId),
+          form,
+        ),
+      )
       let newStory = json->storyMapper
       startedHereId.current = newStory.storyId
       formStoryId.current = newStory.storyId
@@ -303,6 +318,9 @@ let make = (~storyIdFromUrl: option<string>) => {
 
   let onStartOver = () => {
     mixpanelEvent(~eventName="recovery_simulator_start_over")
+    // A signup starts one story: a new story signs up again
+    setSignup(_ => None)
+    setSignupDone(_ => false)
     setStory(_ => None)
     setOptimistic(_ => None)
     setRevealLimit(_ => 0)
@@ -511,6 +529,11 @@ let make = (~storyIdFromUrl: option<string>) => {
         title="Watch the simulation"
         subTitle="Rev Rec handles a failed invoice on its own. Pause at any step."
       />
+    | (false, false) if showForm && !signupDone =>
+      <PageUtils.PageHeading
+        title="Sign up as the customer"
+        subTitle="Sign up for ChotuAI, see next month's renewal fail, then watch Rev Rec recover it."
+      />
     | (false, false) =>
       <PageUtils.PageHeading
         title="Invoice story"
@@ -534,9 +557,26 @@ let make = (~storyIdFromUrl: option<string>) => {
             {"Starting the story…"->React.string}
           </p>
         </div>
+      } else if showForm && !signupDone {
+        <SimulatorSignup
+          onDone={(result: SimulatorSignup.result) => {
+            setSignup(_ => Some(result))
+            setForm(prev => {
+              ...prev,
+              amount: result.amount->SimulatorSignup.major,
+              currency: result.currency,
+              card: result.last4,
+              customer: "new",
+              processor: "stripe",
+            })
+            setSignupDone(_ => true)
+          }}
+          onSkip={() => setSignupDone(_ => true)}
+        />
       } else if showForm {
         // Until the handover the form is the page, across the full content width
         <BillingSystemForm
+          renewal=?signup
           options
           form
           setForm

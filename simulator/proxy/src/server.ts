@@ -45,6 +45,8 @@ import {
   HttpError,
   listStories,
   lastCustomerStory,
+  signup,
+  withSignup,
   SETTINGS_OFF,
   ownerOf,
   paidInApp,
@@ -321,10 +323,33 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (method === "GET" && p === "/sim/blocked")
     return send(res, 200, { blocked: recentBlocked() });
 
+  // ChotuAI signup: the customer's first month (or a $0 card check), before a story. Real test
+  // charges, so limited like story starts.
+  if (method === "POST" && p === "/sim/signup") {
+    const { ip, owner } = visitor(req);
+    const keys = [`signup:${owner}`, `signup:ip:${ip}`] as const;
+    for (const [key, limit] of [
+      [keys[0], config.startsPerHour],
+      [keys[1], config.startsPerIpHour],
+    ] as const) {
+      const gate = allowStart(key, limit);
+      if (!gate.ok) {
+        res.setHeader("Retry-After", String(gate.retryAfterSec));
+        throw new HttpError(
+          429,
+          `limit is ${limit} signups per hour; try again in ${gate.retryAfterSec} s`,
+        );
+      }
+    }
+    noteStart(...keys);
+    return send(res, 200, await signup(owner, await readJson(req)));
+  }
+
   if (method === "POST" && p === "/sim/story/start") {
     // Bad input is refused before the rate limit, so it does not use up a start.
-    const opts = parseStart(await readJson(req));
     const { ip, owner } = visitor(req);
+    // A ChotuAI signup gives the story its customer, card and amount
+    const opts = withSignup(parseStart(await readJson(req)), owner);
     // A Stripe story makes the returning customer when this browser has none (story.ts
     // makeReturningHistory); another processor still needs an earlier story.
     if (opts.customer === "same" && opts.processor && !lastCustomerStory(owner))

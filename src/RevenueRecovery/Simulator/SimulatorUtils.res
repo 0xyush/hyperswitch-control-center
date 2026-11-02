@@ -752,7 +752,8 @@ let savedProcessor = () =>
   }
 
 // POST /sim/story/start body: the preset fills defaults on the proxy, explicit fields win
-let startBody = (form: billingForm) => {
+// signup: a ChotuAI signup (SimulatorSignup): the story's customer, card and amount
+let startBody = (~signup=?, form: billingForm) => {
   // Stripe is the proxy's default; another (enabled) processor is sent by its connector name
   let otherProcessor = form.processor != "stripe" && form.processor->processorEnabled
   [
@@ -771,6 +772,7 @@ let startBody = (form: billingForm) => {
     // Every story starts smart: every processor and preset takes it (A, 28 Oct)
     Some(("mode", "smart"->JSON.Encode.string)),
     otherProcessor ? Some(("processor", form.processor->JSON.Encode.string)) : None,
+    signup->Option.map(id => ("signup", id->JSON.Encode.string)),
   ]
   ->Array.filterMap(field => field)
   ->getJsonFromArrayOfJson
