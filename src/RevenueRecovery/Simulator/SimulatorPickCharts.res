@@ -154,6 +154,7 @@ let options = (~categories, ~tickPositions, ~points, ~average, ~yMax) =>
     },
     "plotOptions": {
       "column": {
+        "animation": false,
         "borderWidth": 0,
         "borderRadius": 2,
         "pointPadding": 0.1,

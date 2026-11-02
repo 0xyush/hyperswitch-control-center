@@ -363,7 +363,6 @@ module DayLine = {
       ->Int.toFloat
     let dayOf = at =>
       failedAt->Option.map(t0 => Math.max(0.0, (at->Date.fromString->Date.getTime -. t0) /. dayMs))
-    let left = day => `${(Math.min(day, grace) /. grace *. 100.0)->Float.toString}%`
     let charged =
       retries->Array.filterMap(retry =>
         retry.charge->Option.flatMap(row =>
@@ -380,84 +379,94 @@ module DayLine = {
       nextDay
       ->Option.orElse(charged->Array.at(-1)->Option.map(((_, day, _)) => day))
       ->Option.getOr(0.0)
-    let marker = (~key, ~day, ~className, ~title) =>
-      <span
-        key
-        title
-        className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${className}`}
-        style={ReactDOM.Style.make(~left=left(day), ())}
-      />
+    let whole = day => Math.floor(day)->Float.toInt
+    let days = grace->Float.toInt
+    let todayI = today->whole
+    let nextI = nextDay->Option.map(whole)
+    let moneyI = moneyBack->Option.map(whole)
+    let dot = (~key, ~className) =>
+      <span key className={`h-[6px] w-[6px] shrink-0 rounded-full ${className}`} />
+    let legend = (~mark, ~text) =>
+      <span className="flex items-center gap-1.5">
+        mark
+        {text->React.string}
+      </span>
     <AddDataAttributes attributes=[("data-sim", "day-line")]>
       <div
-        className="col-span-2 lg:col-span-3 xl:col-span-1 min-w-0 rounded-xl border border-nd_gray-200 bg-white px-4 py-3.5 flex flex-col gap-2">
+        className="col-span-2 lg:col-span-3 xl:col-span-1 min-w-0 rounded-xl border border-nd_gray-200 bg-white px-4 py-3.5 flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-3">
           <span className={`${body.sm.semibold} text-nd_gray-500`}>
             {"Days since the charge failed"->React.string}
           </span>
           <span className={`${body.sm.semibold} text-nd_gray-700 tabular-nums`}>
-            {`Day ${Math.floor(today)->Float.toInt->Int.toString} of ${grace
-              ->Float.toInt
-              ->Int.toString}`->React.string}
+            {`Day ${todayI->Int.toString} of ${days->Int.toString}`->React.string}
           </span>
         </div>
-        <div className="relative h-7">
-          <div
-            className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nd_gray-100"
-          />
-          <div
-            className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nd_primary_blue-200 transition-all duration-700"
-            style={ReactDOM.Style.make(~width=left(today), ())}
-          />
-          {marker(
-            ~key="failed",
-            ~day=0.0,
-            ~className="h-3.5 w-3.5 bg-nd_red-500 ring-2 ring-white",
-            ~title="The charge failed",
-          )}
-          {switch moneyBack {
-          | Some(day) =>
+        // One box per day of the grace period
+        <div className="flex gap-[3px]">
+          {Array.fromInitializer(~length=days, d => d)
+          ->Array.map(d => {
+            let onDay = charged->Array.filter(((_, day, _)) => day->whole == d)
+            let isNext = nextI == Some(d)
+            let isToday = d == todayI
+            let title =
+              [
+                d == 0 ? Some("The charge failed") : None,
+                ...onDay->Array.map(((number, _, ok)) => Some(
+                  `Retry ${number->Int.toString} ${ok ? "approved" : "declined"}`,
+                )),
+                isNext ? Some("Next retry") : None,
+                moneyI == Some(d) ? Some("The money is there again") : None,
+              ]
+              ->Array.filterMap(x => x)
+              ->Array.joinWith(" · ")
             <span
-              key="money"
-              title="The money is there again"
-              className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-nd_green-400"
-              style={ReactDOM.Style.make(~left=left(day), ())}
-            />
-          | None => React.null
-          }}
-          {charged
-          ->Array.map(((number, day, ok)) =>
-            marker(
-              ~key=`r${number->Int.toString}`,
-              ~day,
-              ~className=`h-3 w-3 ring-2 ring-white ${ok ? "bg-nd_green-500" : "bg-nd_gray-400"}`,
-              ~title=`Retry ${number->Int.toString}${ok ? ": approved" : ": declined"}`,
-            )
-          )
+              key={d->Int.toString}
+              title={`Day ${d->Int.toString}${title == "" ? "" : `: ${title}`}`}
+              className={`relative flex h-7 min-w-0 flex-1 items-center justify-center gap-[2px] overflow-hidden rounded-[4px] ${d <=
+                todayI
+                  ? "bg-nd_primary_blue-50"
+                  : "bg-nd_gray-50"} ${isToday
+                  ? "ring-2 ring-inset ring-nd_primary_blue-450"
+                  : ""}`}>
+              <RenderIf condition={moneyI == Some(d)}>
+                <span className="absolute inset-x-0 top-0 h-1 bg-nd_green-500" />
+              </RenderIf>
+              <RenderIf condition={d == 0}> {dot(~key="f", ~className="bg-nd_red-500")} </RenderIf>
+              {onDay
+              ->Array.slice(~start=0, ~end=3)
+              ->Array.map(((number, _, ok)) =>
+                dot(~key=number->Int.toString, ~className=ok ? "bg-nd_green-500" : "bg-nd_gray-400")
+              )
+              ->React.array}
+              <RenderIf condition=isNext>
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full border-2 border-nd_primary_blue-450 bg-white animate-pulse"
+                />
+              </RenderIf>
+            </span>
+          })
           ->React.array}
-          {switch nextDay {
-          | Some(day) =>
-            marker(
-              ~key="next",
-              ~day,
-              ~className="h-4 w-4 border-2 border-nd_primary_blue-450 bg-white animate-pulse",
-              ~title="Next retry",
-            )
-          | None => React.null
-          }}
         </div>
         <div
-          className={`relative flex justify-between ${body.xs.medium} text-nd_gray-400 tabular-nums`}>
-          <span> {"Failed"->React.string} </span>
-          {switch moneyBack {
-          | Some(day) =>
-            <span
-              className="absolute -translate-x-1/2 whitespace-nowrap text-nd_green-600"
-              style={ReactDOM.Style.make(~left=left(day), ())}>
-              {"Money there again"->React.string}
-            </span>
-          | None => React.null
-          }}
-          <span> {`Day ${grace->Float.toInt->Int.toString}: grace ends`->React.string} </span>
+          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 ${body.xs.medium} text-nd_gray-500`}>
+          <span> {"Day 0: failed"->React.string} </span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {legend(~mark=dot(~key="r", ~className="bg-nd_gray-400"), ~text="Retry")}
+            {legend(
+              ~mark=<span
+                className="h-2 w-2 rounded-full border-2 border-nd_primary_blue-450 bg-white"
+              />,
+              ~text="Next retry",
+            )}
+            <RenderIf condition={moneyBack->Option.isSome}>
+              {legend(
+                ~mark=<span className="h-1 w-3 rounded bg-nd_green-500" />,
+                ~text="Money there again",
+              )}
+            </RenderIf>
+          </span>
+          <span> {`Day ${days->Int.toString}: grace ends`->React.string} </span>
         </div>
       </div>
     </AddDataAttributes>

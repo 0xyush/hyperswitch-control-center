@@ -500,8 +500,12 @@ module StepLabel = {
 // Before the first charge the form is the page, step by step: 1 pick a story on the left (the
 // billing system), 2 enter the card in the customer's checkout on the right (as the control
 // center's Setup Checkout: locked and blurred until a story is picked), the chain under both
-// After a FinnstaAI signup: one wide step to pick why the renewal failed (big story cards), then
-// step 2 hands the failed renewal to Rev Rec. The decline is not shown again: the signup showed it.
+// After a FinnstaAI signup: pick why the renewal failed, on big story cards (3 x 3). The picked
+// card holds the next step, Hand it to Rev Rec. The decline is not shown again: the signup showed
+// it. The first time, a customer pops up over the blurred cards and says what happened.
+// The stories after the five main ones, before More stories: they run on the scripted bank too
+let renewalExtraStories = [11, 13, 16]
+
 module RenewalPicker = {
   @react.component
   let make = (
@@ -512,14 +516,17 @@ module RenewalPicker = {
     // From Hand it to Rev Rec until the running view opens
     ~isBusy,
     ~onRun,
+    // The customer's intro, once per visit
+    ~showIntro=true,
+    ~onIntroDone=() => (),
   ) => {
     let (picked, setPicked) = React.useState(_ => false)
     let (showMore, setShowMore) = React.useState(_ => false)
     let presetById = id => options.presets->Array.find(preset => preset.id == id)
-    let moreStories = options.presets->Array.filter(preset => !(preset.id->isMainStory))
-    // First the customer says what happened, typed out over the blurred stories; Continue clears it
-    let message = `Hi! Become the customer for a minute. You signed up for ${SimulatorSignup.brandName} ${renewal.plan}, and this month's ${renewal.amount->SimulatorSignup.dollars} renewal on your ${renewal.last4->SimulatorSignup.brandLine} was declined. Pick what's going on with you, then watch Rev Rec get the payment back.`
-    let (intro, setIntro) = React.useState(_ => true)
+    let onCards = id => id->isMainStory || renewalExtraStories->Array.includes(id)
+    let moreStories = options.presets->Array.filter(preset => !(preset.id->onCards))
+    let message = `Hi! You're the customer now. Last month you signed up for ${SimulatorSignup.brandName} ${renewal.plan}. Today, your ${renewal.amount->SimulatorSignup.dollars} renewal on ${renewal.last4->SimulatorSignup.brandLine} was declined. Pick what's going on in your life, and watch Rev Rec get the payment back.`
+    let (intro, setIntro) = React.useState(_ => showIntro)
     let (typed, setTyped) = React.useState(_ => 0)
     let isTyped = typed >= message->String.length
     React.useEffect(() => {
@@ -543,17 +550,21 @@ module RenewalPicker = {
       })
       setPicked(_ => true)
     }
-    let tile = (~key, ~title, ~icon, ~line, ~isOn, ~onClick) =>
-      <button
+    // A story card; the picked one holds Hand it to Rev Rec
+    let card = (~key, ~title, ~icon, ~line, ~isOn, ~onPick) =>
+      <div
         key
-        type_="button"
-        disabled=isBusy
-        onClick={_ => onClick()}
-        className={`flex min-h-[148px] flex-col gap-3 rounded-2xl border-2 p-5 text-left transition-colors ${isOn
-            ? "border-nd_primary_blue-450 bg-nd_primary_blue-50"
-            : "border-nd_gray-200 bg-white hover:border-nd_gray-400"} ${isBusy
-            ? "cursor-not-allowed opacity-70"
-            : ""}`}>
+        role="button"
+        tabIndex=0
+        onClick={_ =>
+          if !isBusy {
+            onPick()
+          }}
+        className={`flex flex-col gap-3 rounded-2xl border-2 p-5 text-left transition-all ${isOn
+            ? "border-nd_primary_blue-450 bg-nd_primary_blue-50 shadow-sm"
+            : "border-nd_gray-200 bg-white hover:border-nd_gray-400"} ${isBusy && !isOn
+            ? "cursor-not-allowed opacity-50"
+            : "cursor-pointer"}`}>
         <span className="flex items-center justify-between">
           <span
             className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOn
@@ -568,36 +579,86 @@ module RenewalPicker = {
             </span>
           </RenderIf>
         </span>
-        <span className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </span>
-        <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
-      </button>
+        <span className="flex flex-col gap-1">
+          <span className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </span>
+          <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
+        </span>
+        <RenderIf condition=isOn>
+          <AddDataAttributes attributes=[("data-sim", "renewal-handover")]>
+            <div className="mt-auto flex flex-col gap-2 border-t border-nd_primary_blue-100 pt-3">
+              {isBusy
+                ? <>
+                    <span className={`${body.sm.semibold} text-nd_gray-700`}>
+                      {"Handing the failed renewal to Rev Rec…"->React.string}
+                    </span>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="sim-handover-bar h-full w-1/3 rounded-full bg-nd_primary_blue-450"
+                      />
+                    </div>
+                  </>
+                : <button
+                    type_="button"
+                    onClick={e => {
+                      ReactEvent.Mouse.stopPropagation(e)
+                      onRun()
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-lg bg-nd_primary_blue-450 px-4 py-2.5 ${body.md.semibold} text-white hover:bg-nd_primary_blue-500`}>
+                    {"Hand it to Rev Rec"->React.string}
+                    <Icon name="nd-arrow-right" size=14 />
+                  </button>}
+              <span className={`${body.xs.medium} text-nd_gray-500`}>
+                {"Rev Rec's smart model then picks when to retry."->React.string}
+              </span>
+            </div>
+          </AddDataAttributes>
+        </RenderIf>
+      </div>
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
+    let cardIds =
+      scenarioTiles
+      ->Array.map(((id, title, icon, line)) => (id, title, icon, line))
+      ->Array.concat(
+        renewalExtraStories->Array.filterMap(id =>
+          presetById(id)->Option.map(preset => (
+            id,
+            preset.title,
+            preset->storyIconOf,
+            preset.summary,
+          ))
+        ),
+      )
     <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <style>
-          {"@keyframes cust-pop { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } } .cust-pop { animation: cust-pop .45s cubic-bezier(.2,.8,.2,1) both; } .cust-pop-2 { animation: cust-pop .45s .2s cubic-bezier(.2,.8,.2,1) both; } @keyframes cust-caret { 50% { opacity: 0; } } .cust-caret { animation: cust-caret 1s step-end infinite; } @media (prefers-reduced-motion: reduce) { .cust-pop, .cust-pop-2, .cust-caret { animation: none; } }"->React.string}
+          {"@keyframes cust-pop { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } } .cust-pop { animation: cust-pop .45s cubic-bezier(.2,.8,.2,1) both; } .cust-pop-2 { animation: cust-pop .45s .2s cubic-bezier(.2,.8,.2,1) both; } @keyframes cust-caret { 50% { opacity: 0; } } .cust-caret { animation: cust-caret 1s step-end infinite; } @keyframes sim-handover { from { transform: translateX(-100%); } to { transform: translateX(300%); } } .sim-handover-bar { animation: sim-handover 1.2s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .cust-pop, .cust-pop-2, .cust-caret, .sim-handover-bar { animation: none; } }"->React.string}
         </style>
+        <RenderIf condition={!intro}>
+          <span className={`${heading.md.semibold} text-nd_gray-800`}>
+            {"What's going on with the customer?"->React.string}
+          </span>
+        </RenderIf>
         <div className="relative">
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 transition-[filter,opacity] duration-500 ${intro
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-fr gap-4 transition-[filter,opacity] duration-500 ${intro
                 ? "blur-[3px] opacity-40 pointer-events-none select-none"
                 : ""}`}
             ariaHidden=intro>
-            {scenarioTiles
+            {cardIds
             ->Array.filterMap(((id, title, icon, line)) =>
               presetById(id)->Option.map(preset =>
-                tile(
+                card(
                   ~key=id->Int.toString,
                   ~title,
                   ~icon,
                   ~line,
                   ~isOn={picked && form.preset == id},
-                  ~onClick=() => pick(preset),
+                  ~onPick=() => pick(preset),
                 )
               )
             )
             ->React.array}
-            {tile(
+            {card(
               ~key="more",
               ~title=pickedMore->Option.mapOr(
                 `More stories (${moreStories->Array.length->Int.toString})`,
@@ -606,7 +667,7 @@ module RenewalPicker = {
               ~icon=pickedMore->Option.mapOr("nd-plus", storyIconOf),
               ~line=pickedMore->Option.mapOr("Every other situation", preset => preset.summary),
               ~isOn=pickedMore->Option.isSome,
-              ~onClick=() => setShowMore(_ => true),
+              ~onPick=() => setShowMore(_ => true),
             )}
           </div>
           // The customer, with what happened in a speech bubble
@@ -620,8 +681,6 @@ module RenewalPicker = {
                     className="cust-pop h-40 w-40 shrink-0 drop-shadow-sm"
                   />
                   <div
-                    role="button"
-                    tabIndex=0
                     onClick={_ => setTyped(_ => message->String.length)}
                     className="cust-pop-2 relative mb-6 flex flex-col gap-4 rounded-2xl border border-nd_gray-200 bg-white px-6 py-5 shadow-lg">
                     <span
@@ -642,7 +701,10 @@ module RenewalPicker = {
                         buttonSize=Medium
                         buttonState={isTyped ? Normal : Disabled}
                         rightIcon={FontAwesome("arrow-right")}
-                        onClick={_ => setIntro(_ => false)}
+                        onClick={_ => {
+                          setIntro(_ => false)
+                          onIntroDone()
+                        }}
                       />
                     </div>
                   </div>
@@ -662,39 +724,6 @@ module RenewalPicker = {
             setShowMore(_ => false)
           }}
         />
-        // Step 2, once a story is picked: Rev Rec takes over the failed renewal
-        <RenderIf condition=picked>
-          <AddDataAttributes attributes=[("data-sim", "renewal-handover")]>
-            <div className="flex flex-col gap-4 rounded-2xl border border-nd_gray-200 bg-white p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <StepLabel number=2 text="Rev Rec takes over" />
-                  <span className={`${body.md.medium} text-nd_gray-600`}>
-                    {"The billing system informs Rev Rec of the failed renewal. Rev Rec's smart model then picks when to retry it."->React.string}
-                  </span>
-                </div>
-                <Button
-                  text={isBusy ? "Handing it to Rev Rec…" : "Hand it to Rev Rec"}
-                  buttonType=Primary
-                  buttonSize=Large
-                  buttonState={isBusy ? Disabled : Normal}
-                  rightIcon=?{isBusy ? None : Some(FontAwesome("arrow-right"))}
-                  onClick={_ => onRun()}
-                />
-              </div>
-              <RenderIf condition=isBusy>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-nd_gray-100">
-                  <div
-                    className="sim-handover-bar h-full w-1/3 rounded-full bg-nd_primary_blue-450"
-                  />
-                </div>
-                <style>
-                  {"@keyframes sim-handover { from { transform: translateX(-100%); } to { transform: translateX(300%); } } .sim-handover-bar { animation: sim-handover 1.2s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .sim-handover-bar { animation: none; } }"->React.string}
-                </style>
-              </RenderIf>
-            </div>
-          </AddDataAttributes>
-        </RenderIf>
       </div>
     </AddDataAttributes>
   }

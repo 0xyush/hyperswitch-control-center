@@ -49,6 +49,8 @@ let make = (~storyIdFromUrl: option<string>) => {
   let (signup, setSignup) = React.useState(_ => None)
   let (signupDone, setSignupDone) = React.useState(_ => skipSignup)
   let (resigning, setResigning) = React.useState(_ => false)
+  // The customer's intro over the story picker shows once per visit
+  let (introSeen, setIntroSeen) = React.useState(_ => false)
   let resignup = async (prev: SimulatorSignup.result) => {
     setResigning(_ => true)
     try {
@@ -112,6 +114,33 @@ let make = (~storyIdFromUrl: option<string>) => {
   let formStoryId = React.useRef("")
   // The story started in this tab: its steps animate from step 1; a reopened story's do not
   let startedHereId = React.useRef("")
+  // Skip signup: a default test customer (Starter, Visa 4242) signs up behind the scenes, so the
+  // visitor still lands on the story picker
+  let quickSignup = async () => {
+    setResigning(_ => true)
+    try {
+      let json = await simFetch(
+        ~path="/sim/signup",
+        ~method_=Post,
+        ~body=SimulatorSignup.signupBody(~planId="starter", ~last4="4242"),
+      )
+      let result = json->SimulatorSignup.resultOf(~plan="Starter", ~amount=2000, ~last4="4242")
+      setSignup(_ => Some(result))
+      setForm(prev => {
+        ...prev,
+        amount: result.amount->SimulatorSignup.major,
+        currency: result.currency,
+        card: result.last4,
+        customer: "new",
+        processor: "stripe",
+      })
+      setSignupDone(_ => true)
+    } catch {
+    // Without a signup, the older form
+    | _ => setSignupDone(_ => true)
+    }
+    setResigning(_ => false)
+  }
 
   // Scenario 3 can stay in Monitoring, so the proxy's done flag is the main end signal
   let isDone = story->Option.mapOr(false, storyHasEnded)
@@ -596,7 +625,7 @@ let make = (~storyIdFromUrl: option<string>) => {
             })
             setSignupDone(_ => true)
           }}
-          onSkip={() => setSignupDone(_ => true)}
+          onSkip={() => quickSignup()->ignore}
         />
       } else if showForm && signup->Option.isSome {
         // After a signup: pick why the renewal failed, then hand it to Rev Rec
@@ -609,6 +638,8 @@ let make = (~storyIdFromUrl: option<string>) => {
             renewal
             isBusy={isBusy || isStarting || isBeforeHandover || resigning}
             onRun={() => onCharge()->ignore}
+            showIntro={!introSeen}
+            onIntroDone={() => setIntroSeen(_ => true)}
           />
         | None => React.null
         }
