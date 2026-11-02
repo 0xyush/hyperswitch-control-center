@@ -482,14 +482,6 @@ module ChargeFlow = {
         <span className={`${body.md.semibold} text-nd_gray-800`}> {title->React.string} </span>
         <span className={`${body.sm.medium} text-nd_gray-500`}> {line->React.string} </span>
       </div>
-    let cardIcon =
-      <svg width="40" height="28" viewBox="0 0 40 28" ariaHidden=true>
-        <rect
-          x="1" y="1" width="38" height="26" rx="4" fill="#EEF2F7" stroke="#98A2B3" strokeWidth="2"
-        />
-        <rect x="1" y="7" width="38" height="5" fill="#98A2B3" />
-        <rect x="6" y="18" width="12" height="3" rx="1.5" fill="#98A2B3" />
-      </svg>
     let bankIcon =
       <svg width="40" height="32" viewBox="0 0 40 32" ariaHidden=true>
         <path d="M20 2 L37 10 L3 10 Z" fill="#98A2B3" />
@@ -521,7 +513,11 @@ module ChargeFlow = {
             ~title=`${brandName} billing`,
             ~line=`Renews ${result.amount->dollars}`,
           )}
-          {node(~icon=cardIcon, ~title="Payment processor", ~line=result.last4->brandLine)}
+          {node(
+            ~icon=<GatewayIcon gateway="STRIPE" className="h-8 w-8 rounded-md" />,
+            ~title="Stripe",
+            ~line=`Processor · ${result.last4->brandLine}`,
+          )}
           <div className="relative">
             {node(
               ~icon=bankIcon,
@@ -538,7 +534,7 @@ module ChargeFlow = {
         <span className={`${body.md.medium} text-nd_gray-600`}>
           {switch stage {
           | 0 => `Charging ${result.last4->brandLine} for ${result.amount->dollars}…`
-          | 1 => "The processor asks the customer's bank…"
+          | 1 => "Stripe asks the customer's bank…"
           | _ => "The bank declined the renewal."
           }->React.string}
         </span>
@@ -582,6 +578,33 @@ module RenewalDeclined = {
     </AddDataAttributes>
   }
 }
+
+// A signup's answer (POST /sim/signup)
+let resultOf = (json, ~plan, ~amount, ~last4) => {
+  open LogicUtils
+  let o = json->getDictFromJsonObject
+  {
+    signupId: o->getString("signupId", ""),
+    plan: o->getString("plan", plan),
+    amount: o->getInt("amount", amount),
+    currency: o->getString("currency", "USD"),
+    mode: o->getString("mode", "charge"),
+    last4: o->getString("last4", last4),
+  }
+}
+let signupBody = (~planId, ~last4) =>
+  [
+    ("plan", planId->JSON.Encode.string),
+    ("card", last4->JSON.Encode.string),
+    ("mode", "charge"->JSON.Encode.string),
+  ]
+  ->Dict.fromArray
+  ->JSON.Encode.object
+// The plan's id from its name ("Growth" -> "growth")
+let planIdOf = name =>
+  plans
+  ->Array.find(((_, n, _, _, _)) => n == name)
+  ->Option.mapOr("starter", ((id, _, _, _, _)) => id)
 
 @react.component
 let make = (~onDone: result => unit, ~onSkip) => {
@@ -662,25 +685,13 @@ let make = (~onDone: result => unit, ~onSkip) => {
     setIsBusy(_ => true)
     setError(_ => "")
     try {
-      let body =
-        [
-          ("plan", planId->JSON.Encode.string),
-          ("card", d->String.sliceToEnd(~start=-4)->JSON.Encode.string),
-          ("mode", "charge"->JSON.Encode.string),
-        ]
-        ->Dict.fromArray
-        ->JSON.Encode.object
-      let json = await simFetch(~path="/sim/signup", ~method_=Post, ~body)
-      open LogicUtils
-      let o = json->getDictFromJsonObject
-      let result = {
-        signupId: o->getString("signupId", ""),
-        plan: o->getString("plan", planName),
-        amount: o->getInt("amount", amount),
-        currency: o->getString("currency", "USD"),
-        mode: o->getString("mode", "charge"),
-        last4: o->getString("last4", d->String.sliceToEnd(~start=-4)),
-      }
+      let last4 = d->String.sliceToEnd(~start=-4)
+      let json = await simFetch(
+        ~path="/sim/signup",
+        ~method_=Post,
+        ~body=signupBody(~planId, ~last4),
+      )
+      let result = json->resultOf(~plan=planName, ~amount, ~last4)
       setPhase(_ => Paid(result))
     } catch {
     | _ => setError(_ => "The payment did not go through. Try again in a moment.")
@@ -740,7 +751,7 @@ let make = (~onDone: result => unit, ~onSkip) => {
             </button>
           </div>
           <div
-            className="w-full grid grid-cols-1 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-8 items-start">
+            className="w-full grid grid-cols-1 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-8 items-stretch">
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-2.5">
                 {stepLabel(
@@ -812,7 +823,7 @@ let make = (~onDone: result => unit, ~onSkip) => {
               </div>
               // Your bill
               <div
-                className="rounded-2xl border border-nd_gray-200 bg-nd_gray-25 px-6 py-5 flex flex-col gap-2.5">
+                className="flex-1 rounded-2xl border border-nd_gray-200 bg-nd_gray-25 px-6 py-5 flex flex-col gap-2.5">
                 <span className={`${heading.sm.semibold} text-nd_gray-800`}>
                   {"Your Bill"->React.string}
                 </span>
@@ -847,9 +858,9 @@ let make = (~onDone: result => unit, ~onSkip) => {
             <div className="flex flex-col gap-3">
               {stepLabel(~number="2", ~text="Payment details", ~isDone=false, ~isActive=planPicked)}
               // Locked and blurred until Continue
-              <div ref={ReactDOM.Ref.domRef(paymentRef)} className="relative">
+              <div ref={ReactDOM.Ref.domRef(paymentRef)} className="relative flex-1 flex flex-col">
                 <div
-                  className={`flex flex-col gap-3 transition-[filter,opacity] duration-300 ${planPicked
+                  className={`flex-1 flex flex-col gap-3 transition-[filter,opacity] duration-300 ${planPicked
                       ? ""
                       : "blur-[2px] opacity-50 pointer-events-none select-none"}`}>
                   // Cards only
@@ -942,7 +953,7 @@ let make = (~onDone: result => unit, ~onSkip) => {
                   </RenderIf>
                   // The agreement
                   <div
-                    className="mt-1 rounded-2xl border border-nd_gray-200 bg-nd_gray-25 px-5 py-4 flex flex-col gap-3">
+                    className="mt-1 flex-1 rounded-2xl border border-nd_gray-200 bg-nd_gray-25 px-5 py-4 flex flex-col justify-between gap-3">
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input
                         type_="checkbox"

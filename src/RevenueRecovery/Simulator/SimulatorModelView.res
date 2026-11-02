@@ -245,6 +245,8 @@ make = (
   ~storyId,
   ~isLive,
   ~pause: option<(bool, bool => unit)>=?,
+  // The queue and second-card stories run on a stand-in decider, not Rev Rec's model
+  ~isDecider=false,
   ~footerRight: React.element=React.null,
 ) => {
   let simFetch = SimulatorApi.useSimFetch()
@@ -310,7 +312,23 @@ make = (
   let footer = <div className="ml-auto flex items-center gap-3"> footerRight </div>
 
   switch state {
-  | None => footerRight === React.null ? React.null : <div className="flex"> footer </div>
+  // No pick from the model (yet): the card still shows, and says why
+  | None =>
+    <AddDataAttributes attributes=[("data-sim", "model-view")]>
+      <div className="flex flex-col gap-4 rounded-xl border border-nd_gray-150 bg-white p-4">
+        <span className={`${body.lg.semibold} text-nd_gray-800`}>
+          {"Why the smart model picked this time"->React.string}
+        </span>
+        <span className={`${body.md.medium} text-nd_gray-600`}>
+          {(
+            isDecider
+              ? "This story runs on a stand-in decider: each retry is booked 5 seconds after the last. Rev Rec's own model does not pick here, so there are no charts."
+              : "The charts, the math and Step through it show once Rev Rec's model picks the first retry."
+          )->React.string}
+        </span>
+        <div className="flex"> footer </div>
+      </div>
+    </AddDataAttributes>
   | Some((decision, counts)) =>
     let chosenDay = decision.days->Array.find(d => d.chosen)
     let chosenHour = decision.hours->Array.find(h => h.chosen)

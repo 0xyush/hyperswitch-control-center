@@ -517,6 +517,19 @@ module RenewalPicker = {
     let (showMore, setShowMore) = React.useState(_ => false)
     let presetById = id => options.presets->Array.find(preset => preset.id == id)
     let moreStories = options.presets->Array.filter(preset => !(preset.id->isMainStory))
+    // First the customer says what happened, typed out over the blurred stories; Continue clears it
+    let message = `Hi! Become the customer for a minute. You signed up for ${SimulatorSignup.brandName} ${renewal.plan}, and this month's ${renewal.amount->SimulatorSignup.dollars} renewal on your ${renewal.last4->SimulatorSignup.brandLine} was declined. Pick what's going on with you, then watch Rev Rec get the payment back.`
+    let (intro, setIntro) = React.useState(_ => true)
+    let (typed, setTyped) = React.useState(_ => 0)
+    let isTyped = typed >= message->String.length
+    React.useEffect(() => {
+      if intro && !isTyped {
+        let id = setTimeout(() => setTyped(n => n + 2), 18)
+        Some(() => clearTimeout(id))
+      } else {
+        None
+      }
+    }, (intro, typed))
     let pick = (preset: preset) => {
       setForm((prev: billingForm) => {
         ...preset.fields,
@@ -561,41 +574,82 @@ module RenewalPicker = {
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
     <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <StepLabel number=1 text="Pick the customer's story" isDone=picked />
-          <h2 className={`${heading.lg.semibold} text-nd_gray-800`}>
-            {"Why was the card declined?"->React.string}
-          </h2>
-          <p className={`${body.lg.medium} text-nd_gray-600`}>
-            {`${SimulatorSignup.brandName}'s ${renewal.amount->SimulatorSignup.dollars} renewal on ${renewal.last4->SimulatorSignup.brandLine} did not go through. Pick what is going on with the customer: it decides what the bank says on each retry, and when the money is there again.`->React.string}
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {scenarioTiles
-          ->Array.filterMap(((id, title, icon, line)) =>
-            presetById(id)->Option.map(preset =>
-              tile(
-                ~key=id->Int.toString,
-                ~title,
-                ~icon,
-                ~line,
-                ~isOn={picked && form.preset == id},
-                ~onClick=() => pick(preset),
+        <style>
+          {"@keyframes cust-pop { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } } .cust-pop { animation: cust-pop .45s cubic-bezier(.2,.8,.2,1) both; } .cust-pop-2 { animation: cust-pop .45s .2s cubic-bezier(.2,.8,.2,1) both; } @keyframes cust-caret { 50% { opacity: 0; } } .cust-caret { animation: cust-caret 1s step-end infinite; } @media (prefers-reduced-motion: reduce) { .cust-pop, .cust-pop-2, .cust-caret { animation: none; } }"->React.string}
+        </style>
+        <div className="relative">
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 transition-[filter,opacity] duration-500 ${intro
+                ? "blur-[3px] opacity-40 pointer-events-none select-none"
+                : ""}`}
+            ariaHidden=intro>
+            {scenarioTiles
+            ->Array.filterMap(((id, title, icon, line)) =>
+              presetById(id)->Option.map(preset =>
+                tile(
+                  ~key=id->Int.toString,
+                  ~title,
+                  ~icon,
+                  ~line,
+                  ~isOn={picked && form.preset == id},
+                  ~onClick=() => pick(preset),
+                )
               )
             )
-          )
-          ->React.array}
-          {tile(
-            ~key="more",
-            ~title=pickedMore->Option.mapOr(
-              `More stories (${moreStories->Array.length->Int.toString})`,
-              preset => preset.title,
-            ),
-            ~icon=pickedMore->Option.mapOr("nd-plus", storyIconOf),
-            ~line=pickedMore->Option.mapOr("Every other situation", preset => preset.summary),
-            ~isOn=pickedMore->Option.isSome,
-            ~onClick=() => setShowMore(_ => true),
-          )}
+            ->React.array}
+            {tile(
+              ~key="more",
+              ~title=pickedMore->Option.mapOr(
+                `More stories (${moreStories->Array.length->Int.toString})`,
+                preset => preset.title,
+              ),
+              ~icon=pickedMore->Option.mapOr("nd-plus", storyIconOf),
+              ~line=pickedMore->Option.mapOr("Every other situation", preset => preset.summary),
+              ~isOn=pickedMore->Option.isSome,
+              ~onClick=() => setShowMore(_ => true),
+            )}
+          </div>
+          // The customer, with what happened in a speech bubble
+          <RenderIf condition=intro>
+            <AddDataAttributes attributes=[("data-sim", "customer-intro")]>
+              <div className="absolute inset-0 z-20 flex items-center justify-center px-4">
+                <div className="flex max-w-[760px] items-end gap-5">
+                  <img
+                    src="/assets/simulator/customer.svg"
+                    alt="The customer"
+                    className="cust-pop h-40 w-40 shrink-0 drop-shadow-sm"
+                  />
+                  <div
+                    role="button"
+                    tabIndex=0
+                    onClick={_ => setTyped(_ => message->String.length)}
+                    className="cust-pop-2 relative mb-6 flex flex-col gap-4 rounded-2xl border border-nd_gray-200 bg-white px-6 py-5 shadow-lg">
+                    <span
+                      className="absolute -left-2 bottom-8 h-4 w-4 rotate-45 border-b border-l border-nd_gray-200 bg-white"
+                    />
+                    <p className={`${body.lg.medium} text-nd_gray-800 min-h-[84px]`}>
+                      {message->String.slice(~start=0, ~end=typed)->React.string}
+                      <RenderIf condition={!isTyped}>
+                        <span className="cust-caret ml-0.5 text-nd_gray-500">
+                          {"|"->React.string}
+                        </span>
+                      </RenderIf>
+                    </p>
+                    <div className="flex justify-end">
+                      <Button
+                        text="Continue"
+                        buttonType=Primary
+                        buttonSize=Medium
+                        buttonState={isTyped ? Normal : Disabled}
+                        rightIcon={FontAwesome("arrow-right")}
+                        onClick={_ => setIntro(_ => false)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AddDataAttributes>
+          </RenderIf>
         </div>
         <MoreStoriesModal
           isOpen=showMore

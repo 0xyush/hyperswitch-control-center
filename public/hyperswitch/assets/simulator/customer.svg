@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="The customer">
+  <title>The customer</title>
+  <!-- A customer looking at a declined payment on their phone -->
+  <circle cx="80" cy="80" r="78" fill="#EAF1FF"/>
+  <clipPath id="c"><circle cx="80" cy="80" r="78"/></clipPath>
+  <g clip-path="url(#c)">
+    <path d="M24 164 C24 120 50 104 80 104 C110 104 136 120 136 164 Z" fill="#2F6FEB"/>
+    <path d="M66 104 L80 120 L94 104 Z" fill="#FFFFFF" opacity="0.9"/>
+    <rect x="70" y="86" width="20" height="22" rx="8" fill="#E9B48F"/>
+    <circle cx="52" cy="70" r="6" fill="#E9B48F"/>
+    <circle cx="108" cy="70" r="6" fill="#E9B48F"/>
+    <circle cx="80" cy="66" r="28" fill="#F5C9A4"/>
+    <path d="M51 64 C49 42 64 32 81 32 C99 32 113 43 110 64 C106 54 98 47 86 47 C74 47 60 52 51 64 Z" fill="#3B2A22"/>
+    <path d="M63 62 Q68 59 73 61" stroke="#3B2A22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <path d="M87 61 Q92 59 97 62" stroke="#3B2A22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <circle cx="69" cy="68" r="2.8" fill="#1F2430"/>
+    <circle cx="91" cy="68" r="2.8" fill="#1F2430"/>
+    <circle cx="63" cy="77" r="4.5" fill="#F29C8A" opacity="0.35"/>
+    <circle cx="97" cy="77" r="4.5" fill="#F29C8A" opacity="0.35"/>
+    <path d="M73 82 Q80 78 87 82" stroke="#8A4B3E" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <!-- The phone, with the declined payment -->
+    <g transform="rotate(-10 116 122)">
+      <rect x="102" y="96" width="30" height="50" rx="6" fill="#1F2430"/>
+      <rect x="105" y="101" width="24" height="38" rx="3" fill="#FFFFFF"/>
+      <circle cx="117" cy="114" r="7" fill="#F04438"/>
+      <path d="M114 111 L120 117 M120 111 L114 117" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+      <rect x="109" y="126" width="16" height="3" rx="1.5" fill="#D0D5DD"/>
+      <rect x="111" y="132" width="12" height="3" rx="1.5" fill="#E4E7EC"/>
+    </g>
+    <circle cx="104" cy="140" r="8" fill="#F5C9A4"/>
+  </g>
+</svg>

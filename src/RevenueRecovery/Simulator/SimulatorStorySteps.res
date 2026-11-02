@@ -3268,7 +3268,7 @@ module InvoiceHeaderBar = {
         {switch onNewStory {
         | Some(onNewStory) =>
           actionButton(
-            ~text="New story",
+            ~text="Try another story",
             ~icon=SimulatorStoryHelper.refreshIcon,
             ~isOn={!isBusy},
             ~onClick=onNewStory,
@@ -3604,6 +3604,7 @@ module StoryView = {
               <SimulatorModelView
                 storyId=s.storyId
                 isLive={!(s->storyHasEnded)}
+                isDecider
                 pause=?pauseControl
                 footerRight={<>
                   <RenderIf condition={s.realLife->Option.isSome}>

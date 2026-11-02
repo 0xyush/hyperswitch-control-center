@@ -343,6 +343,127 @@ let useLiveCounts = (~storyId, ~isLive) => {
   json
 }
 
+// The story's days as one line: the failure on day 0, each Rev Rec retry where it ran (green when
+// it worked), the next retry, and the day the money is there again, up to the grace period's end
+module DayLine = {
+  let dayMs = 86_400_000.0
+  @react.component
+  let make = (~story: option<story>, ~retries: array<SimulatorStorySteps.retry>) => {
+    let failedAt =
+      story
+      ->Option.flatMap(s =>
+        s.timeline->Array.find(row => row.phase == 1 && row.status == StepDeclined)
+      )
+      ->Option.map(row => row.at->Date.fromString->Date.getTime)
+    let grace =
+      story
+      ->Option.flatMap(s => s.settings)
+      ->Option.flatMap(settings => settings.currentGraceDays)
+      ->Option.getOr(30)
+      ->Int.toFloat
+    let dayOf = at =>
+      failedAt->Option.map(t0 => Math.max(0.0, (at->Date.fromString->Date.getTime -. t0) /. dayMs))
+    let left = day => `${(Math.min(day, grace) /. grace *. 100.0)->Float.toString}%`
+    let charged =
+      retries->Array.filterMap(retry =>
+        retry.charge->Option.flatMap(row =>
+          row.realLife->Option.flatMap(
+            slot => slot.at->dayOf->Option.map(day => (retry.number, day, row.status == StepOk)),
+          )
+        )
+      )
+    let next = story->Option.flatMap(s => s.nextRetry)->Option.filter(next => !next.pending)
+    let nextDay = next->Option.flatMap(next => next.realLife->dayOf)
+    let moneyBack =
+      story->Option.flatMap(s => s.bank)->Option.flatMap(bank => bank.worksFromAt->dayOf)
+    let today =
+      nextDay
+      ->Option.orElse(charged->Array.at(-1)->Option.map(((_, day, _)) => day))
+      ->Option.getOr(0.0)
+    let marker = (~key, ~day, ~className, ~title) =>
+      <span
+        key
+        title
+        className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${className}`}
+        style={ReactDOM.Style.make(~left=left(day), ())}
+      />
+    <AddDataAttributes attributes=[("data-sim", "day-line")]>
+      <div
+        className="col-span-2 lg:col-span-3 xl:col-span-1 min-w-0 rounded-xl border border-nd_gray-200 bg-white px-4 py-3.5 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className={`${body.sm.semibold} text-nd_gray-500`}>
+            {"Days since the charge failed"->React.string}
+          </span>
+          <span className={`${body.sm.semibold} text-nd_gray-700 tabular-nums`}>
+            {`Day ${Math.floor(today)->Float.toInt->Int.toString} of ${grace
+              ->Float.toInt
+              ->Int.toString}`->React.string}
+          </span>
+        </div>
+        <div className="relative h-7">
+          <div
+            className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nd_gray-100"
+          />
+          <div
+            className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nd_primary_blue-200 transition-all duration-700"
+            style={ReactDOM.Style.make(~width=left(today), ())}
+          />
+          {marker(
+            ~key="failed",
+            ~day=0.0,
+            ~className="h-3.5 w-3.5 bg-nd_red-500 ring-2 ring-white",
+            ~title="The charge failed",
+          )}
+          {switch moneyBack {
+          | Some(day) =>
+            <span
+              key="money"
+              title="The money is there again"
+              className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-nd_green-400"
+              style={ReactDOM.Style.make(~left=left(day), ())}
+            />
+          | None => React.null
+          }}
+          {charged
+          ->Array.map(((number, day, ok)) =>
+            marker(
+              ~key=`r${number->Int.toString}`,
+              ~day,
+              ~className=`h-3 w-3 ring-2 ring-white ${ok ? "bg-nd_green-500" : "bg-nd_gray-400"}`,
+              ~title=`Retry ${number->Int.toString}${ok ? ": approved" : ": declined"}`,
+            )
+          )
+          ->React.array}
+          {switch nextDay {
+          | Some(day) =>
+            marker(
+              ~key="next",
+              ~day,
+              ~className="h-4 w-4 border-2 border-nd_primary_blue-450 bg-white animate-pulse",
+              ~title="Next retry",
+            )
+          | None => React.null
+          }}
+        </div>
+        <div
+          className={`relative flex justify-between ${body.xs.medium} text-nd_gray-400 tabular-nums`}>
+          <span> {"Failed"->React.string} </span>
+          {switch moneyBack {
+          | Some(day) =>
+            <span
+              className="absolute -translate-x-1/2 whitespace-nowrap text-nd_green-600"
+              style={ReactDOM.Style.make(~left=left(day), ())}>
+              {"Money there again"->React.string}
+            </span>
+          | None => React.null
+          }}
+          <span> {`Day ${grace->Float.toInt->Int.toString}: grace ends`->React.string} </span>
+        </div>
+      </div>
+    </AddDataAttributes>
+  }
+}
+
 @react.component
 let make = (
   // The billing system's first charge (form.firstCharge): its decline sets the group
@@ -598,9 +719,15 @@ let make = (
           </div>
         </RenderIf>
       </div>
+      // The reason, the story's days as a line, and the next retry. The counts behind the pick are
+      // in the charts and the steps.
       <div
-        className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.7fr)] gap-3 items-stretch">
-        {stats->Array.map(stat => <StatBox key=stat.label stat />)->React.array}
+        className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)_minmax(0,1.7fr)] gap-3 items-stretch">
+        {stats
+        ->Array.slice(~start=0, ~end=1)
+        ->Array.map(stat => <StatBox key=stat.label stat />)
+        ->React.array}
+        <DayLine story retries />
         // Its own key per face, so a result flips in and the next pick flips back
         <AddDataAttributes attributes=[("data-sim", "next-retry"), ("data-state", viewKey)]>
           <div

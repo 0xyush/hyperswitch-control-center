@@ -48,6 +48,30 @@ let make = (~storyIdFromUrl: option<string>) => {
     url.search->getDictFromUrlSearchParams->Dict.get("preset")->Option.isSome
   let (signup, setSignup) = React.useState(_ => None)
   let (signupDone, setSignupDone) = React.useState(_ => skipSignup)
+  let (resigning, setResigning) = React.useState(_ => false)
+  let resignup = async (prev: SimulatorSignup.result) => {
+    setResigning(_ => true)
+    try {
+      let json = await simFetch(
+        ~path="/sim/signup",
+        ~method_=Post,
+        ~body=SimulatorSignup.signupBody(
+          ~planId=prev.plan->SimulatorSignup.planIdOf,
+          ~last4=prev.last4,
+        ),
+      )
+      setSignup(_ => Some(
+        json->SimulatorSignup.resultOf(~plan=prev.plan, ~amount=prev.amount, ~last4=prev.last4),
+      ))
+    } catch {
+    // Without a fresh signup, the visitor signs up again
+    | _ => {
+        setSignup(_ => None)
+        setSignupDone(_ => false)
+      }
+    }
+    setResigning(_ => false)
+  }
 
   let (screenState, setScreenState) = React.useState(_ => PageLoaderWrapper.Loading)
   let (options, setOptions) = React.useState(_ => {
@@ -318,9 +342,12 @@ let make = (~storyIdFromUrl: option<string>) => {
 
   let onStartOver = () => {
     mixpanelEvent(~eventName="recovery_simulator_start_over")
-    // A signup starts one story: a new story signs up again
-    setSignup(_ => None)
-    setSignupDone(_ => false)
+    // After a signup, another story goes back to the story picker, not the plan: a signup starts
+    // one story, so a fresh test customer signs up on the same plan and card behind the scenes
+    switch signup {
+    | Some(prev) => resignup(prev)->ignore
+    | None => ()
+    }
     setStory(_ => None)
     setOptimistic(_ => None)
     setRevealLimit(_ => 0)
@@ -580,7 +607,7 @@ let make = (~storyIdFromUrl: option<string>) => {
             form
             setForm
             renewal
-            isBusy={isBusy || isStarting || isBeforeHandover}
+            isBusy={isBusy || isStarting || isBeforeHandover || resigning}
             onRun={() => onCharge()->ignore}
           />
         | None => React.null
