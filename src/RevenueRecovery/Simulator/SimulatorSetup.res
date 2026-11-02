@@ -254,7 +254,8 @@ module ReviewStep = {
 // the demo's user does not manage connectors, and picking here creates nothing
 module ConnectorCards = {
   @react.component
-  let make = (~connectors, ~connectorType, ~heading, ~onPick, ~searchable=false) => {
+  let // comingSoon: shown, not tappable, with a "Coming soon" tag
+  make = (~connectors, ~connectorType, ~heading, ~onPick, ~searchable=false, ~comingSoon=false) => {
     let (query, setQuery) = React.useState(_ => "")
     let shown = connectors->Array.filter((connector: ConnectorTypes.connectorTypes) =>
       query->String.trim == "" ||
@@ -288,16 +289,31 @@ module ConnectorCards = {
           let name = connector->ConnectorUtils.getConnectorNameString
           <AddDataAttributes key=name attributes=[("data-sim", `connector-${name}`)]>
             <div
-              role="button"
-              className="border p-4 gap-3 bg-white rounded-lg flex flex-col justify-start h-9.5-rem hover:bg-gray-50 cursor-pointer"
-              onClick={_ => onPick(name)}>
-              <div className="flex flex-row gap-3 items-center">
+              role=?{comingSoon ? None : Some("button")}
+              ariaDisabled=comingSoon
+              className={`border p-4 gap-3 bg-white rounded-lg flex flex-col justify-start h-9.5-rem ${comingSoon
+                  ? "cursor-default"
+                  : "hover:bg-gray-50 cursor-pointer"}`}
+              onClick={_ =>
+                if !comingSoon {
+                  onPick(name)
+                }}>
+              <div className={`flex flex-row gap-3 items-center ${comingSoon ? "opacity-60" : ""}`}>
                 <GatewayIcon gateway={name->String.toUpperCase} className="w-10 h-10 rounded-sm" />
                 <p className={`${body.lg.semibold} text-nd_gray-800 break-all`}>
                   {name->ConnectorUtils.getDisplayNameForConnector(~connectorType)->React.string}
                 </p>
+                <RenderIf condition=comingSoon>
+                  <span
+                    className={`ml-auto shrink-0 rounded-full border border-nd_gray-200 bg-nd_gray-50 px-2 py-0.5 ${body.xs.semibold} text-nd_gray-500`}>
+                    {"Coming soon"->React.string}
+                  </span>
+                </RenderIf>
               </div>
-              <p className={`overflow-hidden ${body.md.medium} text-nd_gray-400 line-clamp-3`}>
+              <p
+                className={`overflow-hidden ${body.md.medium} text-nd_gray-400 line-clamp-3 ${comingSoon
+                    ? "opacity-60"
+                    : ""}`}>
                 {(connector->ConnectorUtils.getConnectorInfo).description->React.string}
               </p>
             </div>
@@ -398,22 +414,36 @@ let make = () => {
 
   let content = switch currentStep->getSectionVariant {
   | (#connectProcessor, #selectProcessor) =>
+    // Stripe runs every story; the rest of the real Rev Rec list is coming to the simulator
+    let isStripe = (c: ConnectorTypes.connectorTypes) =>
+      c->ConnectorUtils.getConnectorNameString == "stripe"
+    let pick = id => {
+      SimulatorUtils.saveProcessor("stripe")
+      setProcessorId(_ => id)
+      next()
+      setPopupFor(_ => pickedProcessor(id))
+    }
     <PageWrapper
       title="Where do you process your payments"
-      subTitle="Pick the processor you use. Every story runs in test mode.">
-      <ConnectorCards
-        connectors=RecoveryConnectorUtils.recoverySupportedConnectors
-        connectorType=ConnectorTypes.Processor
-        heading="Choose a processor"
-        searchable=true
-        onPick={id => {
-          // The stories run on the demo's own test processor, whatever is picked here
-          SimulatorUtils.saveProcessor("stripe")
-          setProcessorId(_ => id)
-          next()
-          setPopupFor(_ => pickedProcessor(id))
-        }}
-      />
+      subTitle="Every story runs in test mode. More processors are coming.">
+      <div className="flex flex-col gap-4">
+        <ConnectorCards
+          connectors={RecoveryConnectorUtils.recoverySupportedConnectors->Array.filter(isStripe)}
+          connectorType=ConnectorTypes.Processor
+          heading="Choose a processor"
+          onPick=pick
+        />
+        <ConnectorCards
+          connectors={RecoveryConnectorUtils.recoverySupportedConnectors->Array.filter(c =>
+            !isStripe(c)
+          )}
+          connectorType=ConnectorTypes.Processor
+          heading="Coming soon to the Rev Rec Simulator"
+          searchable=true
+          comingSoon=true
+          onPick={_ => ()}
+        />
+      </div>
     </PageWrapper>
   | (#connectProcessor, #authenticateProcessor) =>
     <PageWrapper
