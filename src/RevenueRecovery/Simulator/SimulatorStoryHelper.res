@@ -613,10 +613,13 @@ module HandoverScene = {
   }
 }
 
-// The story cards in renewal words (user, 2 Nov): what happens on the renewal day, and when it
-// changes, from each story's bank rule (simulator/proxy/src/scenarios.ts: worksFrom). The renewal
-// is today, the moment its charge fails.
-let renewalCardText = (id, ~renewalAt: Date.t) => {
+// A story card in renewal words (user, 2 Nov): its name, the decline code the bank answers with
+// (scenarios.ts: bank.reason), and what happens in the customer's words, with the day a charge works
+// again (scenarios.ts: worksFrom)
+type renewalCard = {name: string, code: string, line: string}
+let renewalCardOf = (id, ~renewalAt: Date.t) => {
+  // Whole days after the renewal day, as the story's days count
+  let inDays = days => renewalAt->SimulatorSignup.plusDays(days)->SimulatorSignup.shortDate
   // Payday: the 1st or the 15th after the renewal day
   let payday = {
     let d = renewalAt->Date.getDate
@@ -634,17 +637,37 @@ let renewalCardText = (id, ~renewalAt: Date.t) => {
           )
     next->SimulatorSignup.shortDate
   }
-  // The decline code the bank answers with (scenarios.ts: bank.reason), and what might happen that
-  // day in the customer's words. The sentence is the card's title: no separate title (user, 2 Nov).
+  let card = (name, code, line) => Some({name, code, line})
   switch id {
-  | 15 => Some(("insufficient_funds", `You won't have money until payday, ${payday}.`))
-  | 12 => Some(("card_velocity_exceeded", "You'll hit your card's daily limit until tomorrow."))
-  | 14 => Some(("insufficient_funds", "You'll be low on money until tomorrow."))
-  | 19 => Some(("insufficient_funds", "You won't have money for 5 days. Just in time."))
-  | 20 => Some(("insufficient_funds", "You won't have money for 6 days. Too late."))
-  | 11 => Some(("processing_error", "Your bank will be down for 2 hours."))
-  | 13 => Some(("do_not_honor", "Your bank will pause your card until you confirm."))
-  | 16 => Some(("do_not_honor", "Your card will be blocked until you're home."))
+  | 15 => card("Payday", "insufficient_funds", `You won't have money until payday on ${payday}.`)
+  | 12 =>
+    card(
+      "Daily limit",
+      "card_velocity_exceeded",
+      `You'll hit your daily spending limit. It resets on ${inDays(1)}.`,
+    )
+  | 14 => card("Low balance", "insufficient_funds", `Your account will be low until ${inDays(1)}.`)
+  | 19 =>
+    card(
+      "Last chance",
+      "insufficient_funds",
+      `No money until ${inDays(5)}, just before fixed retries end.`,
+    )
+  | 20 =>
+    card("Too late", "insufficient_funds", `No money until ${inDays(6)}, after fixed retries end.`)
+  | 11 => card("Bank hiccup", "processing_error", "Your bank's system will be down for 2 hours.")
+  | 13 =>
+    card(
+      "Fraud check",
+      "do_not_honor",
+      `Your bank pauses the card until you confirm on ${inDays(1)}.`,
+    )
+  | 16 =>
+    card(
+      "Travel block",
+      "do_not_honor",
+      `You'll be abroad. Your bank blocks the card until ${inDays(2)}.`,
+    )
   | _ => None
   }
 }
@@ -703,8 +726,9 @@ module RenewalPicker = {
       onRun()
     }
     // A story card: a click picks it and runs it
-    // With a decline code: the code is the card's title, the sentence under it (user, 2 Nov)
-    let card = (~key, ~title, ~icon, ~line, ~code=?, ~isOn, ~onPick) =>
+    let renewalAt = Date.make()
+    // A story card. With its renewal detail: the name and the decline code, then what happens.
+    let card = (~key, ~title, ~icon, ~line, ~detail: option<renewalCard>=?, ~isOn, ~onPick) =>
       <div
         key
         role="button"
@@ -713,49 +737,50 @@ module RenewalPicker = {
           if !isBusy {
             onPick()
           }}
-        className={`flex flex-col gap-3 rounded-2xl border-2 p-5 text-left transition-all ${isOn
+        className={`flex flex-col gap-3.5 rounded-2xl border-2 p-5 text-left transition-all ${isOn
             ? "border-nd_primary_blue-450 bg-nd_primary_blue-50 shadow-sm"
-            : "border-nd_gray-200 bg-white hover:border-nd_gray-400"} ${isBusy && !isOn
+            : "border-nd_gray-200 bg-white hover:border-nd_gray-400 hover:shadow-sm"} ${isBusy &&
+          !isOn
             ? "cursor-not-allowed opacity-50"
             : "cursor-pointer"}`}>
-        <span className="flex items-center justify-between">
-          // A clear icon: bigger, in a tinted tile
+        <span className="flex items-start gap-3">
           <span
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${isOn
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${isOn
                 ? "bg-white text-nd_primary_blue-500"
                 : "bg-nd_primary_blue-50 text-nd_primary_blue-500"}`}>
             <Icon name=icon size=22 />
           </span>
+          <span className="flex min-w-0 flex-col">
+            <span className={`${heading.sm.semibold} text-nd_gray-800`}>
+              {detail->Option.mapOr(title, d => d.name)->React.string}
+            </span>
+            {switch detail {
+            | Some(d) =>
+              <span className="font-mono text-[13px] text-nd_gray-500">
+                {d.code->React.string}
+              </span>
+            | None =>
+              <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
+            }}
+          </span>
           <RenderIf condition=isOn>
             <span
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-nd_primary_blue-450 text-white">
+              className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-nd_primary_blue-450 text-white">
               <Icon name="nd-check" size=12 />
             </span>
           </RenderIf>
         </span>
-        {switch code {
-        | Some(code) =>
-          <span className="flex flex-col gap-1">
-            <span className="font-mono text-lg font-semibold text-nd_gray-800">
-              {code->React.string}
+        {switch detail {
+        | Some(d) =>
+          <>
+            <span className={`${body.lg.medium} leading-snug text-nd_gray-700`}>
+              {d.line->React.string}
             </span>
-            <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
-              {line->React.string}
-            </span>
-          </span>
-        | None =>
-          <span className="flex flex-col gap-1">
-            <span className={`${heading.md.semibold} text-nd_gray-800`}>
-              {title->React.string}
-            </span>
-            <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
-              {line->React.string}
-            </span>
-          </span>
+          </>
+        | None => React.null
         }}
       </div>
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
-    let renewalAt = Date.make()
     let cardIds =
       scenarioTiles
       ->Array.map(((id, title, icon, line)) => (id, title, icon, line))
@@ -770,12 +795,13 @@ module RenewalPicker = {
         ),
       )
       // In renewal words: what happens on the renewal day
-      ->Array.map(((id, title, icon, line)) =>
-        switch id->renewalCardText(~renewalAt) {
-        | Some((code, sentence)) => (id, title, icon, sentence, Some(code))
-        | None => (id, title, icon, line, None)
-        }
-      )
+      ->Array.map(((id, title, icon, line)) => (
+        id,
+        title,
+        icon,
+        line,
+        id->renewalCardOf(~renewalAt),
+      ))
     <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
       <div className="flex flex-col gap-4">
         <style>
@@ -793,14 +819,14 @@ module RenewalPicker = {
                 : ""}`}
             ariaHidden=intro>
             {cardIds
-            ->Array.filterMap(((id, title, icon, line, code)) =>
+            ->Array.filterMap(((id, title, icon, line, detail)) =>
               presetById(id)->Option.map(preset =>
                 card(
                   ~key=id->Int.toString,
                   ~title,
                   ~icon,
                   ~line,
-                  ~code?,
+                  ~detail?,
                   ~isOn={picked && form.preset == id},
                   ~onPick=() => pick(preset),
                 )
