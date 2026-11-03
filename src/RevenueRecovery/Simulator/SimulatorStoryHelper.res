@@ -703,8 +703,7 @@ module RenewalPicker = {
       onRun()
     }
     // A story card: a click picks it and runs it
-    // With a decline code: the sentence is the card's text (no title), and the code sits quietly at
-    // the bottom (user, 2 Nov: not in a pill)
+    // With a decline code: the code is the card's title, the sentence under it (user, 2 Nov)
     let card = (~key, ~title, ~icon, ~line, ~code=?, ~isOn, ~onPick) =>
       <div
         key
@@ -736,15 +735,14 @@ module RenewalPicker = {
         </span>
         {switch code {
         | Some(code) =>
-          <>
-            <span className={`${heading.sm.semibold} leading-snug text-nd_gray-800`}>
+          <span className="flex flex-col gap-1">
+            <span className="font-mono text-lg font-semibold text-nd_gray-800">
+              {code->React.string}
+            </span>
+            <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
               {line->React.string}
             </span>
-            <span className={`mt-auto ${body.sm.medium} text-nd_gray-500`}>
-              {"Decline code: "->React.string}
-              <span className="font-mono text-nd_gray-700"> {code->React.string} </span>
-            </span>
-          </>
+          </span>
         | None =>
           <span className="flex flex-col gap-1">
             <span className={`${heading.md.semibold} text-nd_gray-800`}>
