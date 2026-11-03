@@ -137,7 +137,12 @@ let shortDate = d => `${months->Array.getUnsafe(d->Date.getMonth)} ${d->Date.get
 let plusDays = (d, n) =>
   Date.makeWithYMD(~year=d->Date.getFullYear, ~month=d->Date.getMonth, ~date=d->Date.getDate + n)
 
-let brandLine = last4 => last4 == "4444" ? `Mastercard ••${last4}` : `Visa ••${last4}`
+let brandLine = last4 =>
+  switch last4 {
+  | "4444" => `Mastercard ••${last4}`
+  | "0005" => `Amex ••${last4}`
+  | _ => `Visa ••${last4}`
+  }
 
 // The story form's step 2 in renewal mode: this month's renewal on the card saved at signup. A
 // picked story runs it; working says what is going on until Rev Rec has it.
@@ -181,18 +186,30 @@ let boxClass = "flex flex-col justify-center rounded-xl border border-nd_gray-30
 
 module Field = {
   @react.component
-  let make = (~label, ~value, ~onChange, ~placeholder="", ~inputMode="text", ~maxLength=80) =>
+  let make = (
+    ~label,
+    ~value,
+    ~onChange,
+    ~placeholder="",
+    ~inputMode="text",
+    ~maxLength=80,
+    // Shown at the right of the input (the card logos)
+    ~trailing=React.null,
+  ) =>
     <label className=boxClass>
       <span className={`${body.xs.medium} text-nd_gray-500`}> {label->React.string} </span>
-      <input
-        value
-        placeholder
-        inputMode
-        maxLength
-        ariaLabel=label
-        onChange={e => onChange(ReactEvent.Form.target(e)["value"])}
-        className={`w-full bg-transparent outline-none ${body.lg.medium} text-nd_gray-800 placeholder:text-nd_gray-400`}
-      />
+      <div className="flex items-center gap-2">
+        <input
+          value
+          placeholder
+          inputMode
+          maxLength
+          ariaLabel=label
+          onChange={e => onChange(ReactEvent.Form.target(e)["value"])}
+          className={`w-full min-w-0 bg-transparent outline-none ${body.lg.medium} text-nd_gray-800 placeholder:text-nd_gray-400`}
+        />
+        trailing
+      </div>
     </label>
 }
 
@@ -676,12 +693,15 @@ let make = (~onDone: result => unit, ~onSkip) => {
     plans->Array.find(((id, _, _, _, _)) => id == planId)->Option.getOr(plans->Array.getUnsafe(0))
   let d = number->digits
   let card = switch d->detect {
-  | Test(card, _) if card->isVisitorCard && (d->brandOf == Visa || d->brandOf == Mastercard) =>
+  | Test(card, _)
+    if card->isVisitorCard &&
+      (d->brandOf == Visa || d->brandOf == Mastercard || d->brandOf == Amex) =>
     Some(card)
   | _ => None
   }
   let cardError = switch d->detect {
-  | _ if d->String.length < 16 => ""
+  // Amex numbers have 15 digits
+  | _ if d->String.length < (d->brandOf == Amex ? 15 : 16) => ""
   | Test(_, _) if card->Option.isSome => ""
   | _ => "Use a test card."
   }
@@ -696,7 +716,8 @@ let make = (~onDone: result => unit, ~onSkip) => {
     setNumber(_ => pan->grouped)
     setExpMonth(_ => "12")
     setExpYear(_ => "2030")
-    setCvv(_ => "123")
+    // An Amex security code has 4 digits
+    setCvv(_ => pan->brandOf == Amex ? "1234" : "123")
   }
 
   let subscribe = async () => {
@@ -717,35 +738,61 @@ let make = (~onDone: result => unit, ~onSkip) => {
     setIsBusy(_ => false)
   }
 
-  // Small fill buttons under the fields: sample details, or a test card
-  let pill = (~label, ~icon=React.null, ~onClick) =>
-    <button
-      type_="button"
-      onClick={_ => onClick()}
-      className={`flex items-center gap-1.5 rounded-full border border-nd_gray-200 bg-white px-3 py-1 ${body.sm.semibold} text-nd_gray-700 hover:border-nd_gray-400`}>
-      icon
-      {label->React.string}
-    </button>
-  let testCardButton = (~label, ~pan) =>
-    pill(
-      ~label,
-      ~icon=SimulatorCheckout.icon(
-        ~name=pan->String.startsWith("4") ? "visa-light" : "mastercard",
-        ~size=14,
-        ~width=22,
-      ),
-      ~onClick=() => useTestCard(pan),
-    )
-  let sampleName = () => {
+  // Autofill (user, 2 Nov): one click fills a test card of that brand, a sample name and address
+  let autofill = pan => {
+    useTestCard(pan)
     setFirst(_ => "John")
     setLast(_ => "Doe")
-  }
-  let sampleAddress = () => {
     setAddress(_ => "1 Market St")
     setCity(_ => "San Francisco")
     setState(_ => "CA")
     setPostcode(_ => "94105")
   }
+  // One clear button; its menu has a test card per brand
+  let (isFillOpen, setIsFillOpen) = React.useState(_ => false)
+  let fillOption = (~icon, ~brand, ~pan) =>
+    <button
+      key=brand
+      type_="button"
+      ariaLabel={`Autofill with the ${brand} test card`}
+      onClick={_ => {
+        autofill(pan)
+        setIsFillOpen(_ => false)
+      }}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-nd_gray-50">
+      {SimulatorCheckout.icon(~name=icon, ~size=18, ~width=28)}
+      <span className={`${body.md.semibold} text-nd_gray-800`}> {brand->React.string} </span>
+      <span className={`ml-auto ${body.sm.medium} text-nd_gray-500 tabular-nums`}>
+        {`•• ${pan->String.sliceToEnd(~start=-4)}`->React.string}
+      </span>
+    </button>
+  let autofillMenu =
+    <div
+      className={`relative -my-1.5 ml-auto transition-opacity ${planPicked
+          ? ""
+          : "pointer-events-none opacity-40"}`}>
+      <button
+        type_="button"
+        ariaExpanded=isFillOpen
+        onClick={_ => setIsFillOpen(open_ => !open_)}
+        className={`flex h-9 items-center gap-1.5 rounded-lg border border-nd_primary_blue-450 bg-white px-3 ${body.sm.semibold} text-nd_primary_blue-450 shadow-sm hover:bg-nd_primary_blue-50`}>
+        {"Autofill test card"->React.string}
+        <Icon name="nd-angle-down" size=12 />
+      </button>
+      <RenderIf condition=isFillOpen>
+        // A click anywhere else closes it
+        <div className="fixed inset-0 z-10" onClick={_ => setIsFillOpen(_ => false)} />
+        <div
+          className="absolute right-0 top-full z-20 mt-1.5 w-60 rounded-xl border border-nd_gray-150 bg-white p-1.5 shadow-lg">
+          <span className={`block px-3 pb-1 pt-1.5 ${body.xs.medium} text-nd_gray-500`}>
+            {"Fills the card, a name and an address"->React.string}
+          </span>
+          {fillOption(~icon="visa-light", ~brand="Visa", ~pan="4242424242424242")}
+          {fillOption(~icon="mastercard", ~brand="Mastercard", ~pan="5555555555554444")}
+          {fillOption(~icon="amex-light", ~brand="Amex", ~pan="378282246310005")}
+        </div>
+      </RenderIf>
+    </div>
 
   <div className="flex flex-col gap-6">
     <style> {css->React.string} </style>
@@ -874,35 +921,23 @@ let make = (~onDone: result => unit, ~onSkip) => {
               </RenderIf>
             </div>
             <div className="flex flex-col gap-3">
-              {stepLabel(~number="2", ~text="Payment details", ~isDone=false, ~isActive=planPicked)}
+              // The step's title, and the Autofill button at its right (cards only; the card's logo
+              // shows in the number field once its first digits name the brand, as on most checkouts)
+              <div className="flex items-center gap-2">
+                {stepLabel(
+                  ~number="2",
+                  ~text="Payment details",
+                  ~isDone=false,
+                  ~isActive=planPicked,
+                )}
+                autofillMenu
+              </div>
               // Locked and blurred until Continue
               <div ref={ReactDOM.Ref.domRef(paymentRef)} className="relative flex-1 flex flex-col">
                 <div
                   className={`flex-1 flex flex-col gap-3 transition-[filter,opacity] duration-300 ${planPicked
                       ? ""
                       : "blur-[2px] opacity-50 pointer-events-none select-none"}`}>
-                  // Cards only
-                  <div className="flex items-center gap-2 border-b-2 border-[#2D5BD7] pb-2.5">
-                    {["visa-light", "mastercard", "amex-light", "discover"]
-                    ->Array.map(name =>
-                      <React.Fragment key=name>
-                        {SimulatorCheckout.icon(~name, ~size=20, ~width=30)}
-                      </React.Fragment>
-                    )
-                    ->React.array}
-                    <span className={`ml-1 ${body.md.semibold} text-nd_gray-700`}>
-                      {"Credit or debit card"->React.string}
-                    </span>
-                  </div>
-                  // Fill buttons, in one row: test cards on the left, sample details on the right
-                  <div className="flex flex-wrap items-center gap-2">
-                    {testCardButton(~label="Test card", ~pan="4242424242424242")}
-                    {testCardButton(~label="Test card", ~pan="5555555555554444")}
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                      {pill(~label="Sample name", ~onClick=sampleName)}
-                      {pill(~label="Sample address", ~onClick=sampleAddress)}
-                    </div>
-                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="First Name" value=first onChange={v => setFirst(_ => v)} />
                     <Field label="Last Name" value=last onChange={v => setLast(_ => v)} />
@@ -929,16 +964,23 @@ let make = (~onDone: result => unit, ~onSkip) => {
                       onChange={v => setPostcode(_ => v)}
                     />
                   </div>
-                  <div
-                    className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
-                    <Field
-                      label="Credit Card Number"
-                      value=number
-                      inputMode="numeric"
-                      maxLength=19
-                      onChange={v =>
-                        setNumber(_ => v->digits->String.slice(~start=0, ~end=16)->grouped)}
-                    />
+                  // The card number on its own row, then expiry and CVV, as on most checkouts
+                  <Field
+                    label="Card number"
+                    value=number
+                    inputMode="numeric"
+                    maxLength=19
+                    // The brand's logo once the first digits name it
+                    trailing={switch d->String.length >= 2 ? d->brandOf : OtherBrand {
+                    | Visa => SimulatorCheckout.icon(~name="visa-light", ~size=14, ~width=21)
+                    | Mastercard => SimulatorCheckout.icon(~name="mastercard", ~size=14, ~width=21)
+                    | Amex => SimulatorCheckout.icon(~name="amex-light", ~size=14, ~width=21)
+                    | _ => React.null
+                    }}
+                    onChange={v =>
+                      setNumber(_ => v->digits->String.slice(~start=0, ~end=16)->grouped)}
+                  />
+                  <div className="grid grid-cols-3 gap-3">
                     <Field
                       label="Exp. MM"
                       value=expMonth

@@ -90,6 +90,8 @@ let make = (~storyIdFromUrl: option<string>) => {
   let (resigning, setResigning) = React.useState(_ => false)
   // The customer's intro over the story picker shows once per visit
   let (introSeen, setIntroSeen) = React.useState(_ => false)
+  // The signup the last story started with (each signup starts one story)
+  let usedSignupId = React.useRef("")
   let resignup = async (prev: SimulatorSignup.result) => {
     setResigning(_ => true)
     try {
@@ -318,6 +320,8 @@ let make = (~storyIdFromUrl: option<string>) => {
     setActionError(_ => None)
     setHasCharged(_ => true)
     setIsBusy(_ => true)
+    // A signup starts one story: the next one needs a new signup (the picker makes it)
+    signup->Option.forEach(s => usedSignupId.current = s.signupId)
     mixpanelEvent(~eventName="recovery_simulator_charge_customer")
     try {
       let json = await simFetch(
@@ -512,9 +516,19 @@ let make = (~storyIdFromUrl: option<string>) => {
     )->ignore
   // Auto-play hands over by itself, and so does a renewal: the signup already showed the decline
   let isRenewal = signup->Option.isSome
+  // Once per story: a handover that fails must not try again in a loop (it did, 2 Nov)
+  let autoHandedOver = React.useRef("")
   React.useEffect(() => {
-    if (autoPlay || isRenewal) && canHandover && !isBusy {
-      onNext()
+    switch story {
+    | Some(s)
+      if (autoPlay || isRenewal) &&
+      canHandover &&
+      !isBusy &&
+      autoHandedOver.current != s.storyId => {
+        autoHandedOver.current = s.storyId
+        onNext()
+      }
+    | _ => ()
     }
     None
   }, (autoPlay, isRenewal, canHandover, isBusy))
@@ -574,12 +588,25 @@ let make = (~storyIdFromUrl: option<string>) => {
   // while the story is still starting. A start that fails ends it, and the picker says why.
   let (sceneAt, setSceneAt) = React.useState(_ => None)
   let (sceneMinDone, setSceneMinDone) = React.useState(_ => false)
+  // It also waits for the model's first pick, so the page opens with its charts ready (user, 2 Nov):
+  // at most sceneMaxMs, for a story the model does not pick in
+  let (sceneMaxDone, setSceneMaxDone) = React.useState(_ => false)
   React.useEffect(() =>
     sceneAt->Option.map(_ => {
-      let timeoutId = setTimeout(() => setSceneMinDone(_ => true), HandoverScene.sceneMs)
-      () => clearTimeout(timeoutId)
+      let minId = setTimeout(() => setSceneMinDone(_ => true), HandoverScene.sceneMs)
+      let maxId = setTimeout(() => setSceneMaxDone(_ => true), HandoverScene.sceneMaxMs)
+      () => {
+        clearTimeout(minId)
+        clearTimeout(maxId)
+      }
     })
   , [sceneAt])
+  let hasFirstPick =
+    story
+    ->Option.flatMap(s => s.nextRetry)
+    ->Option.mapOr(false, next =>
+      !next.pending && picks->Dict.get(next.number->Int.toString)->Option.isSome
+    ) || items->Array.some(item => item.retries->Array.length > 0)
   // Try another story signs up again behind the scenes (about 2 s). The picker stays open
   // meanwhile; Hand it to Rev Rec before that starts the scene, and the story once the signup is in.
   let (runWhenReady, setRunWhenReady) = React.useState(_ => false)
@@ -588,7 +615,9 @@ let make = (~storyIdFromUrl: option<string>) => {
     sceneAt->Option.isSome &&
     signup->Option.isSome &&
     !startFailed &&
-    (!sceneMinDone || (showForm && (isHandingOver || resigning)))
+    (!sceneMinDone ||
+    showForm && (isHandingOver || resigning) ||
+    (!showForm && !hasFirstPick && !sceneMaxDone && !isFinished))
   React.useEffect(() => {
     if runWhenReady && !resigning {
       setRunWhenReady(_ => false)
@@ -746,11 +775,16 @@ let make = (~storyIdFromUrl: option<string>) => {
             isBusy=isHandingOver
             onRun={() => {
               setSceneMinDone(_ => false)
+              setSceneMaxDone(_ => false)
               setSceneAt(_ => Some(Date.now()))
-              if resigning {
-                setRunWhenReady(_ => true)
-              } else {
-                onCharge()->ignore
+              switch signup {
+              | _ if resigning => setRunWhenReady(_ => true)
+              // Its signup already started a story (one that failed, say): sign up again first
+              | Some(prev) if prev.signupId == usedSignupId.current => {
+                  setRunWhenReady(_ => true)
+                  resignup(prev)->ignore
+                }
+              | _ => onCharge()->ignore
               }
             }}
             showIntro={!introSeen && !isPresetLink}

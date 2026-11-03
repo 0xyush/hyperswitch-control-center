@@ -511,6 +511,7 @@ let renewalExtraStories = [11, 13, 16]
 // screen at least sceneMs, and longer while the story is still starting.
 module HandoverScene = {
   let sceneMs = 4000
+  let sceneMaxMs = 12000
   let revRecMark = "/assets/simulator/revrec-mark.svg"
   // The arch, in the 520 x 184 box: from the top of one logo over to the top of the other
   let arc = "M 72 84 C 72 4, 448 4, 448 84"
@@ -523,6 +524,8 @@ module HandoverScene = {
 @keyframes hs-ring { 0% { box-shadow: 0 0 0 0 rgba(0,109,249,.45); } 100% { box-shadow: 0 0 0 18px rgba(0,109,249,0); } }
 @keyframes hs-glow { 0%, 100% { box-shadow: 0 0 0 4px rgba(0,109,249,.10), 0 0 14px rgba(0,109,249,.18); } 50% { box-shadow: 0 0 0 6px rgba(0,109,249,.14), 0 0 22px rgba(0,109,249,.28); } }
 @keyframes hs-pop { 0% { opacity: 0; transform: scale(.4); } 70% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes hs-late { from { opacity: 0; } to { opacity: 1; } }
+.hs-late { animation: hs-late .5s 4.2s ease-out both; }
 .hs-in { animation: hs-in .45s cubic-bezier(.2,.8,.2,1) both; }
 .hs-token { position: absolute; left: 0; top: 0; offset-path: path("${arc}"); offset-rotate: 0deg; offset-anchor: 50% 50%; animation: hs-travel 1.6s .5s cubic-bezier(.45,0,.25,1) both; }
 .hs-draw { stroke-dasharray: ${arcLength->Int.toString}; stroke-dashoffset: ${arcLength->Int.toString}; animation: hs-draw 1.6s .5s cubic-bezier(.45,0,.25,1) forwards; }
@@ -530,7 +533,7 @@ module HandoverScene = {
 .hs-rr-box { animation: hs-glow 2.4s 2.8s ease-in-out infinite; }
 .hs-ring { animation: hs-ring 1s 2.1s ease-out 2; }
 .hs-pop { animation: hs-pop .35s 2.3s cubic-bezier(.2,.8,.2,1) both; }
-@media (prefers-reduced-motion: reduce) { .hs-in, .hs-token, .hs-draw, .hs-rr, .hs-rr-box, .hs-ring, .hs-pop { animation: none; } .hs-token { display: none; } .hs-draw { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .hs-in, .hs-token, .hs-draw, .hs-rr, .hs-rr-box, .hs-ring, .hs-pop, .hs-late { animation: none; } .hs-token { display: none; } .hs-draw { stroke-dashoffset: 0; } }
 `
   @react.component
   let make = (~renewal: SimulatorSignup.result) => {
@@ -601,6 +604,10 @@ module HandoverScene = {
             </div>,
           )}
         </div>
+        // Seen only when the model takes longer than the scene
+        <span className={`hs-late ${body.sm.medium} text-nd_gray-500`}>
+          {"Rev Rec's smart model is picking a time…"->React.string}
+        </span>
       </div>
     </AddDataAttributes>
   }

@@ -880,7 +880,9 @@ function recoveryBody(
     payment_method_data: {
       primary_processor_payment_method_token: o.token,
       payment_method_metadata: {
-        card_network: c.network,
+        // Rev Rec's API spells it AmericanExpress (its CardNetwork enum)
+        card_network:
+          c.network === "American Express" ? "AmericanExpress" : c.network,
         card_type: "credit",
         card_isin: c.isin,
         card_issuing_country: "US",

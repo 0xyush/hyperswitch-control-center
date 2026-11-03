@@ -286,9 +286,11 @@ make = (
     | None => ()
     }
 
-  // Read now, then every 3 s while the story runs
+  // Read now, then every 3 s while the story runs. Nothing shows until the first read is in, so
+  // the card appears once, filled (a "charts show once…" line that flipped to charts read as a refresh)
+  let (isLoaded, setIsLoaded) = React.useState(_ => false)
   React.useEffect(() => {
-    let read = async () =>
+    let read = async () => {
       try {
         let json = await simFetch(~path=`/sim/story/${storyId}/model`, ~method_=Get)
         // The decision and the counts behind it (SimulatorPickCharts)
@@ -300,6 +302,8 @@ make = (
       } catch {
       | _ => ()
       }
+      setIsLoaded(_ => true)
+    }
     read()->ignore
     if isLive {
       let id = setInterval(() => read()->ignore, 3000)
@@ -312,6 +316,7 @@ make = (
   let footer = <div className="ml-auto flex items-center gap-3"> footerRight </div>
 
   switch state {
+  | None if !isLoaded => React.null
   // No pick from the model (yet): the card still shows, and says why
   | None =>
     <AddDataAttributes attributes=[("data-sim", "model-view")]>
