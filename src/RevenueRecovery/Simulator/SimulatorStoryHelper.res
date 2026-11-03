@@ -613,6 +613,41 @@ module HandoverScene = {
   }
 }
 
+// The story cards in renewal words (user, 2 Nov): what happens on the renewal day, and when it
+// changes, from each story's bank rule (simulator/proxy/src/scenarios.ts: worksFrom). The renewal
+// is today, the moment its charge fails.
+let renewalCardText = (id, ~renewalAt: Date.t) => {
+  // Payday: the 1st or the 15th after the renewal day
+  let payday = {
+    let d = renewalAt->Date.getDate
+    let next =
+      d < 15
+        ? Date.makeWithYMD(
+            ~year=renewalAt->Date.getFullYear,
+            ~month=renewalAt->Date.getMonth,
+            ~date=15,
+          )
+        : Date.makeWithYMD(
+            ~year=renewalAt->Date.getFullYear,
+            ~month=renewalAt->Date.getMonth + 1,
+            ~date=1,
+          )
+    next->SimulatorSignup.shortDate
+  }
+  // In the customer's own words, one short line each (the heading says the day)
+  switch id {
+  | 15 => Some(("Payday", `No money until payday, ${payday}.`))
+  | 12 => Some(("Daily limit", "Daily limit hit. Resets tomorrow."))
+  | 14 => Some(("Low balance", "Low on money. More comes tomorrow."))
+  | 19 => Some(("Last chance", "Money in 5 days, before retries end."))
+  | 20 => Some(("Too late", "Money in 6 days, after retries end."))
+  | 11 => Some(("Bank hiccup", "Your bank is down for 2 hours."))
+  | 13 => Some(("Fraud check", "Card paused until you confirm."))
+  | 16 => Some(("Travel block", "Card blocked until you're home."))
+  | _ => None
+  }
+}
+
 module RenewalPicker = {
   @react.component
   let make = (
@@ -696,11 +731,14 @@ module RenewalPicker = {
           </RenderIf>
         </span>
         <span className="flex flex-col gap-1">
-          <span className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </span>
-          <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
+          <span className={`${heading.md.semibold} text-nd_gray-800`}> {title->React.string} </span>
+          <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
+            {line->React.string}
+          </span>
         </span>
       </div>
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
+    let renewalAt = Date.make()
     let cardIds =
       scenarioTiles
       ->Array.map(((id, title, icon, line)) => (id, title, icon, line))
@@ -714,14 +752,21 @@ module RenewalPicker = {
           ))
         ),
       )
+      // In renewal words: what happens on the renewal day
+      ->Array.map(((id, title, icon, line)) =>
+        switch id->renewalCardText(~renewalAt) {
+        | Some((title, line)) => (id, title, icon, line)
+        | None => (id, title, icon, line)
+        }
+      )
     <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
       <div className="flex flex-col gap-4">
         <style>
           {"@keyframes cust-pop { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } } .cust-pop { animation: cust-pop .45s cubic-bezier(.2,.8,.2,1) both; } .cust-pop-2 { animation: cust-pop .45s .2s cubic-bezier(.2,.8,.2,1) both; } @keyframes cust-caret { 50% { opacity: 0; } } .cust-caret { animation: cust-caret 1s step-end infinite; } @keyframes sim-handover { from { transform: translateX(-100%); } to { transform: translateX(300%); } } .sim-handover-bar { animation: sim-handover 1.2s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .cust-pop, .cust-pop-2, .cust-caret, .sim-handover-bar { animation: none; } }"->React.string}
         </style>
         <RenderIf condition={!intro}>
-          <span className={`${heading.md.semibold} text-nd_gray-800`}>
-            {"What's going on with the customer?"->React.string}
+          <span className={`${heading.lg.semibold} text-nd_gray-800`}>
+            {`Pick a story the customer might run into on ${renewalAt->SimulatorSignup.shortDate}`->React.string}
           </span>
         </RenderIf>
         <div className="relative">
