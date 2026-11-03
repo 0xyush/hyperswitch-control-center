@@ -506,61 +506,42 @@ module StepLabel = {
 // The stories after the five main ones, before More stories: they run on the scripted bank too
 let renewalExtraStories = [11, 13, 16]
 
-// The handover, played once after Hand it to Rev Rec (user, 2 Nov): FinnstaAI's billing sends the
-// failed renewal across, Rev Rec lights up, then the story page opens. SimulatorStory keeps it on
+// The handover, played once after Hand it to Rev Rec (user, 2 Nov): a "$" token arcs from FinnstaAI's
+// billing over to Rev Rec, Rev Rec lights up, then the story page opens. SimulatorStory keeps it on
 // screen at least sceneMs, and longer while the story is still starting.
 module HandoverScene = {
-  let sceneMs = 4200
+  let sceneMs = 4000
   let revRecMark = "/assets/simulator/revrec-mark.svg"
-  let css = "
+  // The arch, in the 520 x 184 box: from the top of one logo over to the top of the other
+  let arc = "M 72 84 C 72 4, 448 4, 448 84"
+  let arcLength = 419 // px, for drawing it as it goes
+  let css = `
 @keyframes hs-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes hs-move { 0% { left: 76px; opacity: 0; transform: translate(-50%, -50%) scale(.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 85% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { left: calc(100% - 76px); opacity: 0; transform: translate(-50%, -50%) scale(.4); } }
-@keyframes hs-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes hs-travel { 0% { offset-distance: 0%; opacity: 0; transform: scale(.6); } 10% { opacity: 1; transform: scale(1); } 88% { opacity: 1; transform: scale(1); } 100% { offset-distance: 100%; opacity: 0; transform: scale(.4); } }
+@keyframes hs-draw { to { stroke-dashoffset: 0; } }
 @keyframes hs-wake { 0% { filter: grayscale(1); opacity: .45; transform: scale(1); } 45% { filter: grayscale(0); opacity: 1; transform: scale(1.12); } 100% { filter: grayscale(0); opacity: 1; transform: scale(1); } }
 @keyframes hs-ring { 0% { box-shadow: 0 0 0 0 rgba(0,109,249,.45); } 100% { box-shadow: 0 0 0 18px rgba(0,109,249,0); } }
 @keyframes hs-glow { 0%, 100% { box-shadow: 0 0 0 4px rgba(0,109,249,.10), 0 0 14px rgba(0,109,249,.18); } 50% { box-shadow: 0 0 0 6px rgba(0,109,249,.14), 0 0 22px rgba(0,109,249,.28); } }
 @keyframes hs-pop { 0% { opacity: 0; transform: scale(.4); } 70% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
-@keyframes hs-pulse { 50% { opacity: .35; } }
 .hs-in { animation: hs-in .45s cubic-bezier(.2,.8,.2,1) both; }
-.hs-chip { position: absolute; top: 32px; transform: translate(-50%, -50%); animation: hs-move 1.5s .5s cubic-bezier(.45,0,.25,1) both; }
-.hs-fill { transform-origin: left; animation: hs-fill 1.5s .5s cubic-bezier(.45,0,.25,1) both; }
-.hs-rr { animation: hs-wake .7s 2s ease-out both; }
-.hs-rr-box { animation: hs-glow 2.4s 2.7s ease-in-out infinite; }
-.hs-ring { animation: hs-ring 1s 2s ease-out 2; }
-.hs-pop { animation: hs-pop .35s cubic-bezier(.2,.8,.2,1) both; }
-.hs-pulse { animation: hs-pulse 1.1s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .hs-in, .hs-chip, .hs-fill, .hs-rr, .hs-rr-box, .hs-ring, .hs-pop, .hs-pulse { animation: none; } .hs-chip { display: none; } }
-"
+.hs-token { position: absolute; left: 0; top: 0; offset-path: path("${arc}"); offset-rotate: 0deg; offset-anchor: 50% 50%; animation: hs-travel 1.6s .5s cubic-bezier(.45,0,.25,1) both; }
+.hs-draw { stroke-dasharray: ${arcLength->Int.toString}; stroke-dashoffset: ${arcLength->Int.toString}; animation: hs-draw 1.6s .5s cubic-bezier(.45,0,.25,1) forwards; }
+.hs-rr { animation: hs-wake .7s 2.1s ease-out both; }
+.hs-rr-box { animation: hs-glow 2.4s 2.8s ease-in-out infinite; }
+.hs-ring { animation: hs-ring 1s 2.1s ease-out 2; }
+.hs-pop { animation: hs-pop .35s 2.3s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .hs-in, .hs-token, .hs-draw, .hs-rr, .hs-rr-box, .hs-ring, .hs-pop { animation: none; } .hs-token { display: none; } .hs-draw { stroke-dashoffset: 0; } }
+`
   @react.component
   let make = (~renewal: SimulatorSignup.result) => {
-    let delay = ms => {JsxDOMStyle.animationDelay: `${ms->Int.toString}ms`}
-    // One line of what is happening: it shows at `at`, and its tick fills at `doneAt`
-    let step = (~key, ~at, ~doneAt=?, ~text) =>
-      <div key className="hs-in flex items-center gap-2.5" style={delay(at)}>
-        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-          {switch doneAt {
-          | Some(doneAt) =>
-            <>
-              <span className="absolute inset-0 rounded-full border-2 border-nd_gray-200" />
-              <span
-                className="hs-pop absolute inset-0 flex items-center justify-center rounded-full bg-nd_primary_blue-450 text-white"
-                style={delay(doneAt)}>
-                <Icon name="nd-check" size=10 />
-              </span>
-            </>
-          | None => <span className="hs-pulse h-2.5 w-2.5 rounded-full bg-nd_primary_blue-450" />
-          }}
-        </span>
-        <span className={`${body.md.medium} text-nd_gray-700`}> {text->React.string} </span>
-      </div>
-    let node = (~label, ~children) =>
-      <div className="relative z-10 flex w-[152px] flex-col items-center gap-2 text-center">
+    let node = (~side, ~label, ~children) =>
+      <div className={`absolute ${side} top-[88px] flex w-[144px] flex-col items-center gap-2`}>
         children
         <span className={`${body.md.semibold} text-nd_gray-800`}> {label->React.string} </span>
       </div>
     <AddDataAttributes attributes=[("data-sim", "handover-scene")]>
       <div
-        className="hs-in flex min-h-[460px] flex-col items-center justify-center gap-9 rounded-2xl border border-nd_gray-150 bg-white px-6 py-12">
+        className="hs-in flex min-h-[380px] flex-col items-center justify-center gap-8 rounded-2xl border border-nd_gray-150 bg-white px-6 py-12">
         <style> {css->React.string} </style>
         <div className="flex flex-col items-center gap-1.5 text-center">
           <span className={`${body.xs.semibold} uppercase tracking-wider text-nd_primary_blue-450`}>
@@ -570,23 +551,34 @@ module HandoverScene = {
             {`${SimulatorSignup.brandName} hands the failed renewal to Rev Rec`->React.string}
           </span>
         </div>
-        // FinnstaAI's billing, the track, Rev Rec. Only a small token moves; the words stay still.
-        <div className="relative flex w-full max-w-[560px] items-start justify-between">
-          <div
-            className="absolute left-[76px] right-[76px] top-8 h-0 border-t-2 border-dashed border-nd_gray-200"
-          />
-          <div
-            className="hs-fill absolute left-[76px] right-[76px] top-[31px] h-0.5 rounded-full bg-nd_primary_blue-450"
-          />
+        // The arch over the top; only the token moves, the words stay still
+        <div className="relative h-[184px] w-[520px] max-w-full">
+          <svg
+            className="absolute inset-0 text-nd_primary_blue-450"
+            width="520"
+            height="184"
+            viewBox="0 0 520 184"
+            fill="none"
+            ariaHidden=true>
+            <path d=arc stroke="#D0D5DD" strokeWidth="2" strokeDasharray="5 6" />
+            <path
+              className="hs-draw"
+              d=arc
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          </svg>
           <span
-            className="hs-chip z-20 flex h-7 w-7 items-center justify-center rounded-full border-2 border-nd_red-500 bg-white text-[13px] font-bold text-nd_red-500 shadow-sm">
-            {"$"->React.string}
-          </span>
-          <span
-            className={`absolute left-1/2 top-11 -translate-x-1/2 whitespace-nowrap ${body.xs.medium} text-nd_gray-500`}>
+            className={`absolute left-1/2 top-[56px] -translate-x-1/2 whitespace-nowrap ${body.xs.medium} text-nd_gray-500`}>
             {`${renewal.plan} renewal · ${renewal.amount->SimulatorSignup.dollars} · declined`->React.string}
           </span>
+          <span
+            className="hs-token z-20 flex h-7 w-7 items-center justify-center rounded-full border-2 border-nd_red-500 bg-white text-[13px] font-bold text-nd_red-500 shadow-sm">
+            {"$"->React.string}
+          </span>
           {node(
+            ~side="left-0",
             ~label=`${SimulatorSignup.brandName} billing`,
             ~children=<div
               className="flex h-16 w-16 items-center justify-center rounded-2xl border border-nd_gray-150 bg-white shadow-sm">
@@ -594,6 +586,7 @@ module HandoverScene = {
             </div>,
           )}
           {node(
+            ~side="right-0",
             ~label="Rev Rec",
             ~children=<div className="hs-rr relative">
               <span className="hs-ring absolute inset-0 rounded-2xl" />
@@ -602,22 +595,11 @@ module HandoverScene = {
                 <img src=revRecMark alt="" className="h-10 w-10" />
               </div>
               <span
-                className={`hs-pop absolute -right-1.5 -top-1.5 rounded-full bg-nd_green-500 px-1.5 py-px ${body.xs.semibold} text-white`}
-                style={delay(2300)}>
+                className={`hs-pop absolute -right-1.5 -top-1.5 rounded-full bg-nd_green-500 px-1.5 py-px ${body.xs.semibold} text-white`}>
                 {"On"->React.string}
               </span>
             </div>,
           )}
-        </div>
-        <div className="flex flex-col gap-3">
-          {step(
-            ~key="1",
-            ~at=300,
-            ~doneAt=2000,
-            ~text=`${SimulatorSignup.brandName}'s billing sends the failed renewal`,
-          )}
-          {step(~key="2", ~at=2000, ~doneAt=2700, ~text="Rev Rec takes it over")}
-          {step(~key="3", ~at=2700, ~text="Its smart model picks the best time to retry")}
         </div>
       </div>
     </AddDataAttributes>
