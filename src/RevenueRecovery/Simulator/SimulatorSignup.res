@@ -432,8 +432,26 @@ module MonthLater = {
           <div className={`bg-[#0E8A6A] py-1.5 ${body.md.semibold} text-white`}>
             {months->Array.getUnsafe(shown->Date.getMonth)->React.string}
           </div>
-          <div className="py-3 text-5xl font-semibold tabular-nums text-nd_gray-800">
+          <div className="pt-3 text-5xl font-semibold tabular-nums text-nd_gray-800">
             {shown->Date.getDate->Int.toString->React.string}
+          </div>
+          // Which day this is, so the jump in dates reads (user, 2 Nov): the signup, then today
+          <div className="flex h-9 items-center justify-center">
+            {if day >= total {
+              <span
+                key="today"
+                className={`sgn-pop rounded-full bg-[#E7F6F1] px-2.5 py-0.5 ${body.sm.semibold} text-[#0E8A6A]`}>
+                {"Today"->React.string}
+              </span>
+            } else if day == 0 {
+              <span
+                key="signup"
+                className={`rounded-full bg-nd_gray-100 px-2.5 py-0.5 ${body.sm.semibold} text-nd_gray-600`}>
+                {"Signup day"->React.string}
+              </span>
+            } else {
+              React.null
+            }}
           </div>
         </div>
       </div>

@@ -506,6 +506,124 @@ module StepLabel = {
 // The stories after the five main ones, before More stories: they run on the scripted bank too
 let renewalExtraStories = [11, 13, 16]
 
+// The handover, played once after Hand it to Rev Rec (user, 2 Nov): FinnstaAI's billing sends the
+// failed renewal across, Rev Rec lights up, then the story page opens. SimulatorStory keeps it on
+// screen at least sceneMs, and longer while the story is still starting.
+module HandoverScene = {
+  let sceneMs = 4200
+  let revRecMark = "/assets/simulator/revrec-mark.svg"
+  let css = "
+@keyframes hs-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes hs-move { 0% { left: 76px; opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { left: calc(100% - 76px); opacity: 0; transform: translate(-50%, -50%) scale(.6); } }
+@keyframes hs-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes hs-wake { 0% { filter: grayscale(1); opacity: .45; transform: scale(1); } 45% { filter: grayscale(0); opacity: 1; transform: scale(1.12); } 100% { filter: grayscale(0); opacity: 1; transform: scale(1); } }
+@keyframes hs-ring { 0% { box-shadow: 0 0 0 0 rgba(0,109,249,.45); } 100% { box-shadow: 0 0 0 18px rgba(0,109,249,0); } }
+@keyframes hs-glow { 0%, 100% { box-shadow: 0 0 18px 2px rgba(0,109,249,.25); } 50% { box-shadow: 0 0 30px 6px rgba(0,109,249,.40); } }
+@keyframes hs-pop { 0% { opacity: 0; transform: scale(.4); } 70% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes hs-pulse { 50% { opacity: .35; } }
+.hs-in { animation: hs-in .45s cubic-bezier(.2,.8,.2,1) both; }
+.hs-chip { position: absolute; top: 32px; transform: translate(-50%, -50%); animation: hs-move 1.5s .5s cubic-bezier(.45,0,.25,1) both; }
+.hs-fill { transform-origin: left; animation: hs-fill 1.5s .5s cubic-bezier(.45,0,.25,1) both; }
+.hs-rr { animation: hs-wake .7s 2s ease-out both; }
+.hs-rr-box { animation: hs-glow 2.4s 2.7s ease-in-out infinite; }
+.hs-ring { animation: hs-ring 1s 2s ease-out 2; }
+.hs-pop { animation: hs-pop .35s cubic-bezier(.2,.8,.2,1) both; }
+.hs-pulse { animation: hs-pulse 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .hs-in, .hs-chip, .hs-fill, .hs-rr, .hs-rr-box, .hs-ring, .hs-pop, .hs-pulse { animation: none; } .hs-chip { display: none; } }
+"
+  @react.component
+  let make = (~renewal: SimulatorSignup.result) => {
+    let delay = ms => {JsxDOMStyle.animationDelay: `${ms->Int.toString}ms`}
+    // One line of what is happening: it shows at `at`, and its tick fills at `doneAt`
+    let step = (~key, ~at, ~doneAt=?, ~text) =>
+      <div key className="hs-in flex items-center gap-2.5" style={delay(at)}>
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+          {switch doneAt {
+          | Some(doneAt) =>
+            <>
+              <span className="absolute inset-0 rounded-full border-2 border-nd_gray-200" />
+              <span
+                className="hs-pop absolute inset-0 flex items-center justify-center rounded-full bg-nd_primary_blue-450 text-white"
+                style={delay(doneAt)}>
+                <Icon name="nd-check" size=10 />
+              </span>
+            </>
+          | None => <span className="hs-pulse h-2.5 w-2.5 rounded-full bg-nd_primary_blue-450" />
+          }}
+        </span>
+        <span className={`${body.md.medium} text-nd_gray-700`}> {text->React.string} </span>
+      </div>
+    let node = (~label, ~sub, ~children) =>
+      <div className="relative z-10 flex w-[152px] flex-col items-center gap-2 text-center">
+        children
+        <span className={`${body.md.semibold} text-nd_gray-800`}> {label->React.string} </span>
+        <span className={`${body.xs.medium} text-nd_gray-500`}> {sub->React.string} </span>
+      </div>
+    <AddDataAttributes attributes=[("data-sim", "handover-scene")]>
+      <div
+        className="hs-in flex min-h-[460px] flex-col items-center justify-center gap-9 rounded-2xl border border-nd_gray-150 bg-white px-6 py-12">
+        <style> {css->React.string} </style>
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <span className={`${body.xs.semibold} uppercase tracking-wider text-nd_primary_blue-450`}>
+            {"Handing over"->React.string}
+          </span>
+          <span className={`${heading.md.semibold} text-nd_gray-800`}>
+            {`${SimulatorSignup.brandName} hands the failed renewal to Rev Rec`->React.string}
+          </span>
+        </div>
+        // FinnstaAI's billing, the track with the renewal on it, Rev Rec
+        <div className="relative flex w-full max-w-[600px] items-start justify-between">
+          <div
+            className="absolute left-[76px] right-[76px] top-8 h-0 border-t-2 border-dashed border-nd_gray-200"
+          />
+          <div
+            className="hs-fill absolute left-[76px] right-[76px] top-[31px] h-0.5 rounded-full bg-nd_primary_blue-450"
+          />
+          <div
+            className={`hs-chip z-20 flex items-center gap-2 whitespace-nowrap rounded-full border border-nd_red-200 bg-white px-3 py-1.5 shadow-md ${body.xs.semibold} text-nd_gray-700`}>
+            <span className="h-2 w-2 rounded-full bg-nd_red-500" />
+            {`${renewal.plan} renewal · ${renewal.amount->SimulatorSignup.dollars} · Declined`->React.string}
+          </div>
+          {node(
+            ~label=`${SimulatorSignup.brandName} billing`,
+            ~sub="Its renewal was declined",
+            ~children=<div
+              className="flex h-16 w-16 items-center justify-center rounded-2xl border border-nd_gray-150 bg-white shadow-sm">
+              <img src=SimulatorSignup.mark alt="" className="h-10 w-10" />
+            </div>,
+          )}
+          {node(
+            ~label="Rev Rec",
+            ~sub="Recovers failed payments",
+            ~children=<div className="hs-rr relative">
+              <span className="hs-ring absolute inset-0 rounded-2xl" />
+              <div
+                className="hs-rr-box flex h-16 w-16 items-center justify-center rounded-2xl border border-nd_primary_blue-200 bg-white">
+                <img src=revRecMark alt="" className="h-10 w-10" />
+              </div>
+              <span
+                className={`hs-pop absolute -right-2 -top-2 rounded-full bg-nd_green-500 px-1.5 py-0.5 ${body.xs.semibold} text-white`}
+                style={delay(2300)}>
+                {"On"->React.string}
+              </span>
+            </div>,
+          )}
+        </div>
+        <div className="flex flex-col gap-3">
+          {step(
+            ~key="1",
+            ~at=300,
+            ~doneAt=2000,
+            ~text=`${SimulatorSignup.brandName}'s billing sends the failed renewal`,
+          )}
+          {step(~key="2", ~at=2000, ~doneAt=2700, ~text="Rev Rec takes it over")}
+          {step(~key="3", ~at=2700, ~text="Its smart model picks the best time to retry")}
+        </div>
+      </div>
+    </AddDataAttributes>
+  }
+}
+
 module RenewalPicker = {
   @react.component
   let make = (
@@ -519,8 +637,10 @@ module RenewalPicker = {
     // The customer's intro, once per visit
     ~showIntro=true,
     ~onIntroDone=() => (),
+    // Opened from a ?preset link: that story is picked already
+    ~startPicked=false,
   ) => {
-    let (picked, setPicked) = React.useState(_ => false)
+    let (picked, setPicked) = React.useState(_ => startPicked)
     let (showMore, setShowMore) = React.useState(_ => false)
     let presetById = id => options.presets->Array.find(preset => preset.id == id)
     let onCards = id => id->isMainStory || renewalExtraStories->Array.includes(id)

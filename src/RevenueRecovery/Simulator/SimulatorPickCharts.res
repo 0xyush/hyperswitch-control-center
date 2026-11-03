@@ -97,7 +97,10 @@ let plotHeight = 160
 let marginTop = 20
 let marginBottom = 22
 
-let options = (~categories, ~tickPositions, ~points, ~average, ~yMax) =>
+// The bars of each chart grow in turn when the charts first show (user, 2 Nov): `defer` is when
+// this chart's bars start, in ms
+let growMs = 800
+let options = (~categories, ~tickPositions, ~points, ~average, ~yMax, ~defer, ~grow) =>
   {
     "chart": {
       "type": "column",
@@ -154,7 +157,9 @@ let options = (~categories, ~tickPositions, ~points, ~average, ~yMax) =>
     },
     "plotOptions": {
       "column": {
-        "animation": false,
+        // Only while the charts first show: a live update re-adds the series, and an animated
+        // series would grow its bars again every few seconds (it read as the chart refreshing)
+        "animation": grow ? {"duration": growMs, "defer": defer} : {"duration": 0, "defer": 0},
         "borderWidth": 0,
         "borderRadius": 2,
         "pointPadding": 0.1,
@@ -169,8 +174,10 @@ let options = (~categories, ~tickPositions, ~points, ~average, ~yMax) =>
 
 module SlotChart = {
   @react.component
-  let make = (~title, ~options, ~className) =>
-    <div className={`flex flex-col gap-1 min-w-0 ${className}`}>
+  let make = (~title, ~options, ~className, ~delayMs) =>
+    <div
+      className={`spc-in flex flex-col gap-1 min-w-0 ${className}`}
+      style={{JsxDOMStyle.animationDelay: `${delayMs->Int.toString}ms`}}>
       <span className={`${body.sm.semibold} text-nd_gray-600`}> {title->React.string} </span>
       <HighchartsHorizontalBarChart.Chart
         highcharts=HighchartsHorizontalBarChart.highchartsModule options
@@ -182,6 +189,12 @@ module SlotChart = {
 // "day of month"); oneIn: the exploration floor in words ("1 in 10"); children: the counts' chip
 @react.component
 let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children=React.null) => {
+  // The bars grow once, when the charts first show; after that every update draws them in place
+  let (grow, setGrow) = React.useState(_ => true)
+  React.useEffect(() => {
+    let timeoutId = setTimeout(() => setGrow(_ => false), 1800 + growMs + 400)
+    Some(() => clearTimeout(timeoutId))
+  }, [])
   let picked = Date.fromString(slot)
   let pickDow = picked->dowOf
   let pickDom = picked->Date.getUTCDate - 1
@@ -196,7 +209,9 @@ let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children
     [counts.dow, counts.dom, counts.hod]
     ->Array.flat
     ->Array.reduce(average, (m, c) => Math.max(m, c->rate))
-  let yMax = Math.min(1.0, top *. 1.18)
+  // Room above the tallest bar for the picked bar's label, even at 100% (the axis has no labels,
+  // so a top above 100% does not show); a capped top pushed the label down onto the bar
+  let yMax = top *. 1.25
   let byDom = dayBy == "day of month"
   let dayRate = byDom
     ? counts.dom->Array.getUnsafe(pickDom)->rate
@@ -225,6 +240,8 @@ let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children
     ),
     ~average,
     ~yMax,
+    ~defer=500,
+    ~grow,
   )
   let domChart = options(
     ~categories=Array.fromInitializer(~length=31, i => (i + 1)->Int.toString),
@@ -241,6 +258,8 @@ let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children
     ),
     ~average,
     ~yMax,
+    ~defer=1150,
+    ~grow,
   )
   let hodChart = options(
     ~categories=Array.fromInitializer(~length=24, h => h->Int.toString),
@@ -250,13 +269,20 @@ let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children
     ),
     ~average,
     ~yMax,
+    ~defer=1800,
+    ~grow,
   )
 
+  let after = ms => {JsxDOMStyle.animationDelay: `${ms->Int.toString}ms`}
   <AddDataAttributes attributes=[("data-sim", "pick-charts")]>
     <div className="flex flex-col gap-4">
+      // The picked time first, then each chart and its bars, then the numbers under them
+      <style>
+        {"@keyframes spc-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } } .spc-in { animation: spc-in .6s cubic-bezier(.2,.8,.2,1) backwards; } @media (prefers-reduced-motion: reduce) { .spc-in { animation: none; } }"->React.string}
+      </style>
       <div className="flex flex-col gap-1">
         <span className={`${body.md.semibold} text-nd_gray-800`}> {headline->React.string} </span>
-        <span className={`${body.md.medium} text-nd_gray-600`}>
+        <span className={`spc-in ${body.md.medium} text-nd_gray-600`} style={after(2700)}>
           {`${dayName} worked ${dayRate->pct} before; ${pickHour->hourLabel} worked ${hourRate->pct}.`->React.string}
         </span>
       </div>
@@ -264,16 +290,22 @@ let make = (~counts, ~slot, ~dayBy, ~planDays: array<planDay>, ~oneIn, ~children
       // No minimum is wider than the card, so a phone shows each chart whole.
       <div className="flex flex-wrap gap-x-6 gap-y-4">
         <SlotChart
-          title="Day of week" options=dowChart className="flex-1 min-w-[min(220px,100%)]"
+          title="Day of week" options=dowChart className="flex-1 min-w-[min(220px,100%)]" delayMs=0
         />
         <SlotChart
-          title="Day of month" options=domChart className="flex-[1.6] min-w-[min(330px,100%)]"
+          title="Day of month"
+          options=domChart
+          className="flex-[1.6] min-w-[min(330px,100%)]"
+          delayMs=650
         />
         <SlotChart
-          title="Hour (UTC)" options=hodChart className="flex-[1.3] min-w-[min(290px,100%)]"
+          title="Hour (UTC)"
+          options=hodChart
+          className="flex-[1.3] min-w-[min(290px,100%)]"
+          delayMs=1300
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="spc-in flex flex-wrap items-center gap-2" style={after(2950)}>
         <span className={`${body.sm.medium} text-nd_gray-500`}>
           {`Dashed line: the average for this decline, ${average->pct}. Every day keeps at least a ${oneIn} chance, so Rev Rec keeps learning.`->React.string}
         </span>

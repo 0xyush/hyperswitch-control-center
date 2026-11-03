@@ -29,7 +29,30 @@ let columnsHeightFor: (Dom.element, float, float) => float = %raw(`function (el,
 
 // After Charge customer the hero form gives way to two columns: a 200 ms fade and rise, no bounce.
 // "backwards", so no transform stays after it: a transform would trap the fixed "New retry" pill.
-let storyEnterCss = "@keyframes simStoryEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } } .sim-story-enter > div { animation: simStoryEnter 200ms ease-out backwards; } @media (prefers-reduced-motion: reduce) { .sim-story-enter > div { animation: none; } }"
+// The page comes in one part at a time (user, 2 Nov): the status bar, the smart model row (its tiles
+// in turn, SimulatorModelBox), then the steps and the model's charts (SimulatorPickCharts)
+let storyEnterCss = "@keyframes simStoryEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } } .sim-story-enter > div { animation: simStoryEnter 500ms cubic-bezier(.2,.8,.2,1) backwards; } .sim-story-enter > div:nth-of-type(2) { animation-delay: 250ms; } .sim-story-enter > div:nth-of-type(3) { animation-delay: 1100ms; } @media (prefers-reduced-motion: reduce) { .sim-story-enter > div, .smb-first > * { animation: none; } }"
+
+// The tab keeps the visitor's signup (sessionStorage), so a story page that reloads still knows it
+// and Try another story goes back to the story picker, not the older form (user, 2 Nov)
+let signupKey = "sim-signup"
+let saveSignup: Nullable.t<
+  string,
+> => unit = %raw(`function (v) { try { if (v == null) { window.sessionStorage.removeItem("sim-signup"); } else { window.sessionStorage.setItem("sim-signup", v); } } catch (e) {} }`)
+let readSignup: unit => Nullable.t<
+  string,
+> = %raw(`function () { try { return window.sessionStorage.getItem("sim-signup"); } catch (e) { return null; } }`)
+let storedSignup = (): option<SimulatorSignup.result> =>
+  readSignup()
+  ->Nullable.toOption
+  ->Option.flatMap(text =>
+    try {
+      let result: SimulatorSignup.result = text->JSON.parseExn->Identity.jsonToAnyType
+      result.signupId->LogicUtils.isNonEmptyString ? Some(result) : None
+    } catch {
+    | _ => None
+    }
+  )
 
 @react.component
 let make = (~storyIdFromUrl: option<string>) => {
@@ -46,7 +69,23 @@ let make = (~storyIdFromUrl: option<string>) => {
     isWatch ||
     storyIdFromUrl->Option.isSome ||
     url.search->getDictFromUrlSearchParams->Dict.get("preset")->Option.isSome
-  let (signup, setSignup) = React.useState(_ => None)
+  // A ?preset link (the feature tour, Try it yourself) opens the story picker on that story
+  let isPresetLink =
+    !isWatch &&
+    storyIdFromUrl->Option.isNone &&
+    url.search->getDictFromUrlSearchParams->Dict.get("preset")->Option.isSome
+  // Opened on a story: the tab's signup, if it made one
+  let (signup, setSignup) = React.useState(_ =>
+    storyIdFromUrl->Option.isSome ? storedSignup() : None
+  )
+  React.useEffect(() => {
+    saveSignup(
+      signup->Option.mapOr(Nullable.null, result =>
+        result->Identity.genericTypeToJson->JSON.stringify->Nullable.make
+      ),
+    )
+    None
+  }, [signup])
   let (signupDone, setSignupDone) = React.useState(_ => skipSignup)
   let (resigning, setResigning) = React.useState(_ => false)
   // The customer's intro over the story picker shows once per visit
@@ -141,6 +180,22 @@ let make = (~storyIdFromUrl: option<string>) => {
     }
     setResigning(_ => false)
   }
+
+  // A ?preset link signs up behind the scenes too (once per link), then opens the picker on its story
+  let presetSignupTried = React.useRef(false)
+  React.useEffect(() => {
+    // After the presets load, so the link's story fills the form first and the signup's card wins
+    if (
+      isPresetLink &&
+      screenState == PageLoaderWrapper.Success &&
+      signup->Option.isNone &&
+      !presetSignupTried.current
+    ) {
+      presetSignupTried.current = true
+      quickSignup()->ignore
+    }
+    None
+  }, (isPresetLink, screenState))
 
   // Scenario 3 can stay in Monitoring, so the proxy's done flag is the main end signal
   let isDone = story->Option.mapOr(false, storyHasEnded)
@@ -375,6 +430,8 @@ let make = (~storyIdFromUrl: option<string>) => {
     // one story, so a fresh test customer signs up on the same plan and card behind the scenes
     switch signup {
     | Some(prev) => resignup(prev)->ignore
+    // No signup in this tab (the page was opened on a story): a default one, then the picker
+    | None if !isWatch => quickSignup()->ignore
     | None => ()
     }
     setStory(_ => None)
@@ -513,6 +570,28 @@ let make = (~storyIdFromUrl: option<string>) => {
     )
   // A story URL that is still loading shows "Loading the story…" in the running view's place
   let showForm = !isWatch && (!hasStarted || isBeforeHandover || startFailed)
+  // The handover scene (HandoverScene): from Hand it to Rev Rec for at least its length, and longer
+  // while the story is still starting. A start that fails ends it, and the picker says why.
+  let (sceneAt, setSceneAt) = React.useState(_ => None)
+  let (sceneMinDone, setSceneMinDone) = React.useState(_ => false)
+  React.useEffect(() =>
+    sceneAt->Option.map(_ => {
+      let timeoutId = setTimeout(() => setSceneMinDone(_ => true), HandoverScene.sceneMs)
+      () => clearTimeout(timeoutId)
+    })
+  , [sceneAt])
+  let isHandingOver = isBusy || isStarting || isBeforeHandover || resigning
+  let showScene =
+    sceneAt->Option.isSome &&
+    signup->Option.isSome &&
+    !startFailed &&
+    (!sceneMinDone || (showForm && isHandingOver))
+  React.useEffect(() => {
+    if sceneAt->Option.isSome && !showScene {
+      setSceneAt(_ => None)
+    }
+    None
+  }, (sceneAt, showScene))
   let columnsRef = React.useRef(Nullable.null)
   let (columnsHeight, setColumnsHeight) = React.useState(_ => None)
   // Measured once the columns are on the page (after the presets load), and on resize
@@ -611,6 +690,20 @@ let make = (~storyIdFromUrl: option<string>) => {
             {"Starting the story…"->React.string}
           </p>
         </div>
+      } else if (
+        showForm &&
+        signup->Option.isNone &&
+        (resigning || (isPresetLink && !presetSignupTried.current))
+      ) {
+        // Signing up behind the scenes (Skip signup, a ?preset link, Try another story)
+        <div className={`${cardStyle} flex items-center justify-center gap-3 p-10`}>
+          <Loader />
+        </div>
+      } else if showScene {
+        switch signup {
+        | Some(renewal) => <HandoverScene renewal />
+        | None => React.null
+        }
       } else if showForm && !signupDone {
         <SimulatorSignup
           onDone={(result: SimulatorSignup.result) => {
@@ -636,9 +729,14 @@ let make = (~storyIdFromUrl: option<string>) => {
             form
             setForm
             renewal
-            isBusy={isBusy || isStarting || isBeforeHandover || resigning}
-            onRun={() => onCharge()->ignore}
-            showIntro={!introSeen}
+            isBusy=isHandingOver
+            onRun={() => {
+              setSceneMinDone(_ => false)
+              setSceneAt(_ => Some(Date.now()))
+              onCharge()->ignore
+            }}
+            showIntro={!introSeen && !isPresetLink}
+            startPicked=isPresetLink
             onIntroDone={() => setIntroSeen(_ => true)}
           />
         | None => React.null

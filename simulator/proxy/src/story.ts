@@ -241,6 +241,12 @@ const prof = (s: Story): ProfileRef => s.profileRef ?? PROFILES.story;
 
 // Portfolio stories share one queue: at most 5 Stripe or sandbox calls per second.
 let nextSlot = 0;
+// The least time a visitor gets to see each retry coming (seconds; the sim stretches its demo
+// clock so no retry is booked sooner, selfhost/sim/sim.mjs). SIM_MIN_LEAD_SEC=0 turns it off.
+const MIN_LEAD_SEC = Number(process.env.SIM_MIN_LEAD_SEC ?? 30);
+const minLead = (): Record<string, string> =>
+  MIN_LEAD_SEC > 0 ? { "metadata[sim_min_lead]": String(MIN_LEAD_SEC) } : {};
+
 const PACE_MS = 200;
 async function pace() {
   const now = Date.now();
@@ -2337,6 +2343,7 @@ async function runStart(story: Story) {
         description: "Rev Rec simulator (test)",
         "metadata[sim_story]": story.storyId,
         "metadata[invoice]": story.invoiceId,
+        ...minLead(),
       },
     );
     if (!r.json?.id)
@@ -2883,6 +2890,7 @@ export async function signup(owner: string, body: any) {
     name: "FinnstaAI customer (test)",
     description: "Rev Rec simulator: FinnstaAI signup (test)",
     "metadata[sim_signup]": id,
+    ...minLead(),
   });
   if (!cus.json?.id)
     throw new HttpError(502, `customer not created: ${stripeError(cus)}`);

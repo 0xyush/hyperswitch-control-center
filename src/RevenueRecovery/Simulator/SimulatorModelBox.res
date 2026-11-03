@@ -224,6 +224,9 @@ let flipMs = 2600
 
 let css = `
 .smb-in { animation: smb-in .45s cubic-bezier(.2, .8, .2, 1) backwards; }
+.smb-first > :nth-child(1) { animation: smb-in .5s .35s cubic-bezier(.2, .8, .2, 1) backwards; }
+.smb-first > :nth-child(2) { animation: smb-in .5s .6s cubic-bezier(.2, .8, .2, 1) backwards; }
+.smb-first > :nth-child(3) { animation-delay: .85s; }
 .smb-flip { animation: smb-flip .55s cubic-bezier(.2, .8, .2, 1) backwards; }
 .smb-spin { animation: smb-spin 1s linear infinite; transform-origin: 50% 50%; }
 .smb-ping { animation: smb-ping 1.2s ease-out infinite; }
@@ -345,128 +348,214 @@ let useLiveCounts = (~storyId, ~isLive) => {
 
 // The story's days as one line: the failure on day 0, each Rev Rec retry where it ran (green when
 // it worked), the next retry, and the day the money is there again, up to the grace period's end
+// The story's days as a slider (user, 2 Nov): day 0 (the failure) to the grace end. The blue fill and
+// its thumb move with the demo clock from the last retry to the next one; the dots are Rev Rec's
+// retries, the ring the next one, the green part the days the money is there again.
 module DayLine = {
   let dayMs = 86_400_000.0
   @react.component
   let make = (~story: option<story>, ~retries: array<SimulatorStorySteps.retry>) => {
+    let ms = at => at->Date.fromString->Date.getTime
     let failedAt =
       story
       ->Option.flatMap(s =>
         s.timeline->Array.find(row => row.phase == 1 && row.status == StepDeclined)
       )
-      ->Option.map(row => row.at->Date.fromString->Date.getTime)
+      ->Option.map(row => row.at->ms)
     let grace =
       story
       ->Option.flatMap(s => s.settings)
       ->Option.flatMap(settings => settings.currentGraceDays)
       ->Option.getOr(30)
       ->Int.toFloat
-    let dayOf = at =>
-      failedAt->Option.map(t0 => Math.max(0.0, (at->Date.fromString->Date.getTime -. t0) /. dayMs))
-    let charged =
-      retries->Array.filterMap(retry =>
-        retry.charge->Option.flatMap(row =>
-          row.realLife->Option.flatMap(
-            slot => slot.at->dayOf->Option.map(day => (retry.number, day, row.status == StepOk)),
-          )
+    let days = grace->Float.toInt
+    let dayOf = at => failedAt->Option.map(t0 => Math.max(0.0, (at->ms -. t0) /. dayMs))
+    // Each charged retry: its number, real-life day, result and when it ran in the demo
+    let charged = retries->Array.filterMap(retry =>
+      retry.charge->Option.flatMap(row =>
+        row.realLife->Option.flatMap(
+          slot =>
+            slot.at
+            ->dayOf
+            ->Option.map(day => (retry.number, day, row.status == StepOk, row.at->ms)),
         )
       )
+    )
     let next = story->Option.flatMap(s => s.nextRetry)->Option.filter(next => !next.pending)
     let nextDay = next->Option.flatMap(next => next.realLife->dayOf)
+    let nextAt =
+      next
+      ->Option.map(next => next.runsAt)
+      ->Option.filter(LogicUtils.isNonEmptyString)
+      ->Option.map(ms)
     let moneyBack =
       story->Option.flatMap(s => s.bank)->Option.flatMap(bank => bank.worksFromAt->dayOf)
-    let today =
-      nextDay
-      ->Option.orElse(charged->Array.at(-1)->Option.map(((_, day, _)) => day))
-      ->Option.getOr(0.0)
-    let whole = day => Math.floor(day)->Float.toInt
-    let days = grace->Float.toInt
-    let todayI = today->whole
-    let nextI = nextDay->Option.map(whole)
-    let moneyI = moneyBack->Option.map(whole)
-    let dot = (~key, ~className) =>
-      <span key className={`h-[6px] w-[6px] shrink-0 rounded-full ${className}`} />
+    let isLive = story->Option.mapOr(false, s => !(s->SimulatorUtils.storyHasEnded))
+
+    let (nowMs, setNowMs) = React.useState(_ => Date.now())
+    React.useEffect(() =>
+      isLive
+        ? {
+            let intervalId = setInterval(() => setNowMs(_ => Date.now()), 250)
+            Some(() => clearInterval(intervalId))
+          }
+        : None
+    , [isLive])
+    // The fill grows from day 0 when the slider first shows
+    let (isShown, setIsShown) = React.useState(_ => false)
+    React.useEffect(() => {
+      let timeoutId = setTimeout(() => setIsShown(_ => true), 700)
+      Some(() => clearTimeout(timeoutId))
+    }, [])
+
+    // Today on the real-life calendar: from the last thing that happened toward the next retry, at
+    // the demo clock's pace; it waits there while Rev Rec picks or is paused
+    let last = switch charged->Array.at(-1) {
+    | Some((_, day, _, at)) => Some((at, day))
+    | None => failedAt->Option.map(t0 => (t0, 0.0))
+    }
+    let today = switch (last, nextAt, nextDay) {
+    | (Some((at0, day0)), Some(at1), Some(day1)) if at1 > at0 && day1 >= day0 =>
+      day0 +. (day1 -. day0) *. Math.max(0.0, Math.min(1.0, (nowMs -. at0) /. (at1 -. at0)))
+    | (Some((_, day0)), _, _) => day0
+    | _ => 0.0
+    }
+    let pct = day => Math.max(0.0, Math.min(100.0, day /. grace *. 100.0))
+    let left = day => {JsxDOMStyle.left: `${day->pct->Float.toString}%`}
+    let todayPct = isShown ? today->pct : 0.0
+    let ticks =
+      [0, 7, 14, 21, 28]
+      ->Array.filter(d => d < days - 3)
+      ->Array.concat([days])
+      ->Array.map(Int.toFloat)
+    let dot = (~className) => <span className={`h-2 w-2 shrink-0 rounded-full ${className}`} />
     let legend = (~mark, ~text) =>
       <span className="flex items-center gap-1.5">
         mark
         {text->React.string}
       </span>
+    // Day 1 is the first 24 hours after the failure, as the story's steps count (proxy: "(day 1)")
+    let dayNumber = day => Math.Int.min(days, day->Math.floor->Float.toInt + 1)
+    let dayText = day => `day ${day->dayNumber->Int.toString}`
+    let marker = "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+
     <AddDataAttributes attributes=[("data-sim", "day-line")]>
       <div
-        className="col-span-2 lg:col-span-3 xl:col-span-1 min-w-0 rounded-xl border border-nd_gray-200 bg-white px-4 py-3.5 flex flex-col gap-2.5">
+        className="col-span-2 lg:col-span-3 xl:col-span-1 min-w-0 rounded-xl border border-nd_gray-200 bg-white px-5 py-3.5 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-3">
           <span className={`${body.sm.semibold} text-nd_gray-500`}>
             {"Days since the charge failed"->React.string}
           </span>
           <span className={`${body.sm.semibold} text-nd_gray-700 tabular-nums`}>
-            {`Day ${todayI->Int.toString} of ${days->Int.toString}`->React.string}
+            {`Day ${today->dayNumber->Int.toString} of ${days->Int.toString}`->React.string}
           </span>
         </div>
-        // One box per day of the grace period
-        <div className="flex gap-[3px]">
-          {Array.fromInitializer(~length=days, d => d)
-          ->Array.map(d => {
-            let onDay = charged->Array.filter(((_, day, _)) => day->whole == d)
-            let isNext = nextI == Some(d)
-            let isToday = d == todayI
-            let title =
-              [
-                d == 0 ? Some("The charge failed") : None,
-                ...onDay->Array.map(((number, _, ok)) => Some(
-                  `Retry ${number->Int.toString} ${ok ? "approved" : "declined"}`,
-                )),
-                isNext ? Some("Next retry") : None,
-                moneyI == Some(d) ? Some("The money is there again") : None,
-              ]
-              ->Array.filterMap(x => x)
-              ->Array.joinWith(" · ")
+        // The slider: the bubble over the thumb, the track, the day marks under it
+        <div className="relative mt-6 h-2">
+          <span className="absolute inset-0 rounded-full bg-nd_gray-100" />
+          {switch moneyBack {
+          | Some(day) if day < grace =>
             <span
-              key={d->Int.toString}
-              title={`Day ${d->Int.toString}${title == "" ? "" : `: ${title}`}`}
-              className={`relative flex h-7 min-w-0 flex-1 items-center justify-center gap-[2px] overflow-hidden rounded-[4px] ${d <=
-                todayI
-                  ? "bg-nd_primary_blue-50"
-                  : "bg-nd_gray-50"} ${isToday
-                  ? "ring-2 ring-inset ring-nd_primary_blue-450"
-                  : ""}`}>
-              <RenderIf condition={moneyI == Some(d)}>
-                <span className="absolute inset-x-0 top-0 h-1 bg-nd_green-500" />
-              </RenderIf>
-              <RenderIf condition={d == 0}> {dot(~key="f", ~className="bg-nd_red-500")} </RenderIf>
-              {onDay
-              ->Array.slice(~start=0, ~end=3)
-              ->Array.map(((number, _, ok)) =>
-                dot(~key=number->Int.toString, ~className=ok ? "bg-nd_green-500" : "bg-nd_gray-400")
-              )
-              ->React.array}
-              <RenderIf condition=isNext>
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full border-2 border-nd_primary_blue-450 bg-white animate-pulse"
-                />
-              </RenderIf>
+              title={`The money is there again from ${day->dayText}`}
+              className="absolute inset-y-0 right-0 rounded-r-full bg-nd_green-100 border-l-2 border-nd_green-500"
+              style={left(day)}
+            />
+          | _ => React.null
+          }}
+          <span
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-nd_primary_blue-200 to-nd_primary_blue-450 transition-[width] duration-700 ease-out"
+            style={{width: `${todayPct->Float.toString}%`}}
+          />
+          <span
+            title="Day 0: the charge failed"
+            className={`${marker} h-3 w-3 bg-nd_red-500 ring-2 ring-white`}
+            style={left(0.0)}
+          />
+          {charged
+          ->Array.map(((number, day, ok, _)) =>
+            <span
+              key={number->Int.toString}
+              title={`Retry ${number->Int.toString} on ${day->dayText}: ${ok
+                  ? "approved"
+                  : "declined"}`}
+              className={`${marker} h-2.5 w-2.5 ring-2 ring-white ${ok
+                  ? "bg-nd_green-500"
+                  : "bg-nd_gray-400"}`}
+              style={left(day)}
+            />
+          )
+          ->React.array}
+          {switch (next, nextDay) {
+          | (Some(next), Some(day)) =>
+            <span key="next" title={`Retry ${next.number->Int.toString}: ${day->dayText}`}>
+              <span
+                className={`${marker} h-4 w-4 bg-nd_primary_blue-200 animate-ping`}
+                style={left(day)}
+              />
+              <span
+                className={`${marker} h-4 w-4 border-2 border-nd_primary_blue-450 bg-white`}
+                style={left(day)}
+              />
+            </span>
+          | _ => React.null
+          }}
+          // The thumb and its bubble
+          <span
+            className={`${marker} h-4 w-4 bg-nd_primary_blue-450 ring-4 ring-nd_primary_blue-100 shadow transition-[left] duration-700 ease-out`}
+            style={{left: `${todayPct->Float.toString}%`}}
+          />
+          <span
+            className={`absolute -top-6 -translate-x-1/2 whitespace-nowrap rounded-md bg-nd_gray-800 px-1.5 py-0.5 ${body.xs.semibold} text-white transition-[left] duration-700 ease-out`}
+            style={{left: `${Math.max(5.0, Math.min(95.0, todayPct))->Float.toString}%`}}>
+            {"Today"->React.string}
+          </span>
+        </div>
+        <div className={`relative mt-1.5 h-4 ${body.xs.medium} text-nd_gray-400 tabular-nums`}>
+          {ticks
+          ->Array.map(day => {
+            let isFirst = day == 0.0
+            let isLast = day == grace
+            <span
+              key={day->Float.toString}
+              className={`absolute whitespace-nowrap ${isFirst
+                  ? ""
+                  : isLast
+                  ? "-translate-x-full"
+                  : "-translate-x-1/2"}`}
+              style={left(day)}>
+              {(
+                isFirst
+                  ? "Failed"
+                  : isLast
+                  ? `Day ${days->Int.toString} · grace ends`
+                  : day->Float.toInt->Int.toString
+              )->React.string}
             </span>
           })
           ->React.array}
         </div>
         <div
-          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 ${body.xs.medium} text-nd_gray-500`}>
-          <span> {"Day 0: failed"->React.string} </span>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {legend(~mark=dot(~key="r", ~className="bg-nd_gray-400"), ~text="Retry")}
-            {legend(
+          className={`mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 ${body.xs.medium} text-nd_gray-500`}>
+          {legend(~mark=dot(~className="bg-nd_gray-400"), ~text="Retry")}
+          {legend(
+            ~mark=<span
+              className="h-2.5 w-2.5 rounded-full border-2 border-nd_primary_blue-450 bg-white"
+            />,
+            ~text=switch nextDay {
+            | Some(day) => `Next retry, ${day->dayText}`
+            | None => "Next retry"
+            },
+          )}
+          {switch moneyBack {
+          | Some(day) if day < grace =>
+            legend(
               ~mark=<span
-                className="h-2 w-2 rounded-full border-2 border-nd_primary_blue-450 bg-white"
+                className="h-2 w-3 rounded-sm bg-nd_green-100 border-l-2 border-nd_green-500"
               />,
-              ~text="Next retry",
-            )}
-            <RenderIf condition={moneyBack->Option.isSome}>
-              {legend(
-                ~mark=<span className="h-1 w-3 rounded bg-nd_green-500" />,
-                ~text="Money there again",
-              )}
-            </RenderIf>
-          </span>
-          <span> {`Day ${days->Int.toString}: grace ends`->React.string} </span>
+              ~text=`Money back from ${day->dayText}`,
+            )
+          | _ => React.null
+          }}
         </div>
       </div>
     </AddDataAttributes>
@@ -490,6 +579,12 @@ let make = (
     ~isLive=story->Option.mapOr(false, s => !(s->SimulatorUtils.storyHasEnded)),
   )
   let (stats, isHard, isSeeded) = facts(~live?, firstCharge)
+  // The tiles come in one at a time when the row first shows; a later result flips in at once
+  let (isFirst, setIsFirst) = React.useState(_ => true)
+  React.useEffect(() => {
+    let timeoutId = setTimeout(() => setIsFirst(_ => false), 1600)
+    Some(() => clearTimeout(timeoutId))
+  }, [])
   let hero = heroOf(~next, ~isHard)
 
   // The same rule as the story's waiting line: no time while a smart pick moves to the demo clock
@@ -731,7 +826,9 @@ let make = (
       // The reason, the story's days as a line, and the next retry. The counts behind the pick are
       // in the charts and the steps.
       <div
-        className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)_minmax(0,1.7fr)] gap-3 items-stretch">
+        className={`${isFirst
+            ? "smb-first "
+            : ""}grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)_minmax(0,1.7fr)] gap-3 items-stretch`}>
         {stats
         ->Array.slice(~start=0, ~end=1)
         ->Array.map(stat => <StatBox key=stat.label stat />)
