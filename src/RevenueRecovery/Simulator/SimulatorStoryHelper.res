@@ -644,30 +644,19 @@ let renewalCardOf = (id, ~renewalAt: Date.t) => {
     card(
       "Daily limit",
       "card_velocity_exceeded",
-      `You'll hit your daily spending limit. It resets on ${inDays(1)}.`,
+      `You'll hit your daily limit. It resets ${inDays(1)}.`,
     )
   | 14 => card("Low balance", "insufficient_funds", `Your account will be low until ${inDays(1)}.`)
   | 19 =>
     card(
       "Last chance",
       "insufficient_funds",
-      `No money until ${inDays(5)}, just before fixed retries end.`,
+      `No money until ${inDays(5)}, just before retries end.`,
     )
-  | 20 =>
-    card("Too late", "insufficient_funds", `No money until ${inDays(6)}, after fixed retries end.`)
+  | 20 => card("Too late", "insufficient_funds", `No money until ${inDays(6)}, after retries end.`)
   | 11 => card("Bank hiccup", "processing_error", "Your bank's system will be down for 2 hours.")
-  | 13 =>
-    card(
-      "Fraud check",
-      "do_not_honor",
-      `Your bank pauses the card until you confirm on ${inDays(1)}.`,
-    )
-  | 16 =>
-    card(
-      "Travel block",
-      "do_not_honor",
-      `You'll be abroad. Your bank blocks the card until ${inDays(2)}.`,
-    )
+  | 13 => card("Fraud check", "do_not_honor", `Card paused until you confirm on ${inDays(1)}.`)
+  | 16 => card("Travel block", "do_not_honor", `You're abroad. Card blocked until ${inDays(2)}.`)
   | _ => None
   }
 }
@@ -737,29 +726,27 @@ module RenewalPicker = {
           if !isBusy {
             onPick()
           }}
-        className={`flex flex-col gap-3.5 rounded-2xl border-2 p-5 text-left transition-all ${isOn
+        className={`flex flex-col gap-4 rounded-2xl border-2 px-6 py-5 text-left transition-all ${isOn
             ? "border-nd_primary_blue-450 bg-nd_primary_blue-50 shadow-sm"
             : "border-nd_gray-200 bg-white hover:border-nd_gray-400 hover:shadow-sm"} ${isBusy &&
           !isOn
             ? "cursor-not-allowed opacity-50"
             : "cursor-pointer"}`}>
-        <span className="flex items-start gap-3">
+        <span className="flex items-center gap-4">
           <span
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${isOn
+            className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${isOn
                 ? "bg-white text-nd_primary_blue-500"
                 : "bg-nd_primary_blue-50 text-nd_primary_blue-500"}`}>
-            <Icon name=icon size=22 />
+            <Icon name=icon size=26 />
           </span>
-          <span className="flex min-w-0 flex-col">
-            <span className={`${heading.sm.semibold} text-nd_gray-800`}>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className={`${heading.md.semibold} text-nd_gray-800`}>
               {detail->Option.mapOr(title, d => d.name)->React.string}
             </span>
             {switch detail {
             | Some(d) if d.code == "" => React.null
             | Some(d) =>
-              <span className="font-mono text-[13px] text-nd_gray-500">
-                {d.code->React.string}
-              </span>
+              <span className="font-mono text-sm text-nd_gray-500"> {d.code->React.string} </span>
             | None =>
               <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
             }}
@@ -815,7 +802,7 @@ module RenewalPicker = {
         </RenderIf>
         <div className="relative">
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-fr gap-4 transition-[filter,opacity] duration-500 ${intro
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-fr gap-5 transition-[filter,opacity] duration-500 ${intro
                 ? "blur-[3px] opacity-40 pointer-events-none select-none"
                 : ""}`}
             ariaHidden=intro>
@@ -1000,29 +987,33 @@ module RenewalJourney = {
       <div className="flex flex-col gap-5">
         <style> {SimulatorSignup.css->React.string} </style>
         {switch stage {
-        | Counting | Finishing =>
+        | Counting =>
           <div key="month" className="sgn-pop flex flex-col items-center gap-6 py-14">
             <span className={`${body.lg.semibold} text-nd_gray-500`}>
-              {(
-                stage == Counting
-                  ? `Subscribed to ${plan}. The month goes by…`
-                  : `On to the renewal on ${renewalDate}…`
-              )->React.string}
+              {`Subscribed to ${plan}. The month goes by…`->React.string}
             </span>
             <SimulatorSignup.MonthCalendar day total />
             <span className={`${body.md.medium} text-nd_gray-500 tabular-nums`}>
               {`Day ${day->Int.toString} of ${total->Int.toString} · next renewal ${renewalDate}`->React.string}
             </span>
           </div>
-        | Picking =>
+        // Stopped for the pick; after it, the same clock runs on to the renewal day while the picked
+        // card stays in view (user, 2 Nov)
+        | Picking | Finishing =>
           <div key="pick" className="sgn-pop flex flex-col gap-5">
-            // The month, stopped
             <div
               className="flex items-center gap-4 rounded-2xl border border-nd_gray-150 bg-white px-5 py-3">
               <SimulatorSignup.MonthCalendar day total compact=true />
               <div className="flex flex-col gap-0.5">
-                <span className={`${body.lg.semibold} text-nd_gray-800`}>
-                  {`${left} to the renewal`->React.string}
+                <span className={`${body.lg.semibold} text-nd_gray-800 tabular-nums`}>
+                  {(
+                    day >= total
+                      ? "Today is the renewal day"
+                      : {
+                          let toGo = total - day
+                          `${toGo->Int.toString} ${toGo == 1 ? "day" : "days"} to the renewal`
+                        }
+                  )->React.string}
                 </span>
                 <span className={`${body.md.medium} text-nd_gray-500`}>
                   {`${plan} renews on ${renewalDate} for ${renewal.amount->SimulatorSignup.dollars} on ${renewal.last4->SimulatorSignup.brandLine}.`->React.string}
@@ -1034,7 +1025,8 @@ module RenewalJourney = {
               form
               setForm
               renewal
-              isBusy
+              // Locked once picked: the other cards fade while the month runs on
+              isBusy={isBusy || stage == Finishing}
               showIntro
               onIntroDone
               startPicked
