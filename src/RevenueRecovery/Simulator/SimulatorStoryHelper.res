@@ -755,6 +755,7 @@ module RenewalPicker = {
               {detail->Option.mapOr(title, d => d.name)->React.string}
             </span>
             {switch detail {
+            | Some(d) if d.code == "" => React.null
             | Some(d) =>
               <span className="font-mono text-[13px] text-nd_gray-500">
                 {d.code->React.string}
@@ -833,14 +834,26 @@ module RenewalPicker = {
               )
             )
             ->React.array}
+            // The same three parts as the other cards: the name, decline codes, what happens
             {card(
               ~key="more",
-              ~title=pickedMore->Option.mapOr(
-                `More stories (${moreStories->Array.length->Int.toString})`,
-                preset => preset.title,
-              ),
+              ~title="",
               ~icon=pickedMore->Option.mapOr("nd-plus", storyIconOf),
-              ~line=pickedMore->Option.mapOr("Every other situation", preset => preset.summary),
+              ~line="",
+              ~detail=switch pickedMore {
+              | Some(preset) => {
+                  name: preset.title,
+                  code: preset.fields.firstCharge
+                  ->SimulatorTestCards.declineOf
+                  ->Option.getOr(""),
+                  line: preset.summary,
+                }
+              | None => {
+                  name: `More stories (${moreStories->Array.length->Int.toString})`,
+                  code: "generic_decline, stolen_card and more",
+                  line: "A stolen card, a second invoice and more.",
+                }
+              },
               ~isOn=pickedMore->Option.isSome,
               ~onPick=() => setShowMore(_ => true),
             )}
