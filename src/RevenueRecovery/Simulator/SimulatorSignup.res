@@ -341,7 +341,9 @@ let focusFirstInput: Dom.element => unit = %raw(`function (el) {
   if (input) input.focus();
 }`)
 
-type phase = Form | Paid(result) | Later(result) | Charging(result) | Declined(result)
+// The signup ends once the first month is paid; the month, the renewal and its decline play in the
+// story page's renewal journey (SimulatorStoryHelper.RenewalJourney)
+type phase = Form | Paid(result)
 
 let css = `
 @keyframes sgn-hand { from { transform: rotate(0deg); } to { transform: rotate(720deg); } }
@@ -403,78 +405,75 @@ module PaidNow = {
 }
 
 // One month on: the calendar counts the days from the signup to today
-module MonthLater = {
+// Whole days from the signup (a month ago) to today, both at midnight
+let daysSinceSignup = () =>
+  Math.round(
+    (Date.make()->midnight->Date.getTime -. monthAgo()->Date.getTime) /. 86_400_000.0,
+  )->Float.toInt
+
+// The month on a calendar: the day it shows is the journey's (it counts, stops for the pick, then
+// runs to today). `compact`: the small one above the story picker.
+module MonthCalendar = {
   @react.component
-  let make = (~result: result, ~onEnd) => {
-    let start = monthAgo()
-    // Whole days from the signup to today (both at midnight, so the time of day does not count)
-    let total =
-      Math.round(
-        (Date.make()->midnight->Date.getTime -. start->Date.getTime) /. 86_400_000.0,
-      )->Float.toInt
-    let (day, setDay) = React.useState(_ => 0)
-    React.useEffect(() => {
-      let id = setInterval(() => setDay(d => d < total ? d + 1 : d), 2600 / Math.Int.max(total, 1))
-      let endId = setTimeout(() => onEnd(), 3600)
-      Some(
-        () => {
-          clearInterval(id)
-          clearTimeout(endId)
-        },
-      )
-    }, [])
-    let shown = start->plusDays(day)
-    <div className="sgn-pop flex flex-col items-center gap-6 py-16">
-      <span className={`${body.lg.semibold} text-nd_gray-500`}>
-        {`Subscribed to ${brandName} ${result.plan}. One month later…`->React.string}
+  let make = (~day, ~total, ~compact=false) => {
+    let shown = monthAgo()->plusDays(day)
+    let tag = if day >= total {
+      <span
+        key="today"
+        className={`sgn-pop rounded-full bg-[#E7F6F1] px-2.5 py-0.5 ${body.sm.semibold} text-[#0E8A6A]`}>
+        {"Today"->React.string}
       </span>
-      <div className="flex items-center gap-8">
-        <svg width="64" height="64" viewBox="0 0 64 64" ariaHidden=true>
-          <circle cx="32" cy="32" r="29" fill="white" stroke="#D0D5DD" strokeWidth="3" />
-          <line x1="32" y1="32" x2="32" y2="15" stroke=ink strokeWidth="3" strokeLinecap="round" />
-          <line
-            className="sgn-hand"
-            x1="32"
-            y1="32"
-            x2="32"
-            y2="9"
-            stroke=green
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          />
-          <circle cx="32" cy="32" r="3" fill=ink />
-        </svg>
+    } else if day == 0 {
+      <span
+        key="signup"
+        className={`rounded-full bg-nd_gray-100 px-2.5 py-0.5 ${body.sm.semibold} text-nd_gray-600`}>
+        {"Signup day"->React.string}
+      </span>
+    } else {
+      React.null
+    }
+    let size = compact ? 44 : 64
+    <div className={`flex items-center ${compact ? "gap-4" : "gap-8"}`}>
+      // The clock's hand turns with the days
+      <svg
+        width={size->Int.toString} height={size->Int.toString} viewBox="0 0 64 64" ariaHidden=true>
+        <circle cx="32" cy="32" r="29" fill="white" stroke="#D0D5DD" strokeWidth="3" />
+        <line x1="32" y1="32" x2="32" y2="15" stroke=ink strokeWidth="3" strokeLinecap="round" />
+        <line
+          x1="32"
+          y1="32"
+          x2="32"
+          y2="9"
+          stroke=green
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          style={{
+            transform: `rotate(${(day * 24)->Int.toString}deg)`,
+            transformOrigin: "32px 32px",
+            transition: "transform .12s linear",
+          }}
+        />
+        <circle cx="32" cy="32" r="3" fill=ink />
+      </svg>
+      <div
+        className={`${compact
+            ? "w-24"
+            : "w-40"} overflow-hidden rounded-2xl border border-nd_gray-200 bg-white shadow-sm text-center`}>
         <div
-          className="w-40 overflow-hidden rounded-2xl border border-nd_gray-200 bg-white shadow-sm text-center">
-          <div className={`bg-[#0E8A6A] py-1.5 ${body.md.semibold} text-white`}>
-            {months->Array.getUnsafe(shown->Date.getMonth)->React.string}
-          </div>
-          <div className="pt-3 text-5xl font-semibold tabular-nums text-nd_gray-800">
-            {shown->Date.getDate->Int.toString->React.string}
-          </div>
-          // Which day this is, so the jump in dates reads (user, 2 Nov): the signup, then today
-          <div className="flex h-9 items-center justify-center">
-            {if day >= total {
-              <span
-                key="today"
-                className={`sgn-pop rounded-full bg-[#E7F6F1] px-2.5 py-0.5 ${body.sm.semibold} text-[#0E8A6A]`}>
-                {"Today"->React.string}
-              </span>
-            } else if day == 0 {
-              <span
-                key="signup"
-                className={`rounded-full bg-nd_gray-100 px-2.5 py-0.5 ${body.sm.semibold} text-nd_gray-600`}>
-                {"Signup day"->React.string}
-              </span>
-            } else {
-              React.null
-            }}
-          </div>
+          className={`bg-[#0E8A6A] ${compact ? "py-1" : "py-1.5"} ${body.md.semibold} text-white`}>
+          {months->Array.getUnsafe(shown->Date.getMonth)->React.string}
         </div>
+        <div
+          className={`${compact
+              ? "py-1.5 text-3xl"
+              : "pt-3 text-5xl"} font-semibold tabular-nums text-nd_gray-800`}>
+          {shown->Date.getDate->Int.toString->React.string}
+        </div>
+        <RenderIf condition={!compact}>
+          // Which day this is, so the jump in dates reads: the signup, then today
+          <div className="flex h-9 items-center justify-center"> tag </div>
+        </RenderIf>
       </div>
-      <span className={`${body.md.medium} text-nd_gray-500 tabular-nums`}>
-        {`Day ${day->Int.toString} of ${total->Int.toString} · next renewal ${Date.make()->shortDate}`->React.string}
-      </span>
     </div>
   }
 }
@@ -581,8 +580,18 @@ module ChargeFlow = {
 // The renewal failed: the control center's failed panel, as the story's decline
 module RenewalDeclined = {
   @react.component
-  let make = (~result: result, ~onNext) => {
-    let message = `Declined · ${result.amount->dollars} · ${result.last4->brandLine}`
+  let make = (
+    ~result: result,
+    // The bank's reason, from the story's own declined charge, once it is in
+    ~reason: option<string>=?,
+    // The invoice waits for Rev Rec (the story's charge has declined)
+    ~isReady,
+    ~onPass,
+  ) => {
+    let message = switch reason {
+    | Some(reason) => `${reason} · ${result.amount->dollars} · ${result.last4->brandLine}`
+    | None => `Declined · ${result.amount->dollars} · ${result.last4->brandLine}`
+    }
     <AddDataAttributes attributes=[("data-sim", "renewal-declined")]>
       <div className="sgn-pop flex flex-col gap-5 max-w-[560px] w-full mx-auto">
         <span className={`${body.md.semibold} text-nd_gray-500`}>
@@ -601,14 +610,22 @@ module RenewalDeclined = {
             </SDKProvider.Provider>
           </div>
         </div>
-        <Button
-          text="See why it failed and what Rev Rec does"
-          buttonType=Primary
-          buttonSize=Large
-          customButtonStyle="!w-full"
-          rightIcon={FontAwesome("arrow-right")}
-          onClick={_ => onNext()}
-        />
+        <AddDataAttributes attributes=[("data-sim", "pass-to-revrec")]>
+          <div className="flex flex-col">
+            <Button
+              text={isReady ? "Pass it to Rev Rec" : "Getting the invoice ready…"}
+              buttonType=Primary
+              buttonSize=Large
+              buttonState={isReady ? Normal : Loading}
+              customButtonStyle="!w-full"
+              rightIcon=?{isReady ? Some(FontAwesome("arrow-right")) : None}
+              onClick={_ =>
+                if isReady {
+                  onPass()
+                }}
+            />
+          </div>
+        </AddDataAttributes>
       </div>
     </AddDataAttributes>
   }
@@ -797,10 +814,7 @@ let make = (~onDone: result => unit, ~onSkip) => {
   <div className="flex flex-col gap-6">
     <style> {css->React.string} </style>
     {switch phase {
-    | Paid(result) => <PaidNow result onEnd={() => setPhase(_ => Later(result))} />
-    | Later(result) => <MonthLater result onEnd={() => setPhase(_ => Charging(result))} />
-    | Charging(result) => <ChargeFlow result onEnd={() => setPhase(_ => Declined(result))} />
-    | Declined(result) => <RenewalDeclined result onNext={() => onDone(result)} />
+    | Paid(result) => <PaidNow result onEnd={() => onDone(result)} />
     | Form =>
       <AddDataAttributes attributes=[("data-sim", "signup")]>
         // One screen: the logo and Skip on top; the plan and the bill on the left, the payment on

@@ -620,9 +620,12 @@ module RenewalPicker = {
     ~form: billingForm,
     ~setForm,
     ~renewal: SimulatorSignup.result,
-    // From Hand it to Rev Rec until the running view opens
+    // While a picked story starts
     ~isBusy,
+    // A pick runs the story at once (user, 2 Nov: no Hand it to Rev Rec on the cards)
     ~onRun,
+    // The customer's words in the intro (the journey says how many days are left)
+    ~message=?,
     // The customer's intro, once per visit
     ~showIntro=true,
     ~onIntroDone=() => (),
@@ -634,7 +637,10 @@ module RenewalPicker = {
     let presetById = id => options.presets->Array.find(preset => preset.id == id)
     let onCards = id => id->isMainStory || renewalExtraStories->Array.includes(id)
     let moreStories = options.presets->Array.filter(preset => !(preset.id->onCards))
-    let message = `Hi! You're the customer now. Last month you signed up for ${SimulatorSignup.brandName} ${renewal.plan}. Today, your ${renewal.amount->SimulatorSignup.dollars} renewal on ${renewal.last4->SimulatorSignup.brandLine} was declined. Pick what's going on in your life, and watch Rev Rec get the payment back.`
+    let message =
+      message->Option.getOr(
+        `Hi! You're the customer now. You signed up for ${SimulatorSignup.brandName} ${renewal.plan} at ${renewal.amount->SimulatorSignup.dollars} a month on ${renewal.last4->SimulatorSignup.brandLine}. Pick what's going on in your life this month, and watch what happens at the renewal.`,
+      )
     let (intro, setIntro) = React.useState(_ => showIntro)
     let (typed, setTyped) = React.useState(_ => 0)
     let isTyped = typed >= message->String.length
@@ -658,8 +664,9 @@ module RenewalPicker = {
         customer: "new",
       })
       setPicked(_ => true)
+      onRun()
     }
-    // A story card; the picked one holds Hand it to Rev Rec
+    // A story card: a click picks it and runs it
     let card = (~key, ~title, ~icon, ~line, ~isOn, ~onPick) =>
       <div
         key
@@ -692,36 +699,6 @@ module RenewalPicker = {
           <span className={`${heading.sm.semibold} text-nd_gray-800`}> {title->React.string} </span>
           <span className={`${body.md.medium} text-nd_gray-500`}> {line->React.string} </span>
         </span>
-        <RenderIf condition=isOn>
-          <AddDataAttributes attributes=[("data-sim", "renewal-handover")]>
-            <div className="mt-auto flex flex-col gap-2 border-t border-nd_primary_blue-100 pt-3">
-              {isBusy
-                ? <>
-                    <span className={`${body.sm.semibold} text-nd_gray-700`}>
-                      {"Handing the failed renewal to Rev Rec…"->React.string}
-                    </span>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
-                      <div
-                        className="sim-handover-bar h-full w-1/3 rounded-full bg-nd_primary_blue-450"
-                      />
-                    </div>
-                  </>
-                : <button
-                    type_="button"
-                    onClick={e => {
-                      ReactEvent.Mouse.stopPropagation(e)
-                      onRun()
-                    }}
-                    className={`flex items-center justify-center gap-2 rounded-lg bg-nd_primary_blue-450 px-4 py-2.5 ${body.md.semibold} text-white hover:bg-nd_primary_blue-500`}>
-                    {"Hand it to Rev Rec"->React.string}
-                    <Icon name="nd-arrow-right" size=14 />
-                  </button>}
-              <span className={`${body.xs.medium} text-nd_gray-500`}>
-                {"Rev Rec's smart model then picks when to retry."->React.string}
-              </span>
-            </div>
-          </AddDataAttributes>
-        </RenderIf>
       </div>
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
     let cardIds =
@@ -833,6 +810,145 @@ module RenewalPicker = {
             setShowMore(_ => false)
           }}
         />
+      </div>
+    </AddDataAttributes>
+  }
+}
+
+// After a signup (user, 2 Nov): the month runs on the calendar and stops on a random day past the
+// 15th; the customer picks what is going on in their life; the month runs to the renewal day, the
+// renewal is declined, and Pass it to Rev Rec hands it over (SimulatorStory plays the scene). The
+// picked story starts at once, so its real declined charge is in by the time the decline shows.
+module RenewalJourney = {
+  type stage = Counting | Picking | Finishing | Charging | Declined
+  @react.component
+  let make = (
+    ~renewal: SimulatorSignup.result,
+    ~options: formOptions,
+    ~form: billingForm,
+    ~setForm,
+    ~isBusy,
+    ~showIntro,
+    ~onIntroDone,
+    ~startPicked=false,
+    // Straight to the stop (Try another story)
+    ~startAtPause=false,
+    // A story was picked: start it
+    ~onPicked,
+    // The bank's reason, once the story's charge has declined
+    ~reason: option<string>=?,
+    // The invoice waits for Rev Rec
+    ~isReady,
+    // The story failed to start: back to the pick (the page says why)
+    ~failed,
+    ~onPass,
+  ) => {
+    let total = SimulatorSignup.daysSinceSignup()
+    // A different day each time, past the 15th and at least 3 days before the renewal
+    let (pauseDay, _) = React.useState(_ => {
+      let last = Math.Int.max(16, total - 3)
+      16 + Math.floor(Math.random() *. (last - 16 + 1)->Int.toFloat)->Float.toInt
+    })
+    let (stage, setStage) = React.useState(_ => startAtPause ? Picking : Counting)
+    let (day, setDay) = React.useState(_ => startAtPause ? pauseDay : 0)
+    // The month runs: to the stop, then (after the pick) to the renewal day
+    React.useEffect(() =>
+      switch stage {
+      | Counting | Finishing => {
+          let target = stage == Counting ? pauseDay : total
+          let id = setInterval(
+            () => setDay(d => d < target ? d + 1 : d),
+            stage == Counting ? 75 : 110,
+          )
+          Some(() => clearInterval(id))
+        }
+      | _ => None
+      }
+    , [stage])
+    React.useEffect(() =>
+      switch stage {
+      | Counting if day >= pauseDay => {
+          let id = setTimeout(() => setStage(_ => Picking), 400)
+          Some(() => clearTimeout(id))
+        }
+      | Finishing if day >= total => {
+          let id = setTimeout(() => setStage(_ => Charging), 1000)
+          Some(() => clearTimeout(id))
+        }
+      | _ => None
+      }
+    , (stage, day))
+    // Only a new failure sends it back (the old story's error clears when the next one starts)
+    let wasFailed = React.useRef(failed)
+    React.useEffect(() => {
+      if failed && !wasFailed.current && stage != Picking && stage != Counting {
+        setStage(_ => Picking)
+        setDay(_ => pauseDay)
+      }
+      wasFailed.current = failed
+      None
+    }, [failed])
+    let daysLeft = total - pauseDay
+    let renewalDate = Date.make()->SimulatorSignup.shortDate
+    let left = `${daysLeft->Int.toString} ${daysLeft == 1 ? "day" : "days"}`
+    let plan = `${SimulatorSignup.brandName} ${renewal.plan}`
+
+    <AddDataAttributes attributes=[("data-sim", "renewal-journey")]>
+      <div className="flex flex-col gap-5">
+        <style> {SimulatorSignup.css->React.string} </style>
+        {switch stage {
+        | Counting | Finishing =>
+          <div key="month" className="sgn-pop flex flex-col items-center gap-6 py-14">
+            <span className={`${body.lg.semibold} text-nd_gray-500`}>
+              {(
+                stage == Counting
+                  ? `Subscribed to ${plan}. The month goes by…`
+                  : `On to the renewal on ${renewalDate}…`
+              )->React.string}
+            </span>
+            <SimulatorSignup.MonthCalendar day total />
+            <span className={`${body.md.medium} text-nd_gray-500 tabular-nums`}>
+              {`Day ${day->Int.toString} of ${total->Int.toString} · next renewal ${renewalDate}`->React.string}
+            </span>
+          </div>
+        | Picking =>
+          <div key="pick" className="sgn-pop flex flex-col gap-5">
+            // The month, stopped
+            <div
+              className="flex items-center gap-4 rounded-2xl border border-nd_gray-150 bg-white px-5 py-3">
+              <SimulatorSignup.MonthCalendar day total compact=true />
+              <div className="flex flex-col gap-0.5">
+                <span className={`${body.lg.semibold} text-nd_gray-800`}>
+                  {`${left} to the renewal`->React.string}
+                </span>
+                <span className={`${body.md.medium} text-nd_gray-500`}>
+                  {`${plan} renews on ${renewalDate} for ${renewal.amount->SimulatorSignup.dollars} on ${renewal.last4->SimulatorSignup.brandLine}.`->React.string}
+                </span>
+              </div>
+            </div>
+            <RenewalPicker
+              options
+              form
+              setForm
+              renewal
+              isBusy
+              showIntro
+              onIntroDone
+              startPicked
+              message={`Hi! You're the customer now. You signed up for ${plan} at ${renewal.amount->SimulatorSignup.dollars} a month. Your renewal is in ${left}, on ${renewalDate}. Pick what's going on in your life, and watch what happens.`}
+              onRun={() => {
+                setStage(_ => Finishing)
+                onPicked()
+              }}
+            />
+          </div>
+        | Charging =>
+          <SimulatorSignup.ChargeFlow
+            key="charge" result=renewal onEnd={() => setStage(_ => Declined)}
+          />
+        | Declined =>
+          <SimulatorSignup.RenewalDeclined key="declined" result=renewal ?reason isReady onPass />
+        }}
       </div>
     </AddDataAttributes>
   }

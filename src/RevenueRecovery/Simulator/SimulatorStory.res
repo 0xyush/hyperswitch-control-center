@@ -514,24 +514,19 @@ let make = (~storyIdFromUrl: option<string>) => {
       ~eventName="recovery_simulator_handover",
       ~failText="The invoice did not reach Rev Rec. Try again.",
     )->ignore
-  // Auto-play hands over by itself, and so does a renewal: the signup already showed the decline
-  let isRenewal = signup->Option.isSome
+  // Auto-play hands over by itself; a renewal waits for Pass it to Rev Rec (user, 2 Nov)
   // Once per story: a handover that fails must not try again in a loop (it did, 2 Nov)
   let autoHandedOver = React.useRef("")
   React.useEffect(() => {
     switch story {
-    | Some(s)
-      if (autoPlay || isRenewal) &&
-      canHandover &&
-      !isBusy &&
-      autoHandedOver.current != s.storyId => {
+    | Some(s) if autoPlay && canHandover && !isBusy && autoHandedOver.current != s.storyId => {
         autoHandedOver.current = s.storyId
         onNext()
       }
     | _ => ()
     }
     None
-  }, (autoPlay, isRenewal, canHandover, isBusy))
+  }, (autoPlay, canHandover, isBusy))
 
   // Which steps fade in: those added in this tab, not those known when the story was opened
   let itemCount = Math.Int.max(visibleCount, 1)
@@ -764,32 +759,41 @@ let make = (~storyIdFromUrl: option<string>) => {
           onSkip={() => quickSignup()->ignore}
         />
       } else if showForm && signup->Option.isSome {
-        // After a signup: pick why the renewal failed, then hand it to Rev Rec
+        // After a signup: the month, the pick, the renewal's decline, then Pass it to Rev Rec
         switch signup {
         | Some(renewal) =>
-          <RenewalPicker
+          <RenewalJourney
+            renewal
             options
             form
             setForm
-            renewal
             isBusy=isHandingOver
-            onRun={() => {
+            showIntro={!introSeen && !isPresetLink}
+            onIntroDone={() => setIntroSeen(_ => true)}
+            startPicked=isPresetLink
+            // Try another story: straight to the stopped month
+            startAtPause=introSeen
+            // The pick starts the story at once (after the form takes the pick: runWhenReady), so
+            // its declined charge is in by the time the decline shows
+            onPicked={() => {
+              switch signup {
+              // Its signup already started a story: sign up again first
+              | Some(prev) if !resigning && prev.signupId == usedSignupId.current =>
+                resignup(prev)->ignore
+              | _ => ()
+              }
+              setRunWhenReady(_ => true)
+            }}
+            reason=?{declined->Option.map(fst)}
+            isReady={canHandover && !isBusy}
+            failed=startFailed
+            // Pass it to Rev Rec: the scene, and the handover
+            onPass={() => {
               setSceneMinDone(_ => false)
               setSceneMaxDone(_ => false)
               setSceneAt(_ => Some(Date.now()))
-              switch signup {
-              | _ if resigning => setRunWhenReady(_ => true)
-              // Its signup already started a story (one that failed, say): sign up again first
-              | Some(prev) if prev.signupId == usedSignupId.current => {
-                  setRunWhenReady(_ => true)
-                  resignup(prev)->ignore
-                }
-              | _ => onCharge()->ignore
-              }
+              onNext()
             }}
-            showIntro={!introSeen && !isPresetLink}
-            startPicked=isPresetLink
-            onIntroDone={() => setIntroSeen(_ => true)}
           />
         | None => React.null
         }
