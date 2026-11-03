@@ -243,9 +243,16 @@ const prof = (s: Story): ProfileRef => s.profileRef ?? PROFILES.story;
 let nextSlot = 0;
 // The least time a visitor gets to see each retry coming (seconds; the sim stretches its demo
 // clock so no retry is booked sooner, selfhost/sim/sim.mjs). SIM_MIN_LEAD_SEC=0 turns it off.
-const MIN_LEAD_SEC = Number(process.env.SIM_MIN_LEAD_SEC ?? 30);
-const minLead = (): Record<string, string> =>
-  MIN_LEAD_SEC > 0 ? { "metadata[sim_min_lead]": String(MIN_LEAD_SEC) } : {};
+// Off by default (user, 2 Nov): only retry 1 gets a fixed lead; later retries keep the model's own
+// timing. SIM_MIN_LEAD_SEC=30 brings back a minimum warning before every retry.
+const MIN_LEAD_SEC = Number(process.env.SIM_MIN_LEAD_SEC ?? 0);
+// Retry 1 is booked exactly this far out (user, 2 Nov: "20 seconds"; the handover scene uses about 2 s
+// of it, so the story page opens on about 0:20). SIM_FIRST_LEAD_SEC=0 turns it off.
+const FIRST_LEAD_SEC = Number(process.env.SIM_FIRST_LEAD_SEC ?? 22);
+const minLead = (): Record<string, string> => ({
+  ...(MIN_LEAD_SEC > 0 ? { "metadata[sim_min_lead]": String(MIN_LEAD_SEC) } : {}),
+  ...(FIRST_LEAD_SEC > 0 ? { "metadata[sim_first_lead]": String(FIRST_LEAD_SEC) } : {}),
+});
 
 const PACE_MS = 200;
 async function pace() {

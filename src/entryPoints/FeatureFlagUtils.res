@@ -96,6 +96,8 @@ type featureFlag = {
   paymentLinkOperations: bool,
   simulatorDemoSession: bool,
   devRecoverySimulator: bool,
+  // Portfolio Run and Learn Rev Rec in the simulator (off: reviewers see the Invoice Story only)
+  devRecoverySimulatorExtras: bool,
 }
 
 let featureFlagType = (featureFlags: JSON.t) => {
@@ -194,6 +196,7 @@ let featureFlagType = (featureFlags: JSON.t) => {
     paymentLinkOperations: dict->getBool("payment_link_operations", false),
     simulatorDemoSession: dict->getBool("simulator_demo_session", false),
     devRecoverySimulator: dict->getBool("dev_recovery_simulator", false),
+    devRecoverySimulatorExtras: dict->getBool("dev_recovery_simulator_extras", false),
   }
 }
 

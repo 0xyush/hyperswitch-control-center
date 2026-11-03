@@ -9,6 +9,9 @@ let drawerSubHeading = "How Rev Rec recovers failed payments, one part at a time
 let stepText = (text: string) =>
   <p className={`${body.md.medium} text-nd_gray-600`}> {text->SimulatorGlossary.linkTerms} </p>
 
+// The steps that open Portfolio Run and Learn Rev Rec: shown only with their flag
+let extraStepTitles = ["Run a portfolio", "Learn Rev Rec"]
+
 let steps: array<stepDetails> = [
   {
     title: "What Rev Rec is",

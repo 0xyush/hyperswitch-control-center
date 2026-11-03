@@ -73,15 +73,14 @@ let revenueRecoverySimulatorPortfolio = {
   })
 }
 
-let recoverySidebars = (_isLiveMode, ~showSimulator) => {
+// showExtras (flag dev_recovery_simulator_extras): Portfolio Run and Learn Rev Rec. Off for reviewers,
+// so feedback is on the Invoice Story only (user, 2 Nov).
+let recoverySidebars = (_isLiveMode, ~showSimulator, ~showExtras=false) => {
   showSimulator
     ? [
-        revenueRecoverySimulatorHome,
-        revenueRecoveryInvoices,
-        revenueRecoverySimulatorStory,
-        revenueRecoverySimulatorPortfolio,
-        revenueRecoverySimulatorTour,
-        revenueRecoverySummary,
-      ]
+        [revenueRecoverySimulatorHome, revenueRecoveryInvoices, revenueRecoverySimulatorStory],
+        showExtras ? [revenueRecoverySimulatorPortfolio, revenueRecoverySimulatorTour] : [],
+        [revenueRecoverySummary],
+      ]->Array.flat
     : [revenueRecoveryInvoices, revenueRecoverySummary]
 }

@@ -190,6 +190,7 @@ let useGetAllProductSections = (~products: array<productTypes>) => {
       RevenueRecoverySidebarValues.recoverySidebars(
         isLiveMode,
         ~showSimulator=featureFlagDetails.devRecoverySimulator,
+        ~showExtras=featureFlagDetails.devRecoverySimulatorExtras,
       )
     | Vault => VaultSidebarValues.vaultSidebars
     | CostObservability => HypersenseSidebarValues.hypersenseSidebars
@@ -296,6 +297,7 @@ let useGetSidebarValuesForCurrentActive = () => {
     RevenueRecoverySidebarValues.recoverySidebars(
       isLiveMode,
       ~showSimulator=featureFlagDetails.devRecoverySimulator,
+      ~showExtras=featureFlagDetails.devRecoverySimulatorExtras,
     )
   | Vault => VaultSidebarValues.vaultSidebars
   | CostObservability => HypersenseSidebarValues.hypersenseSidebars

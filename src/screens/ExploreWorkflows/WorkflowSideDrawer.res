@@ -58,7 +58,14 @@ let make = () => {
   | Closed => #ExploreSmartRetries
   }
 
+  let {devRecoverySimulatorExtras} = HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
   let (drawerHeading, subHeading, steps) = getCurrentWorkflowDetails(workflowTitle)
+  // Without its flag, the Rev Rec drawer leaves out Portfolio Run and Learn Rev Rec
+  let steps = devRecoverySimulatorExtras
+    ? steps
+    : steps->Array.filter(step =>
+        !(SimulatorExploreSteps.extraStepTitles->Array.includes(step.title))
+      )
 
   let accordionItems = steps->Array.map(step => {
     let accItem: AccordionAdapter.accordion = {

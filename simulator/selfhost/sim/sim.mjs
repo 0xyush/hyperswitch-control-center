@@ -234,6 +234,7 @@ const decidedAt = (task, attempts) =>
 const customerRules = new Map(); // customer id -> rule or null
 const customerGrace = new Map(); // customer id -> grace days on the simulated calendar, or null
 const customerLead = new Map(); // customer id -> the least seconds of warning before a retry, or 0
+const customerFirstLead = new Map(); // customer id -> retry 1 runs exactly this many seconds out, or 0
 const goodCards = new Map(); // customer id -> the saved card that works (4242)
 async function stripeGet(path) {
   const res = await fetch(`https://${STRIPE_HOST}/v1/${path}`, {
@@ -254,6 +255,8 @@ async function ruleOf(customerId, { fresh = false } = {}) {
     customerGrace.set(customerId, grace >= 1 && grace <= 60 ? grace : null);
     const lead = Number.parseInt(customer.metadata?.sim_min_lead ?? "", 10);
     customerLead.set(customerId, lead >= 1 && lead <= 120 ? lead : 0);
+    const first = Number.parseInt(customer.metadata?.sim_first_lead ?? "", 10);
+    customerFirstLead.set(customerId, first >= 1 && first <= 120 ? first : 0);
   }
   return customerRules.get(customerId);
 }
@@ -483,12 +486,20 @@ async function calendarTick() {
     // A story that asks for it (customer metadata sim_min_lead, in seconds) sees each retry coming:
     // a retry is never booked sooner than that from now. The demo clock stretches by the gap (the
     // paused time does the same), so the later retries keep their real-life days.
+    // Retry 1 of a story that asks for it (sim_first_lead) runs exactly that many seconds out, sooner
+    // or later than its demo time: the same steady start for every visitor (user, 2 Nov)
+    const firstLeadMs =
+      n === 1 && !stopped ? (customerFirstLead.get(customer) ?? 0) * 1000 : 0;
     const leadMs = stopped ? 0 : (customerLead.get(customer) ?? 0) * 1000;
-    const shortMs = Math.max(0, Date.now() + leadMs - demoRaw);
-    if (leadMs && shortMs > 0)
+    const leadShiftMs = firstLeadMs
+      ? Date.now() + firstLeadMs - demoRaw
+      : leadMs
+        ? Math.max(0, Date.now() + leadMs - demoRaw)
+        : 0;
+    if (leadShiftMs !== 0)
       state.pausedMs[task.payment_id] =
-        (state.pausedMs[task.payment_id] ?? 0) + shortMs;
-    const demoAt = Math.max(Date.now() + 1000, demoRaw + (leadMs ? shortMs : 0));
+        (state.pausedMs[task.payment_id] ?? 0) + leadShiftMs;
+    const demoAt = Math.max(Date.now() + 1000, demoRaw + leadShiftMs);
     // Paused (pause.mjs): the planned retry waits years ahead, with the time it has from the pause on
     const { rowCount } =
       pauses.isPaused(task.payment_id) && !stopped

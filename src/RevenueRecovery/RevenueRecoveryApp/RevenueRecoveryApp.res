@@ -1,7 +1,10 @@
 @react.component
 let make = () => {
   let url = RescriptReactRouter.useUrl()
-  let {devRecoverySimulator} = HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
+  let {devRecoverySimulator, devRecoverySimulatorExtras} =
+    HyperswitchAtom.featureFlagAtom->Recoil.useRecoilValueFromAtom
+  // Portfolio Run and Learn Rev Rec only with their flag; else they open the Invoice Story
+  let extras = devRecoverySimulator && devRecoverySimulatorExtras
 
   <>
     {switch url.path->HSwitchUtils.urlPath {
@@ -14,13 +17,13 @@ let make = () => {
       <SimulatorStory storyIdFromUrl=None />
     | list{"v2", "recovery", "simulator", "story", storyId} if devRecoverySimulator =>
       <SimulatorStory storyIdFromUrl=Some(storyId) />
-    | list{"v2", "recovery", "simulator", "tour"} if devRecoverySimulator => <SimulatorTour />
+    | list{"v2", "recovery", "simulator", "tour"} if extras => <SimulatorTour />
     | list{"v2", "recovery", "simulator", "setup"} if devRecoverySimulator => <SimulatorSetup />
     // Operator page, reached by URL only (not in the sidebar)
     | list{"v2", "recovery", "simulator", "health"} if devRecoverySimulator => <SimulatorHealth />
-    | list{"v2", "recovery", "simulator", "portfolio"} if devRecoverySimulator =>
+    | list{"v2", "recovery", "simulator", "portfolio"} if extras =>
       <SimulatorPortfolio runIdFromUrl=None />
-    | list{"v2", "recovery", "simulator", "portfolio", runId} if devRecoverySimulator =>
+    | list{"v2", "recovery", "simulator", "portfolio", runId} if extras =>
       <SimulatorPortfolio runIdFromUrl=Some(runId) />
     | list{"v2", "recovery", "simulator", ..._} if devRecoverySimulator =>
       <EmptyPage path=RevenueRecoverySidebarValues.simulatorStoryPath />
