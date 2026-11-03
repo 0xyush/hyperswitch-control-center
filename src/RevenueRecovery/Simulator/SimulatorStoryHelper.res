@@ -634,16 +634,17 @@ let renewalCardText = (id, ~renewalAt: Date.t) => {
           )
     next->SimulatorSignup.shortDate
   }
-  // In the customer's own words, one short line each (the heading says the day)
+  // The decline code the bank answers with (scenarios.ts: bank.reason), and what might happen that
+  // day in the customer's words. The sentence is the card's title: no separate title (user, 2 Nov).
   switch id {
-  | 15 => Some(("Payday", `No money until payday, ${payday}.`))
-  | 12 => Some(("Daily limit", "Daily limit hit. Resets tomorrow."))
-  | 14 => Some(("Low balance", "Low on money. More comes tomorrow."))
-  | 19 => Some(("Last chance", "Money in 5 days, before retries end."))
-  | 20 => Some(("Too late", "Money in 6 days, after retries end."))
-  | 11 => Some(("Bank hiccup", "Your bank is down for 2 hours."))
-  | 13 => Some(("Fraud check", "Card paused until you confirm."))
-  | 16 => Some(("Travel block", "Card blocked until you're home."))
+  | 15 => Some(("insufficient_funds", `You won't have money until payday, ${payday}.`))
+  | 12 => Some(("card_velocity_exceeded", "You'll hit your card's daily limit until tomorrow."))
+  | 14 => Some(("insufficient_funds", "You'll be low on money until tomorrow."))
+  | 19 => Some(("insufficient_funds", "You won't have money for 5 days. Just in time."))
+  | 20 => Some(("insufficient_funds", "You won't have money for 6 days. Too late."))
+  | 11 => Some(("processing_error", "Your bank will be down for 2 hours."))
+  | 13 => Some(("do_not_honor", "Your bank will pause your card until you confirm."))
+  | 16 => Some(("do_not_honor", "Your card will be blocked until you're home."))
   | _ => None
   }
 }
@@ -702,7 +703,8 @@ module RenewalPicker = {
       onRun()
     }
     // A story card: a click picks it and runs it
-    let card = (~key, ~title, ~icon, ~line, ~isOn, ~onPick) =>
+    // With a decline code: the code by the icon, and the sentence as the card's text (no title)
+    let card = (~key, ~title, ~icon, ~line, ~code=?, ~isOn, ~onPick) =>
       <div
         key
         role="button"
@@ -723,6 +725,14 @@ module RenewalPicker = {
                 : "bg-nd_gray-50 text-nd_gray-600"}`}>
             <Icon name=icon size=18 />
           </span>
+          {switch code {
+          | Some(code) =>
+            <span
+              className={`ml-3 mr-auto rounded-md border border-nd_gray-200 bg-nd_gray-50 px-2 py-0.5 font-mono text-xs font-medium text-nd_gray-600`}>
+              {code->React.string}
+            </span>
+          | None => React.null
+          }}
           <RenderIf condition=isOn>
             <span
               className="flex h-6 w-6 items-center justify-center rounded-full bg-nd_primary_blue-450 text-white">
@@ -730,12 +740,21 @@ module RenewalPicker = {
             </span>
           </RenderIf>
         </span>
-        <span className="flex flex-col gap-1">
-          <span className={`${heading.md.semibold} text-nd_gray-800`}> {title->React.string} </span>
-          <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
+        {switch code {
+        | Some(_) =>
+          <span className={`${heading.sm.semibold} leading-snug text-nd_gray-800`}>
             {line->React.string}
           </span>
-        </span>
+        | None =>
+          <span className="flex flex-col gap-1">
+            <span className={`${heading.md.semibold} text-nd_gray-800`}>
+              {title->React.string}
+            </span>
+            <span className={`${body.lg.medium} leading-relaxed text-nd_gray-600`}>
+              {line->React.string}
+            </span>
+          </span>
+        }}
       </div>
     let pickedMore = picked ? moreStories->Array.find(preset => preset.id == form.preset) : None
     let renewalAt = Date.make()
@@ -755,8 +774,8 @@ module RenewalPicker = {
       // In renewal words: what happens on the renewal day
       ->Array.map(((id, title, icon, line)) =>
         switch id->renewalCardText(~renewalAt) {
-        | Some((title, line)) => (id, title, icon, line)
-        | None => (id, title, icon, line)
+        | Some((code, sentence)) => (id, title, icon, sentence, Some(code))
+        | None => (id, title, icon, line, None)
         }
       )
     <AddDataAttributes attributes=[("data-sim", "renewal-picker")]>
@@ -776,13 +795,14 @@ module RenewalPicker = {
                 : ""}`}
             ariaHidden=intro>
             {cardIds
-            ->Array.filterMap(((id, title, icon, line)) =>
+            ->Array.filterMap(((id, title, icon, line, code)) =>
               presetById(id)->Option.map(preset =>
                 card(
                   ~key=id->Int.toString,
                   ~title,
                   ~icon,
                   ~line,
+                  ~code?,
                   ~isOn={picked && form.preset == id},
                   ~onPick=() => pick(preset),
                 )
@@ -860,8 +880,8 @@ module RenewalPicker = {
   }
 }
 
-// After a signup (user, 2 Nov): the month runs on the calendar and stops on a random day past the
-// 15th; the customer picks what is going on in their life; the month runs to the renewal day, the
+// After a signup (user, 2 Nov): the month runs on the calendar and stops on a random day 2 to 7
+// days before the renewal; the customer picks what is going on in their life; the month runs to the renewal day, the
 // renewal is declined, and Pass it to Rev Rec hands it over (SimulatorStory plays the scene). The
 // picked story starts at once, so its real declined charge is in by the time the decline shows.
 module RenewalJourney = {
@@ -889,10 +909,11 @@ module RenewalJourney = {
     ~onPass,
   ) => {
     let total = SimulatorSignup.daysSinceSignup()
-    // A different day each time, past the 15th and at least 3 days before the renewal
+    // A different day each time, 2 to 7 days before the renewal (around the 25th or later)
     let (pauseDay, _) = React.useState(_ => {
-      let last = Math.Int.max(16, total - 3)
-      16 + Math.floor(Math.random() *. (last - 16 + 1)->Int.toFloat)->Float.toInt
+      let first = Math.Int.max(1, total - 7)
+      let last = Math.Int.max(first, total - 2)
+      first + Math.floor(Math.random() *. (last - first + 1)->Int.toFloat)->Float.toInt
     })
     let (stage, setStage) = React.useState(_ => startAtPause ? Picking : Counting)
     let (day, setDay) = React.useState(_ => startAtPause ? pauseDay : 0)
@@ -980,7 +1001,7 @@ module RenewalJourney = {
               showIntro
               onIntroDone
               startPicked
-              message={`Hi! You're the customer now. You signed up for ${plan} at ${renewal.amount->SimulatorSignup.dollars} a month. Your renewal is in ${left}, on ${renewalDate}. Pick what's going on in your life, and watch what happens.`}
+              message={`Hi! You're the customer now. You signed up for ${plan} at ${renewal.amount->SimulatorSignup.dollars} a month. Your renewal is in ${left}, on ${renewalDate}. Pick what might happen that day, and watch what follows.`}
               onRun={() => {
                 setStage(_ => Finishing)
                 onPicked()
