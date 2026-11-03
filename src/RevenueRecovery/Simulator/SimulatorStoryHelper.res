@@ -703,7 +703,8 @@ module RenewalPicker = {
       onRun()
     }
     // A story card: a click picks it and runs it
-    // With a decline code: the code by the icon, and the sentence as the card's text (no title)
+    // With a decline code: the sentence is the card's text (no title), and the code sits quietly at
+    // the bottom (user, 2 Nov: not in a pill)
     let card = (~key, ~title, ~icon, ~line, ~code=?, ~isOn, ~onPick) =>
       <div
         key
@@ -719,20 +720,13 @@ module RenewalPicker = {
             ? "cursor-not-allowed opacity-50"
             : "cursor-pointer"}`}>
         <span className="flex items-center justify-between">
+          // A clear icon: bigger, in a tinted tile
           <span
-            className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOn
-                ? "bg-white text-nd_primary_blue-450"
-                : "bg-nd_gray-50 text-nd_gray-600"}`}>
-            <Icon name=icon size=18 />
+            className={`flex h-11 w-11 items-center justify-center rounded-xl ${isOn
+                ? "bg-white text-nd_primary_blue-500"
+                : "bg-nd_primary_blue-50 text-nd_primary_blue-500"}`}>
+            <Icon name=icon size=22 />
           </span>
-          {switch code {
-          | Some(code) =>
-            <span
-              className={`ml-3 mr-auto rounded-md border border-nd_gray-200 bg-nd_gray-50 px-2 py-0.5 font-mono text-xs font-medium text-nd_gray-600`}>
-              {code->React.string}
-            </span>
-          | None => React.null
-          }}
           <RenderIf condition=isOn>
             <span
               className="flex h-6 w-6 items-center justify-center rounded-full bg-nd_primary_blue-450 text-white">
@@ -741,10 +735,16 @@ module RenewalPicker = {
           </RenderIf>
         </span>
         {switch code {
-        | Some(_) =>
-          <span className={`${heading.sm.semibold} leading-snug text-nd_gray-800`}>
-            {line->React.string}
-          </span>
+        | Some(code) =>
+          <>
+            <span className={`${heading.sm.semibold} leading-snug text-nd_gray-800`}>
+              {line->React.string}
+            </span>
+            <span className={`mt-auto ${body.sm.medium} text-nd_gray-500`}>
+              {"Decline code: "->React.string}
+              <span className="font-mono text-nd_gray-700"> {code->React.string} </span>
+            </span>
+          </>
         | None =>
           <span className="flex flex-col gap-1">
             <span className={`${heading.md.semibold} text-nd_gray-800`}>
