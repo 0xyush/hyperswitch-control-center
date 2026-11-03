@@ -514,11 +514,11 @@ module HandoverScene = {
   let revRecMark = "/assets/simulator/revrec-mark.svg"
   let css = "
 @keyframes hs-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes hs-move { 0% { left: 76px; opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { left: calc(100% - 76px); opacity: 0; transform: translate(-50%, -50%) scale(.6); } }
+@keyframes hs-move { 0% { left: 76px; opacity: 0; transform: translate(-50%, -50%) scale(.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 85% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { left: calc(100% - 76px); opacity: 0; transform: translate(-50%, -50%) scale(.4); } }
 @keyframes hs-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes hs-wake { 0% { filter: grayscale(1); opacity: .45; transform: scale(1); } 45% { filter: grayscale(0); opacity: 1; transform: scale(1.12); } 100% { filter: grayscale(0); opacity: 1; transform: scale(1); } }
 @keyframes hs-ring { 0% { box-shadow: 0 0 0 0 rgba(0,109,249,.45); } 100% { box-shadow: 0 0 0 18px rgba(0,109,249,0); } }
-@keyframes hs-glow { 0%, 100% { box-shadow: 0 0 18px 2px rgba(0,109,249,.25); } 50% { box-shadow: 0 0 30px 6px rgba(0,109,249,.40); } }
+@keyframes hs-glow { 0%, 100% { box-shadow: 0 0 0 4px rgba(0,109,249,.10), 0 0 14px rgba(0,109,249,.18); } 50% { box-shadow: 0 0 0 6px rgba(0,109,249,.14), 0 0 22px rgba(0,109,249,.28); } }
 @keyframes hs-pop { 0% { opacity: 0; transform: scale(.4); } 70% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes hs-pulse { 50% { opacity: .35; } }
 .hs-in { animation: hs-in .45s cubic-bezier(.2,.8,.2,1) both; }
@@ -553,11 +553,10 @@ module HandoverScene = {
         </span>
         <span className={`${body.md.medium} text-nd_gray-700`}> {text->React.string} </span>
       </div>
-    let node = (~label, ~sub, ~children) =>
+    let node = (~label, ~children) =>
       <div className="relative z-10 flex w-[152px] flex-col items-center gap-2 text-center">
         children
         <span className={`${body.md.semibold} text-nd_gray-800`}> {label->React.string} </span>
-        <span className={`${body.xs.medium} text-nd_gray-500`}> {sub->React.string} </span>
       </div>
     <AddDataAttributes attributes=[("data-sim", "handover-scene")]>
       <div
@@ -571,22 +570,24 @@ module HandoverScene = {
             {`${SimulatorSignup.brandName} hands the failed renewal to Rev Rec`->React.string}
           </span>
         </div>
-        // FinnstaAI's billing, the track with the renewal on it, Rev Rec
-        <div className="relative flex w-full max-w-[600px] items-start justify-between">
+        // FinnstaAI's billing, the track, Rev Rec. Only a small token moves; the words stay still.
+        <div className="relative flex w-full max-w-[560px] items-start justify-between">
           <div
             className="absolute left-[76px] right-[76px] top-8 h-0 border-t-2 border-dashed border-nd_gray-200"
           />
           <div
             className="hs-fill absolute left-[76px] right-[76px] top-[31px] h-0.5 rounded-full bg-nd_primary_blue-450"
           />
-          <div
-            className={`hs-chip z-20 flex items-center gap-2 whitespace-nowrap rounded-full border border-nd_red-200 bg-white px-3 py-1.5 shadow-md ${body.xs.semibold} text-nd_gray-700`}>
-            <span className="h-2 w-2 rounded-full bg-nd_red-500" />
-            {`${renewal.plan} renewal · ${renewal.amount->SimulatorSignup.dollars} · Declined`->React.string}
-          </div>
+          <span
+            className="hs-chip z-20 flex h-7 w-7 items-center justify-center rounded-full border-2 border-nd_red-500 bg-white text-[13px] font-bold text-nd_red-500 shadow-sm">
+            {"$"->React.string}
+          </span>
+          <span
+            className={`absolute left-1/2 top-11 -translate-x-1/2 whitespace-nowrap ${body.xs.medium} text-nd_gray-500`}>
+            {`${renewal.plan} renewal · ${renewal.amount->SimulatorSignup.dollars} · declined`->React.string}
+          </span>
           {node(
             ~label=`${SimulatorSignup.brandName} billing`,
-            ~sub="Its renewal was declined",
             ~children=<div
               className="flex h-16 w-16 items-center justify-center rounded-2xl border border-nd_gray-150 bg-white shadow-sm">
               <img src=SimulatorSignup.mark alt="" className="h-10 w-10" />
@@ -594,7 +595,6 @@ module HandoverScene = {
           )}
           {node(
             ~label="Rev Rec",
-            ~sub="Recovers failed payments",
             ~children=<div className="hs-rr relative">
               <span className="hs-ring absolute inset-0 rounded-2xl" />
               <div
@@ -602,7 +602,7 @@ module HandoverScene = {
                 <img src=revRecMark alt="" className="h-10 w-10" />
               </div>
               <span
-                className={`hs-pop absolute -right-2 -top-2 rounded-full bg-nd_green-500 px-1.5 py-0.5 ${body.xs.semibold} text-white`}
+                className={`hs-pop absolute -right-1.5 -top-1.5 rounded-full bg-nd_green-500 px-1.5 py-px ${body.xs.semibold} text-white`}
                 style={delay(2300)}>
                 {"On"->React.string}
               </span>

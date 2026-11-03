@@ -580,12 +580,26 @@ let make = (~storyIdFromUrl: option<string>) => {
       () => clearTimeout(timeoutId)
     })
   , [sceneAt])
-  let isHandingOver = isBusy || isStarting || isBeforeHandover || resigning
+  // Try another story signs up again behind the scenes (about 2 s). The picker stays open
+  // meanwhile; Hand it to Rev Rec before that starts the scene, and the story once the signup is in.
+  let (runWhenReady, setRunWhenReady) = React.useState(_ => false)
+  let isHandingOver = isBusy || isStarting || isBeforeHandover || runWhenReady
   let showScene =
     sceneAt->Option.isSome &&
     signup->Option.isSome &&
     !startFailed &&
-    (!sceneMinDone || (showForm && isHandingOver))
+    (!sceneMinDone || (showForm && (isHandingOver || resigning)))
+  React.useEffect(() => {
+    if runWhenReady && !resigning {
+      setRunWhenReady(_ => false)
+
+      // A failed signup goes back to the plan page instead (resignup)
+      if signup->Option.isSome {
+        onCharge()->ignore
+      }
+    }
+    None
+  }, (runWhenReady, resigning))
   React.useEffect(() => {
     if sceneAt->Option.isSome && !showScene {
       setSceneAt(_ => None)
@@ -733,7 +747,11 @@ let make = (~storyIdFromUrl: option<string>) => {
             onRun={() => {
               setSceneMinDone(_ => false)
               setSceneAt(_ => Some(Date.now()))
-              onCharge()->ignore
+              if resigning {
+                setRunWhenReady(_ => true)
+              } else {
+                onCharge()->ignore
+              }
             }}
             showIntro={!introSeen && !isPresetLink}
             startPicked=isPresetLink
